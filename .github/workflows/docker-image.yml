@@ -3,8 +3,6 @@ name: Docker Image CI
 on:
   push:
     branches: [ master ]
-  pull_request:
-    branches: [ master ]
 
 jobs:
 
@@ -14,5 +12,23 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Build the Docker image
-      run: docker build . --file Dockerfile --tag my-image-name:$(date +%s)
+    - name: Get current date
+      id: date
+      run: echo "::set-output name=date::$(date +'%Y-%m-%d-%H.%M')"
+    - name: docker login
+      env:
+        DOCKER_USER: ${{secrets.DOCKER_USER}}
+        DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+      run: docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+    - name: Build messaging-service Docker image
+      run: docker build . --file build/docker/messaging-service/Dockerfile --tag infectieradarbe/messaging-service-image:${{ steps.date.outputs.date }}
+    - name: Build message-scheduler Docker image
+      run: docker build . --file build/docker/message-scheduler/Dockerfile --tag infectieradarbe/message-scheduler-image:${{ steps.date.outputs.date }}
+    - name: Build email-client Docker image
+      run: docker build . --file build/docker/email-client-service/Dockerfile --tag infectieradarbe/email-client-service-image:${{ steps.date.outputs.date }}
+    - name: Push messaging-service Docker image
+      run: docker push infectieradarbe/messaging-service-image:${{ steps.date.outputs.date }}
+    - name: Push message-scheduler Docker image
+      run: docker push infectieradarbe/message-scheduler-image:${{ steps.date.outputs.date }}
+    - name: Push email-client Docker image
+      run: docker push infectieradarbe/email-client-service-image:${{ steps.date.outputs.date }}
