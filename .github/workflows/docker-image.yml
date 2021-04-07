@@ -21,14 +21,14 @@ jobs:
         DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
       run: docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
     - name: Build messaging-service Docker image
-      run: docker build . --file build/docker/messaging-service/Dockerfile --tag infectieradarbe/messaging-service-image:${{ steps.date.outputs.date }}
+      run: docker build . --file build/docker/messaging-service/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MS}}:${{ steps.date.outputs.date }}
     - name: Build message-scheduler Docker image
-      run: docker build . --file build/docker/message-scheduler/Dockerfile --tag infectieradarbe/message-scheduler-image:${{ steps.date.outputs.date }}
+      run: docker build . --file build/docker/message-scheduler/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MSC}}:${{ steps.date.outputs.date }}
     - name: Build email-client Docker image
-      run: docker build . --file build/docker/email-client-service/Dockerfile --tag infectieradarbe/email-client-service-image:${{ steps.date.outputs.date }}
+      run: docker build . --file build/docker/email-client-service/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_EC}}:${{ steps.date.outputs.date }}
     - name: Push messaging-service Docker image
-      run: docker push infectieradarbe/messaging-service-image:${{ steps.date.outputs.date }}
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MS}}:${{ steps.date.outputs.date }}
     - name: Push message-scheduler Docker image
-      run: docker push infectieradarbe/message-scheduler-image:${{ steps.date.outputs.date }}
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MSC}}:${{ steps.date.outputs.date }}
     - name: Push email-client Docker image
-      run: docker push infectieradarbe/email-client-service-image:${{ steps.date.outputs.date }}
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_EC}}:${{ steps.date.outputs.date }}
