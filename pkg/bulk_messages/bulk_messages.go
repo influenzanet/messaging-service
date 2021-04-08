@@ -124,7 +124,7 @@ func GenerateForStudyParticipants(
 			break
 		}
 		if err != nil {
-			log.Printf("%v.GenerateForAllUsers(_) = _, %v", apiClients.UserManagementService, err)
+			log.Printf("%v.GenerateForStudyParticipants(_) = _, %v", apiClients.UserManagementService, err)
 			break
 		}
 
