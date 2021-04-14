@@ -124,7 +124,7 @@ func GenerateForStudyParticipants(
 			break
 		}
 		if err != nil {
-			log.Printf("%v.GenerateForAllUsers(_) = _, %v", apiClients.UserManagementService, err)
+			log.Printf("%v.GenerateForStudyParticipants(_) = _, %v", apiClients.UserManagementService, err)
 			break
 		}
 
@@ -195,7 +195,8 @@ func prepareOutgoingEmail(
 			return nil, err
 		}
 		contentInfos["unsubscribeToken"] = token
-	} else if messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY {
+	} else if messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY ||
+		messageTemplate.MessageType == constants.EMAIL_TYPE_STUDY_REMINDER {
 		token, err := getTemploginToken(apiClients.UserManagementService, instanceID, user, messageTemplate.StudyKey, loginTokenLifeTime)
 		if err != nil {
 			return nil, err
@@ -204,6 +205,7 @@ func prepareOutgoingEmail(
 		contentInfos["studyKey"] = messageTemplate.StudyKey
 	}
 
+	contentInfos["language"] = user.Account.PreferredLanguage
 	subject, content, err := generateEmailContent(messageTemplate, user.Account.PreferredLanguage, contentInfos)
 	if err != nil {
 		return nil, err
@@ -298,6 +300,11 @@ func getFilteredUserStream(
 			OnlyConfirmedAccounts:    true,
 			UseReminderWeekdayFilter: true,
 			ReminderWeekday:          weekday,
+		}
+	} else if messageType == constants.EMAIL_TYPE_STUDY_REMINDER {
+		filters = &umAPI.StreamUsersMsg_Filters{
+			OnlyConfirmedAccounts:    true,
+			UseReminderWeekdayFilter: false,
 		}
 	}
 

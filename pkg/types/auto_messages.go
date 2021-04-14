@@ -13,6 +13,7 @@ type AutoMessage struct {
 	Condition *ExpressionArg     `bson:"condition,omitempty"`
 	NextTime  int64              `bson:"nextTime"`
 	Period    int64              `bson:"period"`
+	Label     string             `bson:"label"`
 }
 
 func AutoMessageFromAPI(obj *api.AutoMessage) *AutoMessage {
@@ -28,6 +29,7 @@ func AutoMessageFromAPI(obj *api.AutoMessage) *AutoMessage {
 		Condition: ExpressionArgFromAPI(obj.Condition),
 		NextTime:  obj.NextTime,
 		Period:    obj.Period,
+		Label:     obj.Label,
 	}
 }
 
@@ -43,5 +45,6 @@ func (obj *AutoMessage) ToAPI() *api.AutoMessage {
 		Condition: obj.Condition.ToAPI(),
 		NextTime:  obj.NextTime,
 		Period:    obj.Period,
+		Label:     obj.Label,
 	}
 }
