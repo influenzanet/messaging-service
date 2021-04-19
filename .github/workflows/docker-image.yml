@@ -12,23 +12,24 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
-    - name: Get current date
-      id: date
-      run: echo "::set-output name=date::$(date +'%Y-%m-%d-%H.%M')"
+    - run: git fetch --prune --unshallow --tags
+    - name: Get current version
+      id: version
+      run: echo "::set-output name=version::$(git describe --tags --abbrev=0)"
     - name: docker login
       env:
         DOCKER_USER: ${{secrets.DOCKER_USER}}
         DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
       run: docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
     - name: Build messaging-service Docker image
-      run: docker build . --file build/docker/messaging-service/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MS}}:${{ steps.date.outputs.date }}
+      run: docker build . --file build/docker/messaging-service/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MS}}:${{ steps.version.outputs.version }}
     - name: Build message-scheduler Docker image
-      run: docker build . --file build/docker/message-scheduler/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MSC}}:${{ steps.date.outputs.date }}
+      run: docker build . --file build/docker/message-scheduler/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MSC}}:${{ steps.version.outputs.version }}
     - name: Build email-client Docker image
-      run: docker build . --file build/docker/email-client-service/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_EC}}:${{ steps.date.outputs.date }}
+      run: docker build . --file build/docker/email-client-service/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_EC}}:${{ steps.version.outputs.version }}
     - name: Push messaging-service Docker image
-      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MS}}:${{ steps.date.outputs.date }}
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MS}}:${{ steps.version.outputs.version }}
     - name: Push message-scheduler Docker image
-      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MSC}}:${{ steps.date.outputs.date }}
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MSC}}:${{ steps.version.outputs.version }}
     - name: Push email-client Docker image
-      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_EC}}:${{ steps.date.outputs.date }}
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_EC}}:${{ steps.version.outputs.version }}
