@@ -1,0 +1,40 @@
+name: Docker Image CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      tags:
+        description: 'Docker Tag override: [leave empty if not needed]'
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - run: git fetch --prune --unshallow --tags
+    - name: Get current version
+      id: version
+      run: echo "REPO_VERSION=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
+    - name: Docker image tag override
+      if: ${{ github.event.inputs.tags && github.event.inputs.tags != '' }}
+      run: echo "REPO_VERSION=${{github.event.inputs.tags}}" >> $GITHUB_ENV
+    - name: docker login
+      env:
+        DOCKER_USER: ${{secrets.DOCKER_USER}}
+        DOCKER_PASSWORD: ${{secrets.DOCKER_PASSWORD}}
+      run: docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+    - name: Build messaging-service Docker image
+      run: docker build . --file build/docker/messaging-service/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MS}}:$REPO_VERSION
+    - name: Build message-scheduler Docker image
+      run: docker build . --file build/docker/message-scheduler/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MSC}}:$REPO_VERSION
+    - name: Build email-client Docker image
+      run: docker build . --file build/docker/email-client-service/Dockerfile --tag ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_EC}}:$REPO_VERSION
+    - name: Push messaging-service Docker image
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MS}}:$REPO_VERSION
+    - name: Push message-scheduler Docker image
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_MSC}}:$REPO_VERSION
+    - name: Push email-client Docker image
+      run: docker push ${{secrets.DOCKER_ORGANIZATION}}/${{secrets.DOCKER_REPO_EC}}:$REPO_VERSION
