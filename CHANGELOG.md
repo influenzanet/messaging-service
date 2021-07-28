@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.9.3] - 2021-07-28
+
+### Changed
+
+- For newsletter message type, the weekday setting of the user can be ignored.
+- API arguments for send messages to all users and study participants extended to use "IgnoreWeekday" (boolean), to control if for newsletter type, the filter should ignore reminder weekday of the user.
+
 ## [v0.9.2]
 
 ### Added

@@ -44,6 +44,7 @@ func (s *messagingServer) SendMessageToAllUsers(ctx context.Context, req *api.Se
 		s.messageDBservice,
 		req.Token.InstanceId,
 		types.EmailTemplateFromAPI(req.Template),
+		req.IgnoreWeekday,
 	)
 	return &api.ServiceStatus{
 		Msg:     "message sending triggered",
@@ -69,6 +70,7 @@ func (s *messagingServer) SendMessageToStudyParticipants(ctx context.Context, re
 		req.Token.InstanceId,
 		types.EmailTemplateFromAPI(req.Template),
 		req.Condition,
+		req.IgnoreWeekday,
 	)
 	return &api.ServiceStatus{
 		Msg:     "message sending triggered",

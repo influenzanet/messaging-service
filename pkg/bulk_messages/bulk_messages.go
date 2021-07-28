@@ -25,6 +25,7 @@ func GenerateAutoMessages(
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
 	autoMessage types.AutoMessage,
+	ignoreWeekday bool,
 ) {
 	switch autoMessage.Type {
 	case "all-users":
@@ -33,6 +34,7 @@ func GenerateAutoMessages(
 			messageDBService,
 			instanceID,
 			autoMessage.Template,
+			ignoreWeekday,
 		)
 	case "study-participants":
 		autoMessage.Template.StudyKey = autoMessage.StudyKey
@@ -42,6 +44,7 @@ func GenerateAutoMessages(
 			instanceID,
 			autoMessage.Template,
 			autoMessage.Condition.ToAPI(),
+			ignoreWeekday,
 		)
 	default:
 		log.Printf("GenerateAutoMessages: message type unknown: %s", autoMessage.Type)
@@ -53,11 +56,12 @@ func GenerateForAllUsers(
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
 	messageTemplate types.EmailTemplate,
+	ignoreWeekday bool,
 ) {
 	counters := types.InitMessageCounter()
 
 	currentWeekday := time.Now().Weekday()
-	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday))
+	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday), ignoreWeekday)
 	if err != nil {
 		log.Printf("GenerateForAllUsers: %v", err)
 		return
@@ -108,11 +112,12 @@ func GenerateForStudyParticipants(
 	instanceID string,
 	messageTemplate types.EmailTemplate,
 	condition *api.ExpressionArg,
+	ignoreWeekday bool,
 ) {
 	counters := types.InitMessageCounter()
 
 	currentWeekday := time.Now().Weekday()
-	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday))
+	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday), ignoreWeekday)
 	if err != nil {
 		log.Printf("GenerateForStudyParticipants: %v", err)
 		return
@@ -292,10 +297,16 @@ func getFilteredUserStream(
 	instanceID string,
 	messageType string,
 	weekday int32,
+	ignoreWeekday bool,
 ) (umAPI.UserManagementApi_StreamUsersClient, error) {
 	var filters *umAPI.StreamUsersMsg_Filters
-	if messageType == constants.EMAIL_TYPE_NEWSLETTER ||
-		messageType == constants.EMAIL_TYPE_WEEKLY {
+	if messageType == constants.EMAIL_TYPE_NEWSLETTER {
+		filters = &umAPI.StreamUsersMsg_Filters{
+			OnlyConfirmedAccounts:    true,
+			UseReminderWeekdayFilter: !ignoreWeekday,
+			ReminderWeekday:          weekday,
+		}
+	} else if messageType == constants.EMAIL_TYPE_WEEKLY {
 		filters = &umAPI.StreamUsersMsg_Filters{
 			OnlyConfirmedAccounts:    true,
 			UseReminderWeekdayFilter: true,

@@ -197,6 +197,7 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 				mdb,
 				instance.InstanceID,
 				messageDef,
+				false,
 			)
 
 			messageDef.NextTime += messageDef.Period
