@@ -2,11 +2,11 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"strconv"
 	"time"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/internal/config"
 	emailAPI "github.com/influenzanet/messaging-service/pkg/api/email_client_service"
 	"github.com/influenzanet/messaging-service/pkg/bulk_messages"
@@ -22,6 +22,7 @@ const (
 
 // Config is the structure that holds all global configuration data
 type Config struct {
+	LogLevel    logger.LogLevel
 	Frequencies struct {
 		HighPrio    int
 		LowPrio     int
@@ -40,16 +41,18 @@ func initConfig() Config {
 	conf := Config{}
 	hp, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_HIGH_PRIO"))
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 	lp, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_LOW_PRIO"))
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 	am, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_AUTO_MESSAGE"))
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
+
+	conf.LogLevel = config.GetLogLevel()
 
 	conf.Frequencies = struct {
 		HighPrio    int
@@ -70,6 +73,8 @@ func initConfig() Config {
 
 func main() {
 	conf := initConfig()
+
+	logger.SetLevel(conf.LogLevel)
 
 	// ---> client connections
 	clients := &types.APIClients{}
@@ -97,7 +102,7 @@ func main() {
 func runnerForHighPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
 	lastAttemptOlderThan := int64(float64(freq) * 0.8)
 	for {
-		log.Println("Fetch and send high prio outgoing emails.")
+		logger.Debug.Println("Fetch and send high prio outgoing emails.")
 		go handleOutgoingEmails(mdb, gdb, clients, lastAttemptOlderThan, true)
 		time.Sleep(time.Duration(freq) * time.Second)
 	}
@@ -106,7 +111,7 @@ func runnerForHighPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globa
 func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
 	olderThan := int64(float64(freq) * 0.8)
 	for {
-		log.Println("Fetch and send low prio outgoing emails.")
+		logger.Debug.Println("Fetch and send low prio outgoing emails.")
 		go handleOutgoingEmails(mdb, gdb, clients, olderThan, false)
 		time.Sleep(time.Duration(freq) * time.Second)
 	}
@@ -114,7 +119,7 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 
 func runnerForAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
 	for {
-		log.Println("Fetch and send scheduled bulk messages.")
+		logger.Debug.Println("Fetch and send scheduled bulk messages.")
 		go handleAutoMessages(mdb, gdb, clients)
 		time.Sleep(time.Duration(freq) * time.Second)
 	}
@@ -123,7 +128,7 @@ func runnerForAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.Global
 func handleOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, lastAttemptOlderThan int64, onlyHighPrio bool) {
 	instances, err := gdb.GetAllInstances()
 	if err != nil {
-		log.Printf("handleOutgoingEmails.GetAllInstances: %v", err)
+		logger.Error.Printf("%v", err)
 	}
 	for _, instance := range instances {
 		go handleOutgoingForInstanceID(mdb, instance.InstanceID, clients, lastAttemptOlderThan, onlyHighPrio)
@@ -135,7 +140,7 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 	for {
 		emails, err := mdb.FetchOutgoingEmails(instanceID, outgoingBatchSize, lastAttemptOlderThan, onlyHighPrio)
 		if err != nil {
-			log.Printf("handleOutgoingEmails.FetchOutgoingEmails for %s: %v", instanceID, err)
+			logger.Error.Printf("%s: %v", instanceID, err)
 			break
 		}
 		if len(emails) < 1 {
@@ -151,19 +156,19 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 				HighPrio:        email.HighPrio,
 			})
 			if err != nil {
-				log.Printf("Could not send email in instance %s: %v", instanceID, err)
+				logger.Error.Printf("Could not send email in instance %s: %v", instanceID, err)
 				counters.IncreaseCounter(false)
 				continue
 			}
 
 			_, err = mdb.AddToSentEmails(instanceID, email)
 			if err != nil {
-				log.Printf("Error while saving to sent: %v", err)
+				logger.Error.Printf("Error while saving to sent: %v", err)
 				continue
 			}
 			err = mdb.DeleteOutgoingEmail(instanceID, email.ID.Hex())
 			if err != nil {
-				log.Printf("Error while deleting outgoing: %v", err)
+				logger.Error.Printf("Error while deleting outgoing: %v", err)
 			}
 			counters.IncreaseCounter(true)
 		}
@@ -173,18 +178,18 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 	if onlyHighPrio {
 		prioText = " with high prio"
 	}
-	log.Printf("[%s] Finished processing %d (%d sent, %d failed) messages%s in %d s.", instanceID, counters.Total, counters.Success, counters.Failed, prioText, counters.Duration)
+	logger.Info.Printf("[%s] Finished processing %d (%d sent, %d failed) messages%s in %d s.", instanceID, counters.Total, counters.Success, counters.Failed, prioText, counters.Duration)
 }
 
 func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
 	instances, err := gdb.GetAllInstances()
 	if err != nil {
-		log.Printf("handleAutoMessages.GetAllInstances: %v", err)
+		logger.Error.Printf("GetAllInstances: %v", err)
 	}
 	for _, instance := range instances {
 		activeMessages, err := mdb.FindAutoMessages(instance.InstanceID, true)
 		if err != nil {
-			log.Printf("handleAutoMessages.FindAutoMessages for %s: %v", instance.InstanceID, err)
+			logger.Error.Printf("FindAutoMessages for %s: %v", instance.InstanceID, err)
 			continue
 		}
 		if len(activeMessages) < 1 {
@@ -192,6 +197,7 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 		}
 
 		for _, messageDef := range activeMessages {
+			// TODO: decide to ignore weekday per message type
 			go bulk_messages.GenerateAutoMessages(
 				clients,
 				mdb,
@@ -203,7 +209,7 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 			messageDef.NextTime += messageDef.Period
 			_, err := mdb.SaveAutoMessage(instance.InstanceID, messageDef)
 			if err != nil {
-				log.Printf("handleAutoMessages.SaveAutoMessage for %s: %v", instance.InstanceID, err)
+				logger.Error.Printf("%s: %v", instance.InstanceID, err)
 				continue
 			}
 		}

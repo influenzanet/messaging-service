@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.10.0] - ???
+
+### Changed
+
+- Using new logger library with improved logging format and configurable log level.
+  - For message-scheduler use the environment variable `LOG_LEVEL=<level>`. Valid values are `debug`, `info`, `warning`, `error` . Default (if not speficied) is `info`.
+
+
 ## [v0.9.3] - 2021-07-28
 
 ### Changed

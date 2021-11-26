@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/types"
 )
 
@@ -42,6 +43,21 @@ func GetMessageDBConfig() types.DBConfig {
 		IdleConnTimeout: IdleConnTimeout,
 		MaxPoolSize:     MaxPoolSize,
 		DBNamePrefix:    DBNamePrefix,
+	}
+}
+
+func GetLogLevel() logger.LogLevel {
+	switch os.Getenv("LOG_LEVEL") {
+	case "debug":
+		return logger.LEVEL_DEBUG
+	case "info":
+		return logger.LEVEL_INFO
+	case "error":
+		return logger.LEVEL_ERROR
+	case "warning":
+		return logger.LEVEL_WARNING
+	default:
+		return logger.LEVEL_INFO
 	}
 }
 
