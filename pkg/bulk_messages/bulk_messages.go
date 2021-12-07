@@ -8,6 +8,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/go-utils/pkg/api_types"
 	"github.com/influenzanet/go-utils/pkg/constants"
 	api "github.com/influenzanet/messaging-service/pkg/api/messaging_service"
@@ -26,6 +27,7 @@ func GenerateAutoMessages(
 	instanceID string,
 	autoMessage types.AutoMessage,
 	ignoreWeekday bool,
+	messageLabel string,
 ) {
 	switch autoMessage.Type {
 	case "all-users":
@@ -35,6 +37,7 @@ func GenerateAutoMessages(
 			instanceID,
 			autoMessage.Template,
 			ignoreWeekday,
+			messageLabel,
 		)
 	case "study-participants":
 		autoMessage.Template.StudyKey = autoMessage.StudyKey
@@ -45,6 +48,7 @@ func GenerateAutoMessages(
 			autoMessage.Template,
 			autoMessage.Condition.ToAPI(),
 			ignoreWeekday,
+			messageLabel,
 		)
 	default:
 		log.Printf("GenerateAutoMessages: message type unknown: %s", autoMessage.Type)
@@ -57,6 +61,7 @@ func GenerateForAllUsers(
 	instanceID string,
 	messageTemplate types.EmailTemplate,
 	ignoreWeekday bool,
+	messageLabel string,
 ) {
 	counters := types.InitMessageCounter()
 
@@ -103,7 +108,7 @@ func GenerateForAllUsers(
 		counters.IncreaseCounter(true)
 	}
 	counters.Stop()
-	log.Printf("Generated %d (%d failed) '%s' messages in %d s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration)
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel)
 }
 
 func GenerateForStudyParticipants(
@@ -113,13 +118,14 @@ func GenerateForStudyParticipants(
 	messageTemplate types.EmailTemplate,
 	condition *api.ExpressionArg,
 	ignoreWeekday bool,
+	messageLabel string,
 ) {
 	counters := types.InitMessageCounter()
 
 	currentWeekday := time.Now().Weekday()
 	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday), ignoreWeekday)
 	if err != nil {
-		log.Printf("GenerateForStudyParticipants: %v", err)
+		logger.Error.Printf("%v", err)
 		return
 	}
 
@@ -129,7 +135,7 @@ func GenerateForStudyParticipants(
 			break
 		}
 		if err != nil {
-			log.Printf("%v.GenerateForStudyParticipants(_) = _, %v", apiClients.UserManagementService, err)
+			logger.Error.Printf("%v", err)
 			break
 		}
 
@@ -169,7 +175,7 @@ func GenerateForStudyParticipants(
 		counters.IncreaseCounter(true)
 	}
 	counters.Stop()
-	log.Printf("Generated %d (%d failed) '%s' messages in %d s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration)
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel)
 }
 
 func prepareOutgoingEmail(
@@ -270,7 +276,7 @@ func expressionArgFromMessageToStudyAPI(arg *api.ExpressionArg) *studyAPI.Expres
 	case nil:
 		// The field is not set.
 	default:
-		log.Printf("api.ExpressionArg has unexpected type %T", x)
+		logger.Warning.Printf("api.ExpressionArg has unexpected type %T", x)
 	}
 
 	return newArg

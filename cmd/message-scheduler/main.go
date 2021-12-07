@@ -197,13 +197,13 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 		}
 
 		for _, messageDef := range activeMessages {
-			// TODO: decide to ignore weekday per message type
 			go bulk_messages.GenerateAutoMessages(
 				clients,
 				mdb,
 				instance.InstanceID,
 				messageDef,
 				false,
+				messageDef.Label,
 			)
 
 			messageDef.NextTime += messageDef.Period
