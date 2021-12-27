@@ -6,57 +6,38 @@ package mock_email_client_service
 
 import (
 	context "context"
+	reflect "reflect"
+
 	gomock "github.com/golang/mock/gomock"
 	empty "github.com/golang/protobuf/ptypes/empty"
 	email_client_service "github.com/influenzanet/messaging-service/pkg/api/email_client_service"
 	grpc "google.golang.org/grpc"
-	reflect "reflect"
 )
 
-// MockEmailClientServiceApiClient is a mock of EmailClientServiceApiClient interface
+// MockEmailClientServiceApiClient is a mock of EmailClientServiceApiClient interface.
 type MockEmailClientServiceApiClient struct {
 	ctrl     *gomock.Controller
 	recorder *MockEmailClientServiceApiClientMockRecorder
 }
 
-// MockEmailClientServiceApiClientMockRecorder is the mock recorder for MockEmailClientServiceApiClient
+// MockEmailClientServiceApiClientMockRecorder is the mock recorder for MockEmailClientServiceApiClient.
 type MockEmailClientServiceApiClientMockRecorder struct {
 	mock *MockEmailClientServiceApiClient
 }
 
-// NewMockEmailClientServiceApiClient creates a new mock instance
+// NewMockEmailClientServiceApiClient creates a new mock instance.
 func NewMockEmailClientServiceApiClient(ctrl *gomock.Controller) *MockEmailClientServiceApiClient {
 	mock := &MockEmailClientServiceApiClient{ctrl: ctrl}
 	mock.recorder = &MockEmailClientServiceApiClientMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEmailClientServiceApiClient) EXPECT() *MockEmailClientServiceApiClientMockRecorder {
 	return m.recorder
 }
 
-// Status mocks base method
-func (m *MockEmailClientServiceApiClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*email_client_service.ServiceStatus, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "Status", varargs...)
-	ret0, _ := ret[0].(*email_client_service.ServiceStatus)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Status indicates an expected call of Status
-func (mr *MockEmailClientServiceApiClientMockRecorder) Status(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockEmailClientServiceApiClient)(nil).Status), varargs...)
-}
-
-// SendEmail mocks base method
+// SendEmail mocks base method.
 func (m *MockEmailClientServiceApiClient) SendEmail(ctx context.Context, in *email_client_service.SendEmailReq, opts ...grpc.CallOption) (*email_client_service.ServiceStatus, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
@@ -69,52 +50,57 @@ func (m *MockEmailClientServiceApiClient) SendEmail(ctx context.Context, in *ema
 	return ret0, ret1
 }
 
-// SendEmail indicates an expected call of SendEmail
+// SendEmail indicates an expected call of SendEmail.
 func (mr *MockEmailClientServiceApiClientMockRecorder) SendEmail(ctx, in interface{}, opts ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendEmail", reflect.TypeOf((*MockEmailClientServiceApiClient)(nil).SendEmail), varargs...)
 }
 
-// MockEmailClientServiceApiServer is a mock of EmailClientServiceApiServer interface
+// Status mocks base method.
+func (m *MockEmailClientServiceApiClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*email_client_service.ServiceStatus, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "Status", varargs...)
+	ret0, _ := ret[0].(*email_client_service.ServiceStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Status indicates an expected call of Status.
+func (mr *MockEmailClientServiceApiClientMockRecorder) Status(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockEmailClientServiceApiClient)(nil).Status), varargs...)
+}
+
+// MockEmailClientServiceApiServer is a mock of EmailClientServiceApiServer interface.
 type MockEmailClientServiceApiServer struct {
 	ctrl     *gomock.Controller
 	recorder *MockEmailClientServiceApiServerMockRecorder
 }
 
-// MockEmailClientServiceApiServerMockRecorder is the mock recorder for MockEmailClientServiceApiServer
+// MockEmailClientServiceApiServerMockRecorder is the mock recorder for MockEmailClientServiceApiServer.
 type MockEmailClientServiceApiServerMockRecorder struct {
 	mock *MockEmailClientServiceApiServer
 }
 
-// NewMockEmailClientServiceApiServer creates a new mock instance
+// NewMockEmailClientServiceApiServer creates a new mock instance.
 func NewMockEmailClientServiceApiServer(ctrl *gomock.Controller) *MockEmailClientServiceApiServer {
 	mock := &MockEmailClientServiceApiServer{ctrl: ctrl}
 	mock.recorder = &MockEmailClientServiceApiServerMockRecorder{mock}
 	return mock
 }
 
-// EXPECT returns an object that allows the caller to indicate expected use
+// EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockEmailClientServiceApiServer) EXPECT() *MockEmailClientServiceApiServerMockRecorder {
 	return m.recorder
 }
 
-// Status mocks base method
-func (m *MockEmailClientServiceApiServer) Status(arg0 context.Context, arg1 *empty.Empty) (*email_client_service.ServiceStatus, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Status", arg0, arg1)
-	ret0, _ := ret[0].(*email_client_service.ServiceStatus)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Status indicates an expected call of Status
-func (mr *MockEmailClientServiceApiServerMockRecorder) Status(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockEmailClientServiceApiServer)(nil).Status), arg0, arg1)
-}
-
-// SendEmail mocks base method
+// SendEmail mocks base method.
 func (m *MockEmailClientServiceApiServer) SendEmail(arg0 context.Context, arg1 *email_client_service.SendEmailReq) (*email_client_service.ServiceStatus, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendEmail", arg0, arg1)
@@ -123,8 +109,23 @@ func (m *MockEmailClientServiceApiServer) SendEmail(arg0 context.Context, arg1 *
 	return ret0, ret1
 }
 
-// SendEmail indicates an expected call of SendEmail
+// SendEmail indicates an expected call of SendEmail.
 func (mr *MockEmailClientServiceApiServerMockRecorder) SendEmail(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendEmail", reflect.TypeOf((*MockEmailClientServiceApiServer)(nil).SendEmail), arg0, arg1)
+}
+
+// Status mocks base method.
+func (m *MockEmailClientServiceApiServer) Status(arg0 context.Context, arg1 *empty.Empty) (*email_client_service.ServiceStatus, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Status", arg0, arg1)
+	ret0, _ := ret[0].(*email_client_service.ServiceStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Status indicates an expected call of Status.
+func (mr *MockEmailClientServiceApiServerMockRecorder) Status(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockEmailClientServiceApiServer)(nil).Status), arg0, arg1)
 }

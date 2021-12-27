@@ -39,6 +39,14 @@ func GenerateAutoMessages(
 			ignoreWeekday,
 			messageLabel,
 		)
+	case "scheduled-participant-messages":
+		GenerateScheduledParticipantMessages(
+			apiClients,
+			messageDBService,
+			instanceID,
+			autoMessage.StudyKey,
+			messageLabel,
+		)
 	case "study-participants":
 		autoMessage.Template.StudyKey = autoMessage.StudyKey
 		GenerateForStudyParticipants(
@@ -86,12 +94,14 @@ func GenerateForAllUsers(
 			continue
 		}
 
+		contentInfos := map[string]string{}
 		outgoing, err := prepareOutgoingEmail(
 			user,
 			apiClients,
 			messageDBService,
 			instanceID,
 			messageTemplate,
+			contentInfos,
 		)
 		if err != nil {
 			counters.IncreaseCounter(false)
@@ -153,12 +163,14 @@ func GenerateForStudyParticipants(
 			continue
 		}
 
+		contentInfos := map[string]string{}
 		outgoing, err := prepareOutgoingEmail(
 			user,
 			apiClients,
 			messageDBService,
 			instanceID,
 			messageTemplate,
+			contentInfos,
 		)
 		if err != nil {
 			counters.IncreaseCounter(false)
@@ -178,12 +190,109 @@ func GenerateForStudyParticipants(
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel)
 }
 
+func GenerateScheduledParticipantMessages(
+	apiClients *types.APIClients,
+	messageDBService *messagedb.MessageDBService,
+	instanceID string,
+	studyKey string,
+	messageLabel string,
+) {
+	counters := types.InitMessageCounter()
+
+	currentWeekday := time.Now().Weekday()
+	ignoreWeekday := true
+	stream, err := getFilteredUserStream(apiClients, instanceID, constants.EMAIL_TYPE_STUDY_REMINDER, int32(currentWeekday), ignoreWeekday)
+	if err != nil {
+		logger.Error.Printf("%v", err)
+		return
+	}
+
+	messageTemplateCache := map[string]types.EmailTemplate{}
+	for {
+		user, err := stream.Recv()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			logger.Error.Printf("%v", err)
+			break
+		}
+		for _, profile := range user.Profiles {
+			resp, err := apiClients.StudyService.GetParticipantMessages(context.Background(), &studyAPI.GetParticipantMessagesReq{
+				InstanceId: instanceID,
+				StudyKey:   studyKey,
+				ProfileId:  profile.Id,
+			})
+			if err != nil {
+				// log needed only in debug mode, to prevent too much errors when profile is not a participant
+				logger.Debug.Printf("%s - %s - %s: %v", instanceID, studyKey, profile.Id, err)
+				continue
+			}
+
+			sentMessages := []string{}
+			for _, m := range resp.Messages {
+				template, ok := messageTemplateCache[m.Type]
+				if !ok {
+					template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, studyKey)
+					if err != nil {
+						logger.Error.Printf("template for '%s' could not be found. [%s:%s]", m.Type, instanceID, studyKey)
+						continue
+					}
+					messageTemplateCache[m.Type] = template
+				}
+
+				contentInfos := map[string]string{}
+				contentInfos["profileAlias"] = profile.Alias
+
+				outgoing, err := prepareOutgoingEmail(
+					user,
+					apiClients,
+					messageDBService,
+					instanceID,
+					template,
+					contentInfos,
+				)
+				if err != nil {
+					counters.IncreaseCounter(false)
+					logger.Error.Printf("unexpected error: %v", err)
+					continue
+				}
+
+				_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
+				if err != nil {
+					counters.IncreaseCounter(false)
+					logger.Error.Printf("unexpected error: %v", err)
+					continue
+				}
+				counters.IncreaseCounter(true)
+
+				sentMessages = append(sentMessages, m.Id)
+			}
+
+			// delete messages when generated:
+			_, err = apiClients.StudyService.DeleteMessagesFromParticipant(context.Background(), &studyAPI.DeleteMessagesFromParticipantReq{
+				InstanceId: instanceID,
+				StudyKey:   studyKey,
+				ProfileId:  profile.Id,
+				MessageIds: sentMessages,
+			})
+			if err != nil {
+				logger.Error.Printf("unexpected error: %v", err)
+				continue
+			}
+		}
+	}
+	counters.Stop()
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for auto email '%s'.", counters.Total, counters.Failed, "scheduled participant", counters.Duration, messageLabel)
+}
+
 func prepareOutgoingEmail(
 	user *umAPI.User,
 	apiClients *types.APIClients,
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
 	messageTemplate types.EmailTemplate,
+	contentInfos map[string]string,
 
 ) (*types.OutgoingEmail, error) {
 	outgoingEmail := types.OutgoingEmail{
@@ -191,7 +300,6 @@ func prepareOutgoingEmail(
 		HeaderOverrides: messageTemplate.HeaderOverrides,
 		AddedAt:         time.Now().Unix(),
 	}
-	contentInfos := map[string]string{}
 
 	if user.Account.Type == "email" {
 		outgoingEmail.To = []string{user.Account.AccountId}
