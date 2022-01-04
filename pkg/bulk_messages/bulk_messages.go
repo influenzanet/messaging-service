@@ -270,15 +270,17 @@ func GenerateScheduledParticipantMessages(
 			}
 
 			// delete messages when generated:
-			_, err = apiClients.StudyService.DeleteMessagesFromParticipant(context.Background(), &studyAPI.DeleteMessagesFromParticipantReq{
-				InstanceId: instanceID,
-				StudyKey:   studyKey,
-				ProfileId:  profile.Id,
-				MessageIds: sentMessages,
-			})
-			if err != nil {
-				logger.Error.Printf("unexpected error: %v", err)
-				continue
+			if len(sentMessages) > 0 {
+				_, err = apiClients.StudyService.DeleteMessagesFromParticipant(context.Background(), &studyAPI.DeleteMessagesFromParticipantReq{
+					InstanceId: instanceID,
+					StudyKey:   studyKey,
+					ProfileId:  profile.Id,
+					MessageIds: sentMessages,
+				})
+				if err != nil {
+					logger.Error.Printf("unexpected error: %v", err)
+					continue
+				}
 			}
 		}
 	}
