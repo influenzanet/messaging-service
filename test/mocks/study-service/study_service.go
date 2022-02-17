@@ -118,6 +118,46 @@ func (mr *MockStudyServiceApiClientMockRecorder) DeleteParticipantData(arg0, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteParticipantData", reflect.TypeOf((*MockStudyServiceApiClient)(nil).DeleteParticipantData), varargs...)
 }
 
+// DeleteParticipantFiles mocks base method.
+func (m *MockStudyServiceApiClient) DeleteParticipantFiles(arg0 context.Context, arg1 *api.DeleteParticipantFilesReq, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteParticipantFiles", varargs...)
+	ret0, _ := ret[0].(*api.ServiceStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteParticipantFiles indicates an expected call of DeleteParticipantFiles.
+func (mr *MockStudyServiceApiClientMockRecorder) DeleteParticipantFiles(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteParticipantFiles", reflect.TypeOf((*MockStudyServiceApiClient)(nil).DeleteParticipantFiles), varargs...)
+}
+
+// DeleteResearcherMessages mocks base method.
+func (m *MockStudyServiceApiClient) DeleteResearcherMessages(arg0 context.Context, arg1 *api.DeleteResearcherMessagesReq, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteResearcherMessages", varargs...)
+	ret0, _ := ret[0].(*api.ServiceStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteResearcherMessages indicates an expected call of DeleteResearcherMessages.
+func (mr *MockStudyServiceApiClientMockRecorder) DeleteResearcherMessages(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteResearcherMessages", reflect.TypeOf((*MockStudyServiceApiClient)(nil).DeleteResearcherMessages), varargs...)
+}
+
 // DeleteStudy mocks base method.
 func (m *MockStudyServiceApiClient) DeleteStudy(arg0 context.Context, arg1 *api.StudyReferenceReq, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
 	m.ctrl.T.Helper()
@@ -258,15 +298,55 @@ func (mr *MockStudyServiceApiClientMockRecorder) GetAssignedSurveysForTemporaryP
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAssignedSurveysForTemporaryParticipant", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetAssignedSurveysForTemporaryParticipant), varargs...)
 }
 
+// GetConfidentialResponses mocks base method.
+func (m *MockStudyServiceApiClient) GetConfidentialResponses(arg0 context.Context, arg1 *api.ConfidentialResponsesQuery, arg2 ...grpc.CallOption) (*api.ConfidentialResponses, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetConfidentialResponses", varargs...)
+	ret0, _ := ret[0].(*api.ConfidentialResponses)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetConfidentialResponses indicates an expected call of GetConfidentialResponses.
+func (mr *MockStudyServiceApiClientMockRecorder) GetConfidentialResponses(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfidentialResponses", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetConfidentialResponses), varargs...)
+}
+
+// GetParticipantFile mocks base method.
+func (m *MockStudyServiceApiClient) GetParticipantFile(arg0 context.Context, arg1 *api.GetParticipantFileReq, arg2 ...grpc.CallOption) (api.StudyServiceApi_GetParticipantFileClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetParticipantFile", varargs...)
+	ret0, _ := ret[0].(api.StudyServiceApi_GetParticipantFileClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetParticipantFile indicates an expected call of GetParticipantFile.
+func (mr *MockStudyServiceApiClientMockRecorder) GetParticipantFile(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParticipantFile", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetParticipantFile), varargs...)
+}
+
 // GetParticipantMessages mocks base method.
-func (m *MockStudyServiceApiClient) GetParticipantMessages(arg0 context.Context, arg1 *api.GetParticipantMessagesReq, arg2 ...grpc.CallOption) (*api.GetParticipantMessagesResp, error) {
+func (m *MockStudyServiceApiClient) GetParticipantMessages(arg0 context.Context, arg1 *api.GetParticipantMessagesReq, arg2 ...grpc.CallOption) (*api.StudyMessages, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetParticipantMessages", varargs...)
-	ret0, _ := ret[0].(*api.GetParticipantMessagesResp)
+	ret0, _ := ret[0].(*api.StudyMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -276,6 +356,46 @@ func (mr *MockStudyServiceApiClientMockRecorder) GetParticipantMessages(arg0, ar
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParticipantMessages", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetParticipantMessages), varargs...)
+}
+
+// GetReportsForUser mocks base method.
+func (m *MockStudyServiceApiClient) GetReportsForUser(arg0 context.Context, arg1 *api.GetReportsForUserReq, arg2 ...grpc.CallOption) (*api.ReportHistory, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetReportsForUser", varargs...)
+	ret0, _ := ret[0].(*api.ReportHistory)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReportsForUser indicates an expected call of GetReportsForUser.
+func (mr *MockStudyServiceApiClientMockRecorder) GetReportsForUser(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReportsForUser", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetReportsForUser), varargs...)
+}
+
+// GetResearcherMessages mocks base method.
+func (m *MockStudyServiceApiClient) GetResearcherMessages(arg0 context.Context, arg1 *api.GetReseacherMessagesReq, arg2 ...grpc.CallOption) (*api.StudyMessages, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetResearcherMessages", varargs...)
+	ret0, _ := ret[0].(*api.StudyMessages)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetResearcherMessages indicates an expected call of GetResearcherMessages.
+func (mr *MockStudyServiceApiClientMockRecorder) GetResearcherMessages(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResearcherMessages", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetResearcherMessages), varargs...)
 }
 
 // GetResponsesFlatJSON mocks base method.
@@ -538,6 +658,26 @@ func (mr *MockStudyServiceApiClientMockRecorder) RegisterTemporaryParticipant(ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterTemporaryParticipant", reflect.TypeOf((*MockStudyServiceApiClient)(nil).RegisterTemporaryParticipant), varargs...)
 }
 
+// RemoveConfidentialResponsesForProfiles mocks base method.
+func (m *MockStudyServiceApiClient) RemoveConfidentialResponsesForProfiles(arg0 context.Context, arg1 *api.RemoveConfidentialResponsesForProfilesReq, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RemoveConfidentialResponsesForProfiles", varargs...)
+	ret0, _ := ret[0].(*api.ServiceStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveConfidentialResponsesForProfiles indicates an expected call of RemoveConfidentialResponsesForProfiles.
+func (mr *MockStudyServiceApiClientMockRecorder) RemoveConfidentialResponsesForProfiles(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveConfidentialResponsesForProfiles", reflect.TypeOf((*MockStudyServiceApiClient)(nil).RemoveConfidentialResponsesForProfiles), varargs...)
+}
+
 // RemoveStudyMember mocks base method.
 func (m *MockStudyServiceApiClient) RemoveStudyMember(arg0 context.Context, arg1 *api.StudyMemberReq, arg2 ...grpc.CallOption) (*api.Study, error) {
 	m.ctrl.T.Helper()
@@ -716,6 +856,66 @@ func (mr *MockStudyServiceApiClientMockRecorder) Status(arg0, arg1 interface{}, 
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Status", reflect.TypeOf((*MockStudyServiceApiClient)(nil).Status), varargs...)
+}
+
+// StreamParticipantFileInfos mocks base method.
+func (m *MockStudyServiceApiClient) StreamParticipantFileInfos(arg0 context.Context, arg1 *api.FileInfoQuery, arg2 ...grpc.CallOption) (api.StudyServiceApi_StreamParticipantFileInfosClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StreamParticipantFileInfos", varargs...)
+	ret0, _ := ret[0].(api.StudyServiceApi_StreamParticipantFileInfosClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StreamParticipantFileInfos indicates an expected call of StreamParticipantFileInfos.
+func (mr *MockStudyServiceApiClientMockRecorder) StreamParticipantFileInfos(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamParticipantFileInfos", reflect.TypeOf((*MockStudyServiceApiClient)(nil).StreamParticipantFileInfos), varargs...)
+}
+
+// StreamParticipantStates mocks base method.
+func (m *MockStudyServiceApiClient) StreamParticipantStates(arg0 context.Context, arg1 *api.ParticipantStateQuery, arg2 ...grpc.CallOption) (api.StudyServiceApi_StreamParticipantStatesClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StreamParticipantStates", varargs...)
+	ret0, _ := ret[0].(api.StudyServiceApi_StreamParticipantStatesClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StreamParticipantStates indicates an expected call of StreamParticipantStates.
+func (mr *MockStudyServiceApiClientMockRecorder) StreamParticipantStates(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamParticipantStates", reflect.TypeOf((*MockStudyServiceApiClient)(nil).StreamParticipantStates), varargs...)
+}
+
+// StreamReportHistory mocks base method.
+func (m *MockStudyServiceApiClient) StreamReportHistory(arg0 context.Context, arg1 *api.ReportHistoryQuery, arg2 ...grpc.CallOption) (api.StudyServiceApi_StreamReportHistoryClient, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "StreamReportHistory", varargs...)
+	ret0, _ := ret[0].(api.StudyServiceApi_StreamReportHistoryClient)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StreamReportHistory indicates an expected call of StreamReportHistory.
+func (mr *MockStudyServiceApiClientMockRecorder) StreamReportHistory(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamReportHistory", reflect.TypeOf((*MockStudyServiceApiClient)(nil).StreamReportHistory), varargs...)
 }
 
 // StreamStudyResponses mocks base method.
