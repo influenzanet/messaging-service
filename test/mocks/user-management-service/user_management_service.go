@@ -379,6 +379,26 @@ func (mr *MockUserManagementApiClientMockRecorder) LoginWithEmail(arg0, arg1 int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoginWithEmail", reflect.TypeOf((*MockUserManagementApiClient)(nil).LoginWithEmail), varargs...)
 }
 
+// LoginWithExternalIDP mocks base method.
+func (m *MockUserManagementApiClient) LoginWithExternalIDP(arg0 context.Context, arg1 *api.LoginWithExternalIDPMsg, arg2 ...grpc.CallOption) (*api.LoginResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "LoginWithExternalIDP", varargs...)
+	ret0, _ := ret[0].(*api.LoginResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LoginWithExternalIDP indicates an expected call of LoginWithExternalIDP.
+func (mr *MockUserManagementApiClientMockRecorder) LoginWithExternalIDP(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoginWithExternalIDP", reflect.TypeOf((*MockUserManagementApiClient)(nil).LoginWithExternalIDP), varargs...)
+}
+
 // PurgeUserTempTokens mocks base method.
 func (m *MockUserManagementApiClient) PurgeUserTempTokens(arg0 context.Context, arg1 *api_types.TempTokenInfo, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
 	m.ctrl.T.Helper()
