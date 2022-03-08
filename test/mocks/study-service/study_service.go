@@ -78,6 +78,26 @@ func (mr *MockStudyServiceApiClientMockRecorder) CreateNewStudy(arg0, arg1 inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNewStudy", reflect.TypeOf((*MockStudyServiceApiClient)(nil).CreateNewStudy), varargs...)
 }
 
+// CreateReport mocks base method.
+func (m *MockStudyServiceApiClient) CreateReport(arg0 context.Context, arg1 *api.CreateReportReq, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CreateReport", varargs...)
+	ret0, _ := ret[0].(*api.ServiceStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateReport indicates an expected call of CreateReport.
+func (mr *MockStudyServiceApiClientMockRecorder) CreateReport(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateReport", reflect.TypeOf((*MockStudyServiceApiClient)(nil).CreateReport), varargs...)
+}
+
 // DeleteMessagesFromParticipant mocks base method.
 func (m *MockStudyServiceApiClient) DeleteMessagesFromParticipant(arg0 context.Context, arg1 *api.DeleteMessagesFromParticipantReq, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
 	m.ctrl.T.Helper()
@@ -736,6 +756,26 @@ func (mr *MockStudyServiceApiClientMockRecorder) RunRules(arg0, arg1 interface{}
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunRules", reflect.TypeOf((*MockStudyServiceApiClient)(nil).RunRules), varargs...)
+}
+
+// RunRulesForSingleParticipant mocks base method.
+func (m *MockStudyServiceApiClient) RunRulesForSingleParticipant(arg0 context.Context, arg1 *api.RunRulesForSingleParticipantReq, arg2 ...grpc.CallOption) (*api.RuleRunSummary, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RunRulesForSingleParticipant", varargs...)
+	ret0, _ := ret[0].(*api.RuleRunSummary)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RunRulesForSingleParticipant indicates an expected call of RunRulesForSingleParticipant.
+func (mr *MockStudyServiceApiClientMockRecorder) RunRulesForSingleParticipant(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RunRulesForSingleParticipant", reflect.TypeOf((*MockStudyServiceApiClient)(nil).RunRulesForSingleParticipant), varargs...)
 }
 
 // SaveStudyMember mocks base method.
