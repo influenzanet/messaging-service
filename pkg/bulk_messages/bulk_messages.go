@@ -47,6 +47,13 @@ func GenerateAutoMessages(
 			autoMessage.StudyKey,
 			messageLabel,
 		)
+	case "researcher-notifications":
+		GenerateResearcherNotificationMessages(
+			apiClients,
+			messageDBService,
+			instanceID,
+			messageLabel,
+		)
 	case "study-participants":
 		autoMessage.Template.StudyKey = autoMessage.StudyKey
 		GenerateForStudyParticipants(
@@ -286,6 +293,85 @@ func GenerateScheduledParticipantMessages(
 	}
 	counters.Stop()
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for auto email '%s'.", counters.Total, counters.Failed, "scheduled participant", counters.Duration, messageLabel)
+}
+
+func GenerateResearcherNotificationMessages(
+	apiClients *types.APIClients,
+	messageDBService *messagedb.MessageDBService,
+	instanceID string,
+	messageLabel string,
+) {
+	counters := types.InitMessageCounter()
+
+	messageTemplateCache := map[string]types.EmailTemplate{}
+
+	messages, err := apiClients.StudyService.GetResearcherMessages(context.Background(), &studyAPI.GetReseacherMessagesReq{InstanceId: instanceID})
+	if err != nil {
+		logger.Error.Printf("unexpected error when fetching researcher notifications: %v", err)
+		return
+	}
+
+	for _, m := range messages.Messages {
+		template, ok := messageTemplateCache[m.Type+m.StudyKey]
+		if !ok {
+			template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, m.StudyKey)
+			if err != nil {
+				logger.Error.Printf("template for '%s' could not be found. [%s:%s]", m.Type, instanceID, m.StudyKey)
+				continue
+			}
+			messageTemplateCache[m.Type+m.StudyKey] = template
+		}
+
+		contentInfos := map[string]string{}
+		contentInfos["participantID"] = m.ParticipantId
+		// Merge payload with content infos:
+		for k, v := range m.Payload {
+			contentInfos[k] = v
+		}
+
+		for _, sendTo := range m.SendTo {
+			user := &umAPI.User{
+				Account: &umAPI.User_Account{
+					AccountId: sendTo,
+					Type:      "email",
+				},
+			}
+			outgoing, err := prepareOutgoingEmail(
+				user,
+				apiClients,
+				messageDBService,
+				instanceID,
+				template,
+				contentInfos,
+			)
+			if err != nil {
+				counters.IncreaseCounter(false)
+				logger.Error.Printf("unexpected error: %v", err)
+				continue
+			}
+
+			_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
+			if err != nil {
+				counters.IncreaseCounter(false)
+				logger.Error.Printf("unexpected error: %v", err)
+				continue
+			}
+			counters.IncreaseCounter(true)
+		}
+
+		// delete message when generated:
+		_, err = apiClients.StudyService.DeleteResearcherMessages(context.Background(), &studyAPI.DeleteResearcherMessagesReq{
+			InstanceId: instanceID,
+			StudyKey:   m.StudyKey,
+			MessageIds: []string{m.Id},
+		})
+		if err != nil {
+			logger.Error.Printf("unexpected error when removing notification: %v", err)
+		}
+	}
+
+	counters.Stop()
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for auto email '%s'.", counters.Total, counters.Failed, "researcher notifications", counters.Duration, messageLabel)
 }
 
 func prepareOutgoingEmail(

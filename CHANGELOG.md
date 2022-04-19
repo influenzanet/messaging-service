@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.1.0] - 2022-04-??
+
+### Added
+
+- New message type / logic for researcher notifications.
+
 ## [v1.0.0] - 2022-03-08
 
 ### Added
