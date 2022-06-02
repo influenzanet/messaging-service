@@ -1,6 +1,7 @@
 .PHONY: test api mock docker-email-client docker-message-scheduler docker-messaging-service messaging-service message-scheduler email-client-service
 
-PROTO_BUILD_DIR = ../../..
+PROTO_BUILD_DIR = intermediate
+
 # Where binary are put
 TARGET_DIR ?= ./
 
@@ -24,12 +25,15 @@ help:
 	@echo "  TEST_ARGS : Arguments to pass to go test call"
 
 api:
-	if [ ! -d "./pkg/api" ]; then mkdir -p "./pkg/api"; else  find "./pkg/api" -type f -delete &&  mkdir -p "./pkg/api"; fi
-	find ./api/email_client_service/*.proto -maxdepth 1 -type f -exec protoc {} --proto_path=./api --go_out=plugins=grpc:$(PROTO_BUILD_DIR) \;
-	find ./api/messaging_service/*.proto -maxdepth 1 -type f -exec protoc {} --proto_path=./api --go_out=plugins=grpc:$(PROTO_BUILD_DIR) \;
+	if [ ! -d $(PROTO_BUILD_DIR) ]; then mkdir -p $(PROTO_BUILD_DIR); else  find $(PROTO_BUILD_DIR) -type f -delete &&  mkdir -p $(PROTO_BUILD_DIR); fi
+	find ./api/email_client_service/*.proto -maxdepth 1 -type f -exec protoc {} --proto_path=./api --go_out=$(PROTO_BUILD_DIR) --go_grpc_out=$(PROTO_BUILD_DIR) \;
+	find ./api/messaging_service/*.proto -maxdepth 1 -type f -exec protoc {} --proto_path=./api --go_out=$(PROTO_BUILD_DIR) --go_grpc_out=$(PROTO_BUILD_DIR) \;
+	find "./pkg/api" -delete
+	mv $(PROTO_BUILD_DIR)/github.com/influenzanet/messaging-service/pkg/api pkg/api
+	find $(PROTO_BUILD_DIR) -delete
 
 mock:
-	mockgen -source=./pkg/api/email_client_service/email-client-service.pb.go EmailClientServiceApiClient > test/mocks/email-client-service/email_client_service.go
+	mockgen -source=./pkg/api/email_client_service/email-client-service_grpc.pb.go EmailClientServiceApiClient > test/mocks/email-client-service/email_client_service.go
 	mockgen github.com/influenzanet/user-management-service/pkg/api UserManagementApiClient,UserManagementApi_StreamUsersClient > test/mocks/user-management-service/user_management_service.go
 	mockgen github.com/influenzanet/study-service/pkg/api StudyServiceApiClient > test/mocks/study-service/study_service.go
 	mockgen github.com/influenzanet/logging-service/pkg/api LoggingServiceApiClient > test/mocks/logging_service/logging_service.go

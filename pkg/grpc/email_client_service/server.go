@@ -18,6 +18,7 @@ const (
 )
 
 type emailClientServer struct {
+	api.UnimplementedEmailClientServiceApiServer
 	HighPrioStmpClients *sc.SmtpClients
 	StmpClients         *sc.SmtpClients
 }

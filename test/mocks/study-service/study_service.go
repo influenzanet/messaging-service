@@ -418,6 +418,26 @@ func (mr *MockStudyServiceApiClientMockRecorder) GetResearcherMessages(arg0, arg
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResearcherMessages", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetResearcherMessages), varargs...)
 }
 
+// GetResearcherNotificationSubscriptions mocks base method.
+func (m *MockStudyServiceApiClient) GetResearcherNotificationSubscriptions(arg0 context.Context, arg1 *api.GetResearcherNotificationSubscriptionsReq, arg2 ...grpc.CallOption) (*api.NotificationSubscriptions, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetResearcherNotificationSubscriptions", varargs...)
+	ret0, _ := ret[0].(*api.NotificationSubscriptions)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetResearcherNotificationSubscriptions indicates an expected call of GetResearcherNotificationSubscriptions.
+func (mr *MockStudyServiceApiClientMockRecorder) GetResearcherNotificationSubscriptions(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResearcherNotificationSubscriptions", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetResearcherNotificationSubscriptions), varargs...)
+}
+
 // GetResponsesFlatJSON mocks base method.
 func (m *MockStudyServiceApiClient) GetResponsesFlatJSON(arg0 context.Context, arg1 *api.ResponseExportQuery, arg2 ...grpc.CallOption) (api.StudyServiceApi_GetResponsesFlatJSONClient, error) {
 	m.ctrl.T.Helper()
@@ -996,6 +1016,26 @@ func (mr *MockStudyServiceApiClientMockRecorder) SubmitResponse(arg0, arg1 inter
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitResponse", reflect.TypeOf((*MockStudyServiceApiClient)(nil).SubmitResponse), varargs...)
+}
+
+// UpdateResearcherNotificationSubscriptions mocks base method.
+func (m *MockStudyServiceApiClient) UpdateResearcherNotificationSubscriptions(arg0 context.Context, arg1 *api.UpdateResearcherNotificationSubscriptionsReq, arg2 ...grpc.CallOption) (*api.NotificationSubscriptions, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateResearcherNotificationSubscriptions", varargs...)
+	ret0, _ := ret[0].(*api.NotificationSubscriptions)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateResearcherNotificationSubscriptions indicates an expected call of UpdateResearcherNotificationSubscriptions.
+func (mr *MockStudyServiceApiClientMockRecorder) UpdateResearcherNotificationSubscriptions(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateResearcherNotificationSubscriptions", reflect.TypeOf((*MockStudyServiceApiClient)(nil).UpdateResearcherNotificationSubscriptions), varargs...)
 }
 
 // UploadParticipantFile mocks base method.

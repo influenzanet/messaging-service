@@ -19,6 +19,7 @@ const (
 )
 
 type messagingServer struct {
+	api.UnimplementedMessagingServiceApiServer
 	clients          *types.APIClients
 	messageDBservice *messagedb.MessageDBService
 	//globalDBService  *globaldb.GlobalDBService
