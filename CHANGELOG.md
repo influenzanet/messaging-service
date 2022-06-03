@@ -1,10 +1,14 @@
 # Changelog
 
-## [v1.1.0] - 2022-04-??
+## [v1.1.0] - 2022-06-03
 
 ### Added
 
-- New message type / logic for researcher notifications.
+- New message type / message sending logic for researcher notifications. This messages can be generated through study rules to send a notification about specific topics to a specified list email addresses.
+
+### Changed
+
+- Updated dependencies (gRPC, study-service), and made necessary adaptations on the Makefile to be able to generate the new api files.
 
 ## [v1.0.0] - 2022-03-08
 
