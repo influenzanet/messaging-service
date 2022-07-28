@@ -3,8 +3,8 @@ package templates
 import (
 	"bytes"
 	"html/template"
-	"log"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/types"
 )
 
@@ -23,14 +23,14 @@ func GetTemplateTranslation(tDef types.EmailTemplate, lang string) types.Localiz
 func ResolveTemplate(tempName string, templateDef string, contentInfos map[string]string) (content string, err error) {
 	tmpl, err := template.New(tempName).Parse(templateDef)
 	if err != nil {
-		log.Printf("error when parsing template %s: %v", tempName, err)
+		logger.Error.Printf("error when parsing template %s: %v", tempName, err)
 		return "", err
 	}
 	var tpl bytes.Buffer
 
 	err = tmpl.Execute(&tpl, contentInfos)
 	if err != nil {
-		log.Printf("error when executing template %s: %v", tempName, err)
+		logger.Error.Printf("error when executing template %s: %v", tempName, err)
 		return "", err
 	}
 	return tpl.String(), nil

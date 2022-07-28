@@ -2,9 +2,9 @@ package email_client_service
 
 import (
 	"context"
-	"log"
 	"time"
 
+	"github.com/coneno/logger"
 	"github.com/golang/protobuf/ptypes/empty"
 	api "github.com/influenzanet/messaging-service/pkg/api/email_client_service"
 	"github.com/influenzanet/messaging-service/pkg/types"
@@ -52,7 +52,7 @@ func (s *emailClientServer) SendEmail(ctx context.Context, req *api.SendEmailReq
 				return nil, status.Error(codes.Internal, err.Error())
 			}
 			retryCounter += 1
-			log.Printf("SendEmail attempt #%d %v", retryCounter, err)
+			logger.Error.Printf("SendEmail attempt #%d %v", retryCounter, err)
 			time.Sleep(time.Duration(retryCounter) * time.Second)
 		} else {
 			break

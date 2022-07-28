@@ -2,9 +2,9 @@ package smtp_client
 
 import (
 	"crypto/tls"
-	"log"
 	"net/smtp"
 
+	"github.com/coneno/logger"
 	"github.com/jordan-wright/email"
 )
 
@@ -33,14 +33,14 @@ func initConnectionPool(serverList SmtpServerList) []email.Pool {
 	for _, server := range serverList.Servers {
 		pool, err := connectToPool(server)
 		if err != nil {
-			log.Print("Error setting up connection pool for: " + server.Address())
+			logger.Error.Print("Error setting up connection pool for: " + server.Address())
 			continue
 		} else {
 			connectionPools = append(connectionPools, *pool)
 		}
 	}
 	if len(connectionPools) < 1 {
-		log.Fatal("no smtp server connection in the pool")
+		logger.Error.Fatal("no smtp server connection in the pool")
 	}
 	return connectionPools
 }

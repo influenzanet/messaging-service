@@ -2,8 +2,8 @@ package smtp_client
 
 import (
 	"io/ioutil"
-	"log"
 
+	"github.com/coneno/logger"
 	"gopkg.in/yaml.v2"
 )
 
@@ -34,7 +34,7 @@ func (s *SmtpServer) Address() string {
 func (sl *SmtpServerList) ReadFromFile(fname string) (err error) {
 	yamlFile, err := ioutil.ReadFile(fname)
 	if err != nil {
-		log.Printf("ReadServerConfig: err #%v ", err)
+		logger.Error.Printf("ReadServerConfig: err #%v ", err)
 		return err
 	}
 	err = yaml.UnmarshalStrict(yamlFile, &sl)

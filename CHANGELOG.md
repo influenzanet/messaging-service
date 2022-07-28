@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.] - 2022-
+
+### Changed
+
+- Replacing log.Print instances with custom logger to use log levels.
+
 ## [v1.1.0] - 2022-06-03
 
 ### Added

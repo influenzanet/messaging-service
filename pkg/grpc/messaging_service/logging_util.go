@@ -2,8 +2,8 @@ package messaging_service
 
 import (
 	"context"
-	"log"
 
+	"github.com/coneno/logger"
 	loggingAPI "github.com/influenzanet/logging-service/pkg/api"
 )
 
@@ -23,6 +23,6 @@ func (s *messagingServer) SaveLogEvent(
 		Msg:        msg,
 	})
 	if err != nil {
-		log.Printf("ERROR: failed to save log: %s", err.Error())
+		logger.Error.Printf("failed to save log: %s", err.Error())
 	}
 }

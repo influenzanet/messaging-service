@@ -1,8 +1,7 @@
 package types
 
 import (
-	"log"
-
+	"github.com/coneno/logger"
 	api "github.com/influenzanet/messaging-service/pkg/api/messaging_service"
 )
 
@@ -66,7 +65,7 @@ func ExpressionArgFromAPI(e *api.ExpressionArg) *ExpressionArg {
 	case nil:
 		// The field is not set.
 	default:
-		log.Printf("api.ExpressionArg has unexpected type %T", x)
+		logger.Error.Printf("api.ExpressionArg has unexpected type %T", x)
 	}
 	newEA.DType = e.Dtype
 	return &newEA

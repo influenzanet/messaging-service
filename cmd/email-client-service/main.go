@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/grpc/email_client_service"
 	sc "github.com/influenzanet/messaging-service/pkg/smtp_client"
 )
@@ -29,11 +29,11 @@ func main() {
 
 	smtpClients, err := sc.NewSmtpClients(conf.ServerConfigPath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 	highPrioSmtpClients, err := sc.NewSmtpClients(conf.HighPrioServerConfigPath)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 
 	ctx := context.Background()
@@ -43,6 +43,6 @@ func main() {
 		highPrioSmtpClients,
 		smtpClients,
 	); err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 }

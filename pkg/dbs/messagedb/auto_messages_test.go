@@ -1,10 +1,10 @@
 package messagedb
 
 import (
-	"log"
 	"testing"
 	"time"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/types"
 )
 
@@ -76,7 +76,7 @@ func TestAutoMessageDB(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 			return
 		}
-		log.Println(res)
+		logger.Debug.Println(res)
 		if len(res) != 1 {
 			t.Errorf("unexpected number of messages found: %d", len(res))
 		}
@@ -87,7 +87,7 @@ func TestAutoMessageDB(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 			return
 		}
-		log.Println(res)
+		logger.Debug.Println(res)
 		if len(res) != 2 {
 			t.Errorf("unexpected number of messages found: %d", len(res))
 		}

@@ -4,12 +4,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"io/ioutil"
-	"log"
 	"net/smtp"
 	"net/textproto"
 	"strconv"
 	"time"
 
+	"github.com/coneno/logger"
 	"github.com/jordan-wright/email"
 	"gopkg.in/yaml.v2"
 )
@@ -40,7 +40,7 @@ func (s *SmtpServer) Address() string {
 func (sl *SmtpServerList) ReadFromFile(fname string) (err error) {
 	yamlFile, err := ioutil.ReadFile(fname)
 	if err != nil {
-		log.Printf("ReadServerConfig: err #%v ", err)
+		logger.Error.Printf("ReadServerConfig: err #%v ", err)
 		return err
 	}
 	err = yaml.UnmarshalStrict(yamlFile, &sl)
@@ -86,17 +86,17 @@ func initConnectionPool(serverList SmtpServerList) []email.Pool {
 			InsecureSkipVerify: server.InsecureSkipVerify,
 			ServerName:         server.Host,
 		}
-		log.Println(tlsOpts)
+		logger.Debug.Println(tlsOpts)
 		var pool, err = email.NewPool(server.Address(), server.Connections, auth, tlsOpts)
 		if err != nil {
-			log.Print("Error setting up connection pool for: " + server.Address())
+			logger.Error.Print("Error setting up connection pool for: " + server.Address())
 			continue
 		} else {
 			connectionPools = append(connectionPools, *pool)
 		}
 	}
 	if len(connectionPools) < 1 {
-		log.Fatal("no smtp server connection in the pool")
+		logger.Error.Fatal("no smtp server connection in the pool")
 	}
 	return connectionPools
 }
@@ -147,7 +147,7 @@ func main() {
 
 	smtpClients, err := NewSmtpClients("server_configs.yaml")
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 
 	tStart := time.Now()
@@ -160,10 +160,10 @@ func main() {
 			"<h1>Test email </h1><p>Counter "+strconv.Itoa(i)+"</p>",
 		)
 		if err != nil {
-			log.Fatal(err)
+			logger.Error.Fatal(err)
 		}
-		log.Printf("Testmail %d sent", i)
+		logger.Debug.Printf("Testmail %d sent", i)
 	}
 	runTime := time.Now().UnixNano() - tStart.UnixNano()
-	log.Printf("Runtime for sending: %d ms", runTime/1000000)
+	logger.Info.Printf("Runtime for sending: %d ms", runTime/1000000)
 }

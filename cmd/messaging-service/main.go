@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/internal/config"
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
 	"github.com/influenzanet/messaging-service/pkg/types"
@@ -68,6 +68,6 @@ func main() {
 		clients,
 		messageDBService,
 	); err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 }

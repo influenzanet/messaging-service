@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"log"
 
+	"github.com/coneno/logger"
 	"github.com/golang/protobuf/ptypes/empty"
 	"github.com/influenzanet/go-utils/pkg/constants"
 	"github.com/influenzanet/go-utils/pkg/token_checks"
@@ -132,7 +132,7 @@ func (s *messagingServer) SendInstantEmail(ctx context.Context, req *api.SendEma
 	if err != nil {
 		_, errS := s.messageDBservice.AddToOutgoingEmails(req.InstanceId, outgoingEmail)
 		if errS != nil {
-			log.Printf("Error while saving to outgoing: %v", errS)
+			logger.Error.Printf("Error while saving to outgoing: %v", errS)
 		}
 		return &api.ServiceStatus{
 			Version: apiVersion,
@@ -143,7 +143,7 @@ func (s *messagingServer) SendInstantEmail(ctx context.Context, req *api.SendEma
 
 	_, err = s.messageDBservice.AddToSentEmails(req.InstanceId, outgoingEmail)
 	if err != nil {
-		log.Printf("Saving to sent: %v", err)
+		logger.Error.Printf("Saving to sent: %v", err)
 	}
 
 	return &api.ServiceStatus{

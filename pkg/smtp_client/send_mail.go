@@ -2,10 +2,10 @@ package smtp_client
 
 import (
 	"errors"
-	"log"
 	"net/textproto"
 	"time"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/types"
 	"github.com/jordan-wright/email"
 )
@@ -59,12 +59,12 @@ func (sc *SmtpClients) SendMail(
 
 	if err != nil {
 		// close and try to reconnect
-		log.Printf("error when trying to send email: %v", err)
+		logger.Error.Printf("error when trying to send email: %v", err)
 		pool, errReconnect := connectToPool(sc.servers.Servers[index])
 		if errReconnect != nil {
-			log.Printf("cannot reconnect pool for %s", sc.servers.Servers[index].Host)
+			logger.Error.Printf("cannot reconnect pool for %s", sc.servers.Servers[index].Host)
 		} else {
-			log.Printf("successfully reconnected to %s", sc.servers.Servers[index].Host)
+			logger.Error.Printf("successfully reconnected to %s", sc.servers.Servers[index].Host)
 			sc.connectionPool[index] = *pool
 		}
 	}

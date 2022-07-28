@@ -1,8 +1,9 @@
 package smtp_client
 
 import (
-	"log"
 	"testing"
+
+	"github.com/coneno/logger"
 )
 
 func TestReadServerConfigsFromFile(t *testing.T) {
@@ -34,7 +35,7 @@ func TestReadServerConfigsFromFile(t *testing.T) {
 			return
 		}
 		if servers.Servers[0].Address() != "test.example.com:234" || servers.Servers[0].AuthData.Username != "testuser" {
-			log.Println(servers)
+			logger.Error.Println(servers)
 			t.Error("first server wrong")
 		}
 		if servers.Servers[1].Address() != "test2.example.com:235" || servers.Servers[1].AuthData.Username != "testuser2" {

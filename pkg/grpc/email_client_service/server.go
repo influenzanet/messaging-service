@@ -2,11 +2,11 @@ package email_client_service
 
 import (
 	"context"
-	"log"
 	"net"
 	"os"
 	"os/signal"
 
+	"github.com/coneno/logger"
 	api "github.com/influenzanet/messaging-service/pkg/api/email_client_service"
 	sc "github.com/influenzanet/messaging-service/pkg/smtp_client"
 	"google.golang.org/grpc"
@@ -42,7 +42,7 @@ func RunServer(
 ) error {
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		logger.Error.Fatalf("failed to listen: %v", err)
 	}
 
 	// register service
@@ -57,14 +57,14 @@ func RunServer(
 	go func() {
 		for range c {
 			// sig is a ^C, handle it
-			log.Println("shutting down gRPC server...")
+			logger.Info.Println("shutting down gRPC server...")
 			server.GracefulStop()
 			<-ctx.Done()
 		}
 	}()
 
 	// start gRPC server
-	log.Println("starting gRPC server...")
-	log.Println("wait connections on port " + port)
+	logger.Info.Println("starting gRPC server...")
+	logger.Info.Println("wait connections on port " + port)
 	return server.Serve(lis)
 }

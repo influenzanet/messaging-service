@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"time"
 
 	"github.com/coneno/logger"
@@ -66,7 +65,7 @@ func GenerateAutoMessages(
 			messageLabel,
 		)
 	default:
-		log.Printf("GenerateAutoMessages: message type unknown: %s", autoMessage.Type)
+		logger.Error.Printf("GenerateAutoMessages: message type unknown: %s", autoMessage.Type)
 	}
 }
 
@@ -83,7 +82,7 @@ func GenerateForAllUsers(
 	currentWeekday := time.Now().Weekday()
 	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday), ignoreWeekday)
 	if err != nil {
-		log.Printf("GenerateForAllUsers: %v", err)
+		logger.Error.Printf("GenerateForAllUsers: %v", err)
 		return
 	}
 
@@ -93,7 +92,7 @@ func GenerateForAllUsers(
 			break
 		}
 		if err != nil {
-			log.Printf("%v.GenerateForAllUsers(_) = _, %v", apiClients.UserManagementService, err)
+			logger.Error.Printf("%v.GenerateForAllUsers(_) = _, %v", apiClients.UserManagementService, err)
 			break
 		}
 
@@ -112,14 +111,14 @@ func GenerateForAllUsers(
 		)
 		if err != nil {
 			counters.IncreaseCounter(false)
-			log.Printf("unexpected error: %v", err)
+			logger.Error.Printf("unexpected error: %v", err)
 			continue
 		}
 
 		_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 		if err != nil {
 			counters.IncreaseCounter(false)
-			log.Printf("unexpected error: %v", err)
+			logger.Error.Printf("unexpected error: %v", err)
 			continue
 		}
 		counters.IncreaseCounter(true)
@@ -181,14 +180,14 @@ func GenerateForStudyParticipants(
 		)
 		if err != nil {
 			counters.IncreaseCounter(false)
-			log.Printf("unexpected error: %v", err)
+			logger.Error.Printf("unexpected error: %v", err)
 			continue
 		}
 
 		_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 		if err != nil {
 			counters.IncreaseCounter(false)
-			log.Printf("unexpected error: %v", err)
+			logger.Error.Printf("unexpected error: %v", err)
 			continue
 		}
 		counters.IncreaseCounter(true)

@@ -2,9 +2,9 @@ package globaldb
 
 import (
 	"context"
-	"log"
 	"time"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/types"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -24,7 +24,7 @@ func NewGlobalDBService(configs types.DBConfig) *GlobalDBService {
 		options.Client().SetMaxPoolSize(configs.MaxPoolSize),
 	)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(configs.Timeout)*time.Second)
@@ -32,14 +32,14 @@ func NewGlobalDBService(configs types.DBConfig) *GlobalDBService {
 
 	err = dbClient.Connect(ctx)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 
 	ctx, conCancel := context.WithTimeout(context.Background(), time.Duration(configs.Timeout)*time.Second)
 	err = dbClient.Ping(ctx, nil)
 	defer conCancel()
 	if err != nil {
-		log.Fatal("fail to connect to DB: " + err.Error())
+		logger.Error.Fatal("fail to connect to DB: " + err.Error())
 	}
 
 	return &GlobalDBService{

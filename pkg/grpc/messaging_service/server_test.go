@@ -3,12 +3,12 @@ package messaging_service
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 	"testing"
 	"time"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
 	"github.com/influenzanet/messaging-service/pkg/types"
 
@@ -39,23 +39,23 @@ func setupTestMessageDBService() {
 	password := os.Getenv("MESSAGE_DB_PASSWORD")
 	prefix := os.Getenv("MESSAGE_DB_CONNECTION_PREFIX") // Used in test mode
 	if connStr == "" || username == "" || password == "" {
-		log.Fatal("Couldn't read DB credentials.")
+		logger.Error.Fatal("Couldn't read DB credentials.")
 	}
 	URI := fmt.Sprintf(`mongodb%s://%s:%s@%s`, prefix, username, password, connStr)
 
 	var err error
 	Timeout, err := strconv.Atoi(os.Getenv("DB_TIMEOUT"))
 	if err != nil {
-		log.Fatal("DB_TIMEOUT: " + err.Error())
+		logger.Error.Fatal("DB_TIMEOUT: " + err.Error())
 	}
 	IdleConnTimeout, err := strconv.Atoi(os.Getenv("DB_IDLE_CONN_TIMEOUT"))
 	if err != nil {
-		log.Fatal("DB_IDLE_CONN_TIMEOUT" + err.Error())
+		logger.Error.Fatal("DB_IDLE_CONN_TIMEOUT" + err.Error())
 	}
 	mps, err := strconv.Atoi(os.Getenv("DB_MAX_POOL_SIZE"))
 	MaxPoolSize := uint64(mps)
 	if err != nil {
-		log.Fatal("DB_MAX_POOL_SIZE: " + err.Error())
+		logger.Error.Fatal("DB_MAX_POOL_SIZE: " + err.Error())
 	}
 	testMessageDBService = messagedb.NewMessageDBService(
 		types.DBConfig{
@@ -69,13 +69,13 @@ func setupTestMessageDBService() {
 }
 
 func dropTestDB() {
-	log.Println("Drop test database: service package")
+	logger.Debug.Println("Drop test database: service package")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	err := testMessageDBService.DBClient.Database(testDBNamePrefix + testInstanceID + "_messageDB").Drop(ctx)
 	if err != nil {
-		log.Fatal(err)
+		logger.Error.Fatal(err)
 	}
 }
 
