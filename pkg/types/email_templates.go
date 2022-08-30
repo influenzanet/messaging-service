@@ -8,7 +8,7 @@ import (
 
 type EmailTemplate struct {
 	ID              primitive.ObjectID  `bson:"_id,omitempty"`
-	MessageType     string              `bson:"messageType"`
+	MessageType     string              `bson:"messageType"` // e.g. 'registration','invitation'..), use constants EMAIL_TYPE_* in go-utils/pkg/constants
 	StudyKey        string              `bson:"studyKey,omitempty"`
 	DefaultLanguage string              `bson:"defaultLanguage"`
 	HeaderOverrides *HeaderOverrides    `bson:"headerOverrides"`

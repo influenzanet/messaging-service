@@ -5,10 +5,12 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+// AutoMessage are predefined message to be sent on condition or at fixed time
+// They are also used to send custom messages (all-users, study-particpants)
 type AutoMessage struct {
 	ID        primitive.ObjectID `bson:"_id,omitempty"`
 	Template  EmailTemplate      `bson:"template"`
-	Type      string             `bson:"type"`
+	Type      string             `bson:"type"` // bulk message type, e.g. "all-users", "scheduled-participant-messages", "researcher-notifications", "study-participants"
 	StudyKey  string             `bson:"studyKey,omitempty"`
 	Condition *ExpressionArg     `bson:"condition,omitempty"`
 	NextTime  int64              `bson:"nextTime"`
