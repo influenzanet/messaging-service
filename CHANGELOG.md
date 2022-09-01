@@ -1,10 +1,11 @@
 # Changelog
 
-## [v1.] - 2022-
+## [v1.1.1] - 2022-09-01
 
 ### Changed
 
 - Replacing log.Print instances with custom logger to use log levels.
+- Fixing issue, where participant messages did not inlcude a login token.
 
 ## [v1.1.0] - 2022-06-03
 

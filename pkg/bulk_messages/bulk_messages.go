@@ -108,6 +108,7 @@ func GenerateForAllUsers(
 			instanceID,
 			messageTemplate,
 			contentInfos,
+			messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY || messageTemplate.MessageType == constants.EMAIL_TYPE_STUDY_REMINDER,
 		)
 		if err != nil {
 			counters.IncreaseCounter(false)
@@ -177,6 +178,7 @@ func GenerateForStudyParticipants(
 			instanceID,
 			messageTemplate,
 			contentInfos,
+			true,
 		)
 		if err != nil {
 			counters.IncreaseCounter(false)
@@ -249,7 +251,6 @@ func GenerateScheduledParticipantMessages(
 
 				contentInfos := map[string]string{}
 				contentInfos["profileAlias"] = profile.Alias
-
 				outgoing, err := prepareOutgoingEmail(
 					user,
 					apiClients,
@@ -257,6 +258,7 @@ func GenerateScheduledParticipantMessages(
 					instanceID,
 					template,
 					contentInfos,
+					true,
 				)
 				if err != nil {
 					counters.IncreaseCounter(false)
@@ -342,6 +344,7 @@ func GenerateResearcherNotificationMessages(
 				instanceID,
 				template,
 				contentInfos,
+				false,
 			)
 			if err != nil {
 				counters.IncreaseCounter(false)
@@ -380,7 +383,7 @@ func prepareOutgoingEmail(
 	instanceID string,
 	messageTemplate types.EmailTemplate,
 	contentInfos map[string]string,
-
+	includeLoginToken bool,
 ) (*types.OutgoingEmail, error) {
 	outgoingEmail := types.OutgoingEmail{
 		MessageType:     messageTemplate.MessageType,
@@ -401,8 +404,9 @@ func prepareOutgoingEmail(
 			return nil, err
 		}
 		contentInfos["unsubscribeToken"] = token
-	} else if messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY ||
-		messageTemplate.MessageType == constants.EMAIL_TYPE_STUDY_REMINDER {
+	}
+
+	if includeLoginToken {
 		token, err := getTemploginToken(apiClients.UserManagementService, instanceID, user, messageTemplate.StudyKey, loginTokenLifeTime)
 		if err != nil {
 			return nil, err
