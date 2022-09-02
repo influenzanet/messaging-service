@@ -4,7 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       tags:
+        required: false
         description: 'Docker Tag override: [leave empty if not needed]'
+  push:
+    tags:
+      - "v*"
 
 jobs:
 
