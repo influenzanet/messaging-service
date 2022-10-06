@@ -1,5 +1,15 @@
 # Changelog
 
+## [v1.2.0] - 2022-10-06
+
+### Added
+
+- Add email-emulator service that will write emails onto the disk instead of sending them to an email server. This is a simple alternative to perform local tests without the need to setup actual email server (in case message sending is not needed).
+
+### Changed
+
+- Participant message generation will use the payload (participant flags) for the email template, so that these can be utilised in emails.
+
 ## [v1.1.1] - 2022-09-01
 
 ### Changed
