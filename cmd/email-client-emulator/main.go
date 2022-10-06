@@ -19,8 +19,6 @@ type Config struct {
 func initConfig() Config {
 	conf := Config{}
 	conf.Port = os.Getenv("EMAIL_CLIENT_SERVICE_LISTEN_PORT")
-	conf.ServerConfigPath = os.Getenv("MESSAGING_CONFIG_FOLDER") + "/smtp-servers.yaml"
-	conf.HighPrioServerConfigPath = os.Getenv("MESSAGING_CONFIG_FOLDER") + "/high-prio-smtp-servers.yaml"
 	conf.EmailClientEmulatorPath = os.Getenv("EMAIL_CLIENT_EMULATOR_PATH")
 	return conf
 }
