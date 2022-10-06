@@ -10,10 +10,8 @@ import (
 
 // Config is the structure that holds all global configuration data
 type Config struct {
-	Port                     string
-	ServerConfigPath         string
-	HighPrioServerConfigPath string
-	EmailClientEmulatorPath  string
+	Port                    string
+	EmailClientEmulatorPath string
 }
 
 func initConfig() Config {

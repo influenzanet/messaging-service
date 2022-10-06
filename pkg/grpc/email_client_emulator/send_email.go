@@ -13,10 +13,6 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-const (
-	maxRetry = 5
-)
-
 func (s *emailClientServer) Status(ctx context.Context, _ *empty.Empty) (*api.ServiceStatus, error) {
 	return &api.ServiceStatus{
 		Status:  api.ServiceStatus_NORMAL,
