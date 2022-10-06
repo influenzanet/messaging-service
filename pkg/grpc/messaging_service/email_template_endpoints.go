@@ -8,6 +8,7 @@ import (
 	"github.com/influenzanet/go-utils/pkg/token_checks"
 	loggingAPI "github.com/influenzanet/logging-service/pkg/api"
 	api "github.com/influenzanet/messaging-service/pkg/api/messaging_service"
+	"github.com/influenzanet/messaging-service/pkg/templates"
 	"github.com/influenzanet/messaging-service/pkg/types"
 
 	"google.golang.org/grpc/codes"
@@ -48,7 +49,17 @@ func (s *messagingServer) SaveEmailTemplate(ctx context.Context, req *api.SaveEm
 	}
 
 	templ := types.EmailTemplateFromAPI(req.Template)
-	templ, err := s.messageDBservice.SaveEmailTemplate(req.Token.InstanceId, templ)
+	err := templates.ResolveTemplateByLang(
+		templ,
+		req.Token.InstanceId,
+		make(map[string]string),
+	)
+	//TODO: improve err handling/ reuse content???
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	templ, err = s.messageDBservice.SaveEmailTemplate(req.Token.InstanceId, templ)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

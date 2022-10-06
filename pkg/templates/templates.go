@@ -35,3 +35,24 @@ func ResolveTemplate(tempName string, templateDef string, contentInfos map[strin
 	}
 	return tpl.String(), nil
 }
+
+//TODO check templateTranslations Translations object als Argument
+//
+
+func ResolveTemplateByLang(tempTranslations types.EmailTemplate, InstanceId string, contentInfos map[string]string) (err error) {
+
+	for _, templ := range tempTranslations.Translations {
+		templateName := InstanceId + tempTranslations.MessageType + templ.Lang
+		//save content?!?
+		_, err := ResolveTemplate(
+			templateName,
+			templ.TemplateDef,
+			contentInfos,
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
