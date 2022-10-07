@@ -17,14 +17,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - run: git fetch --prune --unshallow --tags
-    - name: Get current version
+    - uses: actions/checkout@v3
+    - name: Get current version (workflow_dispatch)
       id: version
       run: echo "REPO_VERSION=$(git describe --tags --abbrev=0)" >> $GITHUB_ENV
+      if: ${{ github.event_name == 'workflow_dispatch' }}
     - name: Docker image tag override
       if: ${{ github.event.inputs.tags && github.event.inputs.tags != '' }}
       run: echo "REPO_VERSION=${{github.event.inputs.tags}}" >> $GITHUB_ENV
+    - name: version from tags push
+      run: echo "REPO_VERSION=${{github.ref_name}}" >> $GITHUB_ENV
+      if: ${{ github.event_name == 'push' }}
     - name: docker login
       env:
         DOCKER_USER: ${{secrets.DOCKER_USER}}
