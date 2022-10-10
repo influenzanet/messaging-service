@@ -49,12 +49,11 @@ func (s *messagingServer) SaveEmailTemplate(ctx context.Context, req *api.SaveEm
 	}
 
 	templ := types.EmailTemplateFromAPI(req.Template)
-	err := templates.ResolveTemplateByLang(
+	err := templates.CheckTemplateByLang(
 		templ,
 		req.Token.InstanceId,
 		make(map[string]string),
 	)
-	//TODO: improve err handling/ reuse content???
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

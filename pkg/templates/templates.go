@@ -2,6 +2,7 @@ package templates
 
 import (
 	"bytes"
+	"encoding/base64"
 	"html/template"
 
 	"github.com/coneno/logger"
@@ -36,17 +37,19 @@ func ResolveTemplate(tempName string, templateDef string, contentInfos map[strin
 	return tpl.String(), nil
 }
 
-//TODO check templateTranslations Translations object als Argument
-//
-
-func ResolveTemplateByLang(tempTranslations types.EmailTemplate, InstanceId string, contentInfos map[string]string) (err error) {
+func CheckTemplateByLang(tempTranslations types.EmailTemplate, InstanceId string, contentInfos map[string]string) (err error) {
 
 	for _, templ := range tempTranslations.Translations {
 		templateName := InstanceId + tempTranslations.MessageType + templ.Lang
+		decodedTemplate, err := base64.StdEncoding.DecodeString(templ.TemplateDef)
+		if err != nil {
+			logger.Error.Printf("error when decoding template %s: %v", templateName, err)
+			return err
+		}
 		//save content?!?
-		_, err := ResolveTemplate(
+		_, err = ResolveTemplate(
 			templateName,
-			templ.TemplateDef,
+			string(decodedTemplate),
 			contentInfos,
 		)
 		if err != nil {

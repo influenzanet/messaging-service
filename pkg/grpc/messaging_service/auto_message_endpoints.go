@@ -49,12 +49,11 @@ func (s *messagingServer) SaveAutoMessage(ctx context.Context, req *api.SaveAuto
 	}
 
 	reqMsg := types.AutoMessageFromAPI(req.AutoMessage)
-	err := templates.ResolveTemplateByLang(
+	err := templates.CheckTemplateByLang(
 		reqMsg.Template,
 		req.Token.InstanceId,
 		make(map[string]string),
 	)
-	//TODO: improve err handling/ reuse content???
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
