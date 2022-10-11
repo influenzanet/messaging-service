@@ -251,6 +251,10 @@ func GenerateScheduledParticipantMessages(
 
 				contentInfos := map[string]string{}
 				contentInfos["profileAlias"] = profile.Alias
+				// make payload accessible for the template eninge:
+				for k, v := range m.Payload {
+					contentInfos[k] = v
+				}
 				outgoing, err := prepareOutgoingEmail(
 					user,
 					apiClients,
