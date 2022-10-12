@@ -49,10 +49,8 @@ func (s *messagingServer) SaveAutoMessage(ctx context.Context, req *api.SaveAuto
 	}
 
 	reqMsg := types.AutoMessageFromAPI(req.AutoMessage)
-	err := templates.CheckTemplateByLang(
+	err := templates.CheckAllTranslationsParsable(
 		reqMsg.Template,
-		req.Token.InstanceId,
-		make(map[string]string),
 	)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())

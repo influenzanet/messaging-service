@@ -49,10 +49,8 @@ func (s *messagingServer) SaveEmailTemplate(ctx context.Context, req *api.SaveEm
 	}
 
 	templ := types.EmailTemplateFromAPI(req.Template)
-	err := templates.CheckTemplateByLang(
+	err := templates.CheckAllTranslationsParsable(
 		templ,
-		req.Token.InstanceId,
-		make(map[string]string),
 	)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
