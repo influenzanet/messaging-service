@@ -1,5 +1,11 @@
 # Changelog
 
+## [unreleased] - ???
+
+### Added
+
+- [PR #10](https://github.com/influenzanet/messaging-service/pull/10) Checks if go template engine is able to parse and execute new email templates. This prevents uploading incorrect email templates.
+
 ## [v1.2.0] - 2022-10-06
 
 ### Added
