@@ -8,6 +8,7 @@ import (
 	"github.com/influenzanet/go-utils/pkg/token_checks"
 	loggingAPI "github.com/influenzanet/logging-service/pkg/api"
 	api "github.com/influenzanet/messaging-service/pkg/api/messaging_service"
+	"github.com/influenzanet/messaging-service/pkg/templates"
 	"github.com/influenzanet/messaging-service/pkg/types"
 
 	"google.golang.org/grpc/codes"
@@ -48,6 +49,13 @@ func (s *messagingServer) SaveAutoMessage(ctx context.Context, req *api.SaveAuto
 	}
 
 	reqMsg := types.AutoMessageFromAPI(req.AutoMessage)
+	err := templates.CheckAllTranslationsParsable(
+		reqMsg.Template,
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
 	autoMsg, err := s.messageDBservice.SaveAutoMessage(req.Token.InstanceId, *reqMsg)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
