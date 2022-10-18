@@ -136,9 +136,6 @@ func handleOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalD
 	if err != nil {
 		logger.Error.Printf("%v", err)
 	}
-	if len(instances) == 0 {
-		logger.Warning.Println("No instance found, did you defined global db instances collection ?")
-	}
 	for _, instance := range instances {
 		go handleOutgoingForInstanceID(mdb, instance.InstanceID, clients, lastAttemptOlderThan, onlyHighPrio)
 	}
@@ -194,9 +191,6 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 	instances, err := gdb.GetAllInstances()
 	if err != nil {
 		logger.Error.Printf("GetAllInstances: %v", err)
-	}
-	if len(instances) == 0 {
-		logger.Warning.Println("No instance found, did you defined global db instances collection ?")
 	}
 	for _, instance := range instances {
 		activeMessages, err := mdb.FindAutoMessages(instance.InstanceID, true)
