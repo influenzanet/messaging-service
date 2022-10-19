@@ -126,11 +126,14 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 }
 
 func runnerForScheduledParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
-	logger.Info.Printf("Starting loop for participant message period=%d", freq)
-	for {
-		logger.Debug.Println("Fetch and send scheduled participant messages.")
-		go handleScheduledParticipantMessages(mdb, gdb, clients)
-		time.Sleep(time.Duration(freq) * time.Second)
+	//do nothing if freq == 0
+	if freq > 0 {
+		logger.Info.Printf("Starting loop for participant message period=%d", freq)
+		for {
+			logger.Debug.Println("Fetch and send scheduled participant messages.")
+			go handleScheduledParticipantMessages(mdb, gdb, clients)
+			time.Sleep(time.Duration(freq) * time.Second)
+		}
 	}
 }
 
