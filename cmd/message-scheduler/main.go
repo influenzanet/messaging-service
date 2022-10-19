@@ -24,9 +24,10 @@ const (
 type Config struct {
 	LogLevel    logger.LogLevel
 	Frequencies struct {
-		HighPrio    int
-		LowPrio     int
-		AutoMessage int
+		HighPrio                     int
+		LowPrio                      int
+		AutoMessage                  int
+		ScheduledParticipantMessages int
 	}
 	MessageDBConfig types.DBConfig
 	GlobalDBConfig  types.DBConfig
@@ -51,17 +52,23 @@ func initConfig() Config {
 	if err != nil {
 		logger.Error.Fatal(err)
 	}
+	pm, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_PARTICIPANT_MESSAGE"))
+	if err != nil {
+		logger.Error.Fatal(err)
+	}
 
 	conf.LogLevel = config.GetLogLevel()
 
 	conf.Frequencies = struct {
-		HighPrio    int
-		LowPrio     int
-		AutoMessage int
+		HighPrio                     int
+		LowPrio                      int
+		AutoMessage                  int
+		ScheduledParticipantMessages int
 	}{
-		HighPrio:    hp,
-		LowPrio:     lp,
-		AutoMessage: am,
+		HighPrio:                     hp,
+		LowPrio:                      lp,
+		AutoMessage:                  am,
+		ScheduledParticipantMessages: pm,
 	}
 	conf.ServiceURLs.UserManagementService = os.Getenv("ADDR_USER_MANAGEMENT_SERVICE")
 	conf.ServiceURLs.StudyService = os.Getenv("ADDR_STUDY_SERVICE")
@@ -96,6 +103,7 @@ func main() {
 
 	go runnerForLowPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.LowPrio)
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)
+	go runnerForScheduledParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ScheduledParticipantMessages)
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
