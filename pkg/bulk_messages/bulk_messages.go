@@ -39,13 +39,7 @@ func GenerateAutoMessages(
 			messageLabel,
 		)
 	case "scheduled-participant-messages":
-		GenerateScheduledParticipantMessages(
-			apiClients,
-			messageDBService,
-			instanceID,
-			autoMessage.StudyKey,
-			messageLabel,
-		)
+		logger.Warning.Printf("WARNING: using particpant messages through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v", instanceID, autoMessage.StudyKey)
 	case "researcher-notifications":
 		GenerateResearcherNotificationMessages(
 			apiClients,
@@ -202,7 +196,6 @@ func GenerateScheduledParticipantMessages(
 	apiClients *types.APIClients,
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
-	studyKey string,
 	messageLabel string,
 ) {
 	counters := types.InitMessageCounter()
