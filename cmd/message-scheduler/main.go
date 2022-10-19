@@ -117,6 +117,15 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 	}
 }
 
+func runnerForScheduledParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
+	logger.Info.Printf("Starting loop for participant message period=%d", freq)
+	for {
+		logger.Debug.Println("Fetch and send scheduled participant messages.")
+		go handleScheduledParticipantMessages(mdb, gdb, clients)
+		time.Sleep(time.Duration(freq) * time.Second)
+	}
+}
+
 func runnerForAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
 	for {
 		logger.Debug.Println("Fetch and send scheduled bulk messages.")
@@ -213,5 +222,23 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 				continue
 			}
 		}
+	}
+}
+
+func handleScheduledParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
+	instances, err := gdb.GetAllInstances()
+	if err != nil {
+		logger.Error.Printf("GetAllInstances: %v", err)
+	}
+	if len(instances) == 0 {
+		logger.Warning.Println("No instance found, did you define global db instances collection?")
+	}
+	for _, instance := range instances {
+		go bulk_messages.GenerateScheduledParticipantMessages(
+			clients,
+			mdb,
+			instance.InstanceID,
+			"Schedule for participant study messages",
+		)
 	}
 }
