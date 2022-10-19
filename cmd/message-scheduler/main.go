@@ -24,10 +24,10 @@ const (
 type Config struct {
 	LogLevel    logger.LogLevel
 	Frequencies struct {
-		HighPrio                     int
-		LowPrio                      int
-		AutoMessage                  int
-		ScheduledParticipantMessages int
+		HighPrio            int
+		LowPrio             int
+		AutoMessage         int
+		ParticipantMessages int
 	}
 	MessageDBConfig types.DBConfig
 	GlobalDBConfig  types.DBConfig
@@ -60,15 +60,15 @@ func initConfig() Config {
 	conf.LogLevel = config.GetLogLevel()
 
 	conf.Frequencies = struct {
-		HighPrio                     int
-		LowPrio                      int
-		AutoMessage                  int
-		ScheduledParticipantMessages int
+		HighPrio            int
+		LowPrio             int
+		AutoMessage         int
+		ParticipantMessages int
 	}{
-		HighPrio:                     hp,
-		LowPrio:                      lp,
-		AutoMessage:                  am,
-		ScheduledParticipantMessages: pm,
+		HighPrio:            hp,
+		LowPrio:             lp,
+		AutoMessage:         am,
+		ParticipantMessages: pm,
 	}
 	conf.ServiceURLs.UserManagementService = os.Getenv("ADDR_USER_MANAGEMENT_SERVICE")
 	conf.ServiceURLs.StudyService = os.Getenv("ADDR_STUDY_SERVICE")
@@ -103,7 +103,7 @@ func main() {
 
 	go runnerForLowPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.LowPrio)
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)
-	go runnerForScheduledParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ScheduledParticipantMessages)
+	go runnerForParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ParticipantMessages)
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
@@ -125,13 +125,13 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 	}
 }
 
-func runnerForScheduledParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
+func runnerForParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
 	//do nothing if freq == 0
 	if freq > 0 {
 		logger.Info.Printf("Starting loop for participant message period=%d", freq)
 		for {
 			logger.Debug.Println("Fetch and send scheduled participant messages.")
-			go handleScheduledParticipantMessages(mdb, gdb, clients)
+			go handleParticipantMessages(mdb, gdb, clients)
 			time.Sleep(time.Duration(freq) * time.Second)
 		}
 	}
@@ -236,7 +236,7 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 	}
 }
 
-func handleScheduledParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
+func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
 	instances, err := gdb.GetAllInstances()
 	if err != nil {
 		logger.Error.Printf("GetAllInstances: %v", err)
@@ -245,7 +245,7 @@ func handleScheduledParticipantMessages(mdb *messagedb.MessageDBService, gdb *gl
 		logger.Warning.Println("No instance found, did you define global db instances collection?")
 	}
 	for _, instance := range instances {
-		go bulk_messages.GenerateScheduledParticipantMessages(
+		go bulk_messages.GenerateParticipantMessages(
 			clients,
 			mdb,
 			instance.InstanceID,

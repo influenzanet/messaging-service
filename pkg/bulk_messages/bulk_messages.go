@@ -192,7 +192,7 @@ func GenerateForStudyParticipants(
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel)
 }
 
-func GenerateScheduledParticipantMessages(
+func GenerateParticipantMessages(
 	apiClients *types.APIClients,
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
