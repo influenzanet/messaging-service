@@ -33,7 +33,7 @@ func (s *emailClientServer) SendEmail(ctx context.Context, req *api.SendEmailReq
 		if err != nil {
 			logger.Error.Printf("error sending mail: err at target path mkdir %v", err.Error())
 		}
-		filename := time.Now().Format("2006-01-01 15:04:05") + " " + req.Subject + ".html"
+		filename := time.Now().Format("2006-01-02 15:04:05") + " " + req.Subject + ".html"
 		f, err := os.Create(filepath + "/" + filename)
 		if err != nil {
 			logger.Error.Printf("error while creating file %v", filename)
