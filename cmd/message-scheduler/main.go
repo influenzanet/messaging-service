@@ -39,17 +39,17 @@ type Config struct {
 
 func initConfig() Config {
 	conf := Config{}
-	
+
 	hp, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_HIGH_PRIO"))
 	if err != nil {
 		logger.Error.Fatal(err)
 	}
-	
+
 	lp, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_LOW_PRIO"))
 	if err != nil {
 		logger.Error.Fatal(err)
 	}
-	
+
 	am, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_AUTO_MESSAGE"))
 	if err != nil {
 		logger.Error.Fatal(err)
@@ -78,7 +78,7 @@ func main() {
 	conf := initConfig()
 
 	logger.SetLevel(conf.LogLevel)
-	
+
 	// ---> client connections
 	clients := &types.APIClients{}
 	umClient, close := gc.ConnectToUserManagementService(conf.ServiceURLs.UserManagementService)
@@ -102,32 +102,41 @@ func main() {
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
+func logInitialLoopStartedMsg(loopName string, period time.Duration) {
+	logger.Info.Printf("Starting loop for '%s' with a period of %s", loopName, period)
+}
+
 func runnerForHighPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
-	logger.Info.Printf("Starting loop for High priority message frequency=%d", freq)
+	period := time.Duration(freq) * time.Second
+	logInitialLoopStartedMsg("high prio outgoing emails", period)
+
 	lastAttemptOlderThan := int64(float64(freq) * 0.8)
 	for {
 		logger.Debug.Println("Fetch and send high prio outgoing emails.")
 		go handleOutgoingEmails(mdb, gdb, clients, lastAttemptOlderThan, true)
-		time.Sleep(time.Duration(freq) * time.Second)
+		time.Sleep(period)
 	}
 }
 
 func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
-	logger.Info.Printf("Starting loop for Low priority message frequency=%d", freq)
+	period := time.Duration(freq) * time.Second
+	logInitialLoopStartedMsg("low prio outgoing emails", period)
+
 	olderThan := int64(float64(freq) * 0.8)
 	for {
 		logger.Debug.Println("Fetch and send low prio outgoing emails.")
 		go handleOutgoingEmails(mdb, gdb, clients, olderThan, false)
-		time.Sleep(time.Duration(freq) * time.Second)
+		time.Sleep(period)
 	}
 }
 
 func runnerForAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
-	logger.Info.Printf("Starting loop for auto message frequency=%d", freq)
+	period := time.Duration(freq) * time.Second
+	logInitialLoopStartedMsg("auto messages", period)
 	for {
 		logger.Debug.Println("Fetch and send scheduled bulk messages.")
 		go handleAutoMessages(mdb, gdb, clients)
-		time.Sleep(time.Duration(freq) * time.Second)
+		time.Sleep(period)
 	}
 }
 
