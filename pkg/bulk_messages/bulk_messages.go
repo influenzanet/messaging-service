@@ -41,12 +41,7 @@ func GenerateAutoMessages(
 	case "scheduled-participant-messages":
 		logger.Warning.Printf("WARNING: using particpant messages through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v", instanceID, autoMessage.StudyKey)
 	case "researcher-notifications":
-		GenerateResearcherNotificationMessages(
-			apiClients,
-			messageDBService,
-			instanceID,
-			messageLabel,
-		)
+		logger.Warning.Printf("WARNING: using researcher notifications through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v", instanceID, autoMessage.StudyKey)
 	case "study-participants":
 		autoMessage.Template.StudyKey = autoMessage.StudyKey
 		GenerateForStudyParticipants(
