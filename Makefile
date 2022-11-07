@@ -10,6 +10,8 @@ DOCKER_OPTS ?= --rm
 # TEST_ARGS = -v | grep -c RUN
 VERSION := $(shell git describe --tags --abbrev=0)
 
+DOCKER_TAG ?= $(VERSION)
+
 help:
 	@echo "Service building targets"
 	@echo "  test  : run test suites"
@@ -26,8 +28,8 @@ help:
 
 api:
 	if [ ! -d $(PROTO_BUILD_DIR) ]; then mkdir -p $(PROTO_BUILD_DIR); else  find $(PROTO_BUILD_DIR) -type f -delete &&  mkdir -p $(PROTO_BUILD_DIR); fi
-	find ./api/email_client_service/*.proto -maxdepth 1 -type f -exec protoc {} --proto_path=./api --go_out=$(PROTO_BUILD_DIR) --go_grpc_out=$(PROTO_BUILD_DIR) \;
-	find ./api/messaging_service/*.proto -maxdepth 1 -type f -exec protoc {} --proto_path=./api --go_out=$(PROTO_BUILD_DIR) --go_grpc_out=$(PROTO_BUILD_DIR) \;
+	find ./api/email_client_service/*.proto -maxdepth 1 -type f -exec protoc {} --proto_path=./api --go_out=$(PROTO_BUILD_DIR) --go-grpc_out=$(PROTO_BUILD_DIR) \;
+	find ./api/messaging_service/*.proto -maxdepth 1 -type f -exec protoc {} --proto_path=./api --go_out=$(PROTO_BUILD_DIR) --go-grpc_out=$(PROTO_BUILD_DIR) \;
 	find "./pkg/api" -delete
 	mv $(PROTO_BUILD_DIR)/github.com/influenzanet/messaging-service/pkg/api pkg/api
 	find $(PROTO_BUILD_DIR) -delete
@@ -42,13 +44,13 @@ test:
 	./test/test.sh $(TEST_ARGS)
 
 docker-email-client:
-	docker build -t  github.com/influenzanet/email-client-service:$(VERSION)  -f build/docker/email-client-service/Dockerfile $(DOCKER_OPTS) .
+	docker build -t  github.com/influenzanet/email-client-service:$(DOCKER_TAG)  -f build/docker/email-client-service/Dockerfile $(DOCKER_OPTS) .
 
 docker-message-scheduler:
-	docker build -t  github.com/influenzanet/message-scheduler:$(VERSION)  -f build/docker/message-scheduler/Dockerfile $(DOCKER_OPTS) .
+	docker build -t  github.com/influenzanet/message-scheduler:$(DOCKER_TAG)  -f build/docker/message-scheduler/Dockerfile $(DOCKER_OPTS) .
 
 docker-messaging-service:
-	docker build -t  github.com/influenzanet/messaging-service:$(VERSION)  -f build/docker/messaging-service/Dockerfile $(DOCKER_OPTS) .
+	docker build -t github.com/influenzanet/messaging-service:$(DOCKER_TAG)  -f build/docker/messaging-service/Dockerfile $(DOCKER_OPTS) .
 
 messaging-service:
 	go build -o $(TARGET_DIR) ./cmd/messaging-service
@@ -60,3 +62,5 @@ email-client-service:
 	go build -o $(TARGET_DIR) ./cmd/email-client-service
 
 build: messaging-service message-scheduler email-client-service
+
+docker: docker-message-scheduler docker-messaging-service docker-email-client

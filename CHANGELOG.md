@@ -5,6 +5,7 @@
 ### Added
 
 - [PR #10](https://github.com/influenzanet/messaging-service/pull/10) Checks if go template engine is able to parse and execute new email templates. This prevents uploading incorrect email templates.
+- [PR #11](https://github.com/influenzanet/messaging-service/pull/11) Improvement on log messages and raise error when no instances are found to help discover issues during initial setup.
 
 ## [v1.2.0] - 2022-10-06
 

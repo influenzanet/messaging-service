@@ -1,6 +1,7 @@
 package globaldb
 
 import (
+	"errors"
 	"github.com/influenzanet/study-service/pkg/types"
 	"go.mongodb.org/mongo-driver/bson"
 )
@@ -32,6 +33,10 @@ func (dbService *GlobalDBService) GetAllInstances() ([]types.Instance, error) {
 	}
 	if err := cur.Err(); err != nil {
 		return instances, err
+	}
+	// No instances is likely to be a mistake
+	if len(instances) == 0 {
+		return instances, errors.New("No instance is defined in globalDb. Did you forget to define one")
 	}
 
 	return instances, nil
