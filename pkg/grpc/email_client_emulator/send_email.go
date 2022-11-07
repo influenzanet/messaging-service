@@ -39,11 +39,9 @@ func (s *emailClientServer) SendEmail(ctx context.Context, req *api.SendEmailReq
 		filename := time.Now().Format("2006-01-01 15:04:05") + " " + req.Subject
 		originFilename := filename
 		fileType := ".html"
-		_, error := os.Stat(filepath + "/" + filename + fileType)
-		for !errors.Is(error, os.ErrNotExist) {
+		for CheckIfFileExits(filepath + "/" + filename + fileType) {
 			fileCounter++
 			filename = originFilename + "(" + strconv.Itoa(fileCounter) + ")"
-			_, error = os.Stat(filepath + "/" + filename + fileType)
 		}
 		f, err := os.Create(filepath + "/" + filename + fileType)
 		if err != nil {
@@ -65,4 +63,9 @@ func (s *emailClientServer) SendEmail(ctx context.Context, req *api.SendEmailReq
 		Status:  api.ServiceStatus_NORMAL,
 		Msg:     "email sent",
 	}, nil
+}
+
+func CheckIfFileExits(filepath string) bool {
+	_, error := os.Stat(filepath)
+	return !errors.Is(error, os.ErrNotExist)
 }
