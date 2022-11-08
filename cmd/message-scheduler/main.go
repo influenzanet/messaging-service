@@ -149,11 +149,12 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 func runnerForParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
 	//do nothing if freq == 0
 	if freq > 0 {
-		logger.Info.Printf("Starting loop for participant message period=%d", freq)
+		period := time.Duration(freq) * time.Second
+		logInitialLoopStartedMsg("participant messages", period)
 		for {
 			logger.Debug.Println("Fetch and send scheduled participant messages.")
 			go handleParticipantMessages(mdb, gdb, clients)
-			time.Sleep(time.Duration(freq) * time.Second)
+			time.Sleep(period)
 		}
 	}
 }
@@ -161,11 +162,12 @@ func runnerForParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb
 func runnerForResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
 	//do nothing if freq == 0
 	if freq > 0 {
-		logger.Info.Printf("Starting loop for researcher notification period=%d", freq)
+		period := time.Duration(freq) * time.Second
+		logInitialLoopStartedMsg("researcher notifications", period)
 		for {
 			logger.Debug.Println("Fetch and send scheduled researcher notifications.")
 			go handleResearcherNotifications(mdb, gdb, clients)
-			time.Sleep(time.Duration(freq) * time.Second)
+			time.Sleep(period)
 		}
 	}
 }
