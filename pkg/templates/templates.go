@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"html/template"
+	"strings"
 
 	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/types"
@@ -23,6 +24,10 @@ func GetTemplateTranslation(tDef types.EmailTemplate, lang string) types.Localiz
 }
 
 func ResolveTemplate(tempName string, templateDef string, contentInfos map[string]string) (content string, err error) {
+	if strings.TrimSpace(templateDef) == "" {
+		logger.Error.Printf("error: empty template %s", tempName)
+		return "", errors.New("empty template `" + tempName)
+	}
 	tmpl, err := template.New(tempName).Parse(templateDef)
 	if err != nil {
 		logger.Error.Printf("error when parsing template %s: %v", tempName, err)
@@ -56,6 +61,5 @@ func CheckAllTranslationsParsable(tempTranslations types.EmailTemplate) (err err
 			return errors.New("could not parse template for `" + templ.Lang + "` - error: " + err.Error())
 		}
 	}
-
 	return nil
 }
