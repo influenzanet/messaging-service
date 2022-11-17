@@ -44,7 +44,10 @@ func ResolveTemplate(tempName string, templateDef string, contentInfos map[strin
 }
 
 func CheckAllTranslationsParsable(tempTranslations types.EmailTemplate) (err error) {
-
+	if len(tempTranslations.Translations) == 0 {
+		logger.Error.Printf("error when decoding template %s: translation list is empty", tempTranslations.MessageType)
+		return errors.New("error when decoding template `" + tempTranslations.MessageType + "`: translation list is empty")
+	}
 	for _, templ := range tempTranslations.Translations {
 		templateName := tempTranslations.MessageType + templ.Lang
 		decodedTemplate, err := base64.StdEncoding.DecodeString(templ.TemplateDef)
