@@ -147,28 +147,30 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 }
 
 func runnerForParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
-	//do nothing if freq == 0
-	if freq > 0 {
-		period := time.Duration(freq) * time.Second
-		logInitialLoopStartedMsg("participant messages", period)
-		for {
-			logger.Debug.Println("Fetch and send scheduled participant messages.")
-			go handleParticipantMessages(mdb, gdb, clients)
-			time.Sleep(period)
-		}
+	if freq <= 0 {
+		logger.Debug.Println("no period defined for participant messages, loop is skipped.")
+		return
+	}
+	period := time.Duration(freq) * time.Second
+	logInitialLoopStartedMsg("participant messages", period)
+	for {
+		logger.Debug.Println("Fetch and send scheduled participant messages.")
+		go handleParticipantMessages(mdb, gdb, clients)
+		time.Sleep(period)
 	}
 }
 
 func runnerForResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
-	//do nothing if freq == 0
-	if freq > 0 {
-		period := time.Duration(freq) * time.Second
-		logInitialLoopStartedMsg("researcher notifications", period)
-		for {
-			logger.Debug.Println("Fetch and send scheduled researcher notifications.")
-			go handleResearcherNotifications(mdb, gdb, clients)
-			time.Sleep(period)
-		}
+	if freq <= 0 {
+		logger.Debug.Println("no period defined for researcher notifications, loop is skipped.")
+		return
+	}
+	period := time.Duration(freq) * time.Second
+	logInitialLoopStartedMsg("researcher notifications", period)
+	for {
+		logger.Debug.Println("Fetch and send scheduled researcher notifications.")
+		go handleResearcherNotifications(mdb, gdb, clients)
+		time.Sleep(period)
 	}
 }
 
@@ -270,7 +272,7 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 				messageDef.NextTime += messageDef.Period
 			}
 			if flagNextTimeInPast {
-				logger.Warning.Printf("Warning: next time for sending auto messsages is outdatet, adding period until valid date is reached")
+				logger.Warning.Printf("Next time for sending auto messsages is outdated, adding period until valid date is reached")
 			}
 			_, err := mdb.SaveAutoMessage(instance.InstanceID, messageDef)
 			if err != nil {
