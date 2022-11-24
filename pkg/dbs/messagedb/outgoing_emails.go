@@ -31,6 +31,7 @@ func (dbService *MessageDBService) AddToSentEmails(instanceID string, email type
 	email.AddedAt = time.Now().Unix()
 	email.Content = ""
 
+	email.ID = primitive.NilObjectID
 	res, err := dbService.collectionRefSentEmails(instanceID).InsertOne(ctx, email)
 	if err != nil {
 		return email, err
