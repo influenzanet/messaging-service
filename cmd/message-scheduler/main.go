@@ -288,9 +288,6 @@ func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 	if err != nil {
 		logger.Error.Printf("GetAllInstances: %v", err)
 	}
-	if len(instances) == 0 {
-		logger.Warning.Println("No instance found, did you define global db instances collection?")
-	}
 	for _, instance := range instances {
 		go bulk_messages.GenerateParticipantMessages(
 			clients,
@@ -305,9 +302,6 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 	instances, err := gdb.GetAllInstances()
 	if err != nil {
 		logger.Error.Printf("GetAllInstances: %v", err)
-	}
-	if len(instances) == 0 {
-		logger.Warning.Println("No instance found, did you define global db instances collection?")
 	}
 	for _, instance := range instances {
 		go bulk_messages.GenerateResearcherNotificationMessages(
