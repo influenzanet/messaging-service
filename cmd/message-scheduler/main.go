@@ -24,9 +24,11 @@ const (
 type Config struct {
 	LogLevel    logger.LogLevel
 	Frequencies struct {
-		HighPrio    int
-		LowPrio     int
-		AutoMessage int
+		HighPrio                int
+		LowPrio                 int
+		AutoMessage             int
+		ParticipantMessages     int
+		ResearcherNotifications int
 	}
 	MessageDBConfig types.DBConfig
 	GlobalDBConfig  types.DBConfig
@@ -54,17 +56,29 @@ func initConfig() Config {
 	if err != nil {
 		logger.Error.Fatal(err)
 	}
+	pm, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_PARTICIPANT_MESSAGE"))
+	if err != nil {
+		logger.Error.Fatal(err)
+	}
+	rn, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_RESEARCHER_NOTIFICATION"))
+	if err != nil {
+		logger.Error.Fatal(err)
+	}
 
 	conf.LogLevel = config.GetLogLevel()
 
 	conf.Frequencies = struct {
-		HighPrio    int
-		LowPrio     int
-		AutoMessage int
+		HighPrio                int
+		LowPrio                 int
+		AutoMessage             int
+		ParticipantMessages     int
+		ResearcherNotifications int
 	}{
-		HighPrio:    hp,
-		LowPrio:     lp,
-		AutoMessage: am,
+		HighPrio:                hp,
+		LowPrio:                 lp,
+		AutoMessage:             am,
+		ParticipantMessages:     pm,
+		ResearcherNotifications: rn,
 	}
 	conf.ServiceURLs.UserManagementService = os.Getenv("ADDR_USER_MANAGEMENT_SERVICE")
 	conf.ServiceURLs.StudyService = os.Getenv("ADDR_STUDY_SERVICE")
@@ -99,6 +113,8 @@ func main() {
 
 	go runnerForLowPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.LowPrio)
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)
+	go runnerForParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ParticipantMessages)
+	go runnerForResearcherNotifications(messageDBService, globalDBService, clients, conf.Frequencies.ResearcherNotifications)
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
@@ -126,6 +142,34 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 	for {
 		logger.Debug.Println("Fetch and send low prio outgoing emails.")
 		go handleOutgoingEmails(mdb, gdb, clients, olderThan, false)
+		time.Sleep(period)
+	}
+}
+
+func runnerForParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
+	if freq <= 0 {
+		logger.Debug.Println("no period defined for participant messages, loop is skipped.")
+		return
+	}
+	period := time.Duration(freq) * time.Second
+	logInitialLoopStartedMsg("participant messages", period)
+	for {
+		logger.Debug.Println("Fetch and send scheduled participant messages.")
+		go handleParticipantMessages(mdb, gdb, clients)
+		time.Sleep(period)
+	}
+}
+
+func runnerForResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
+	if freq <= 0 {
+		logger.Debug.Println("no period defined for researcher notifications, loop is skipped.")
+		return
+	}
+	period := time.Duration(freq) * time.Second
+	logInitialLoopStartedMsg("researcher notifications", period)
+	for {
+		logger.Debug.Println("Fetch and send scheduled researcher notifications.")
+		go handleResearcherNotifications(mdb, gdb, clients)
 		time.Sleep(period)
 	}
 }
@@ -222,11 +266,49 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 			)
 
 			messageDef.NextTime += messageDef.Period
+			var flagNextTimeInPast = false
+			for messageDef.NextTime < time.Now().Unix() {
+				flagNextTimeInPast = true
+				messageDef.NextTime += messageDef.Period
+			}
+			if flagNextTimeInPast {
+				logger.Warning.Printf("Next time for sending auto messsages is outdated, adding period until valid date is reached")
+			}
 			_, err := mdb.SaveAutoMessage(instance.InstanceID, messageDef)
 			if err != nil {
 				logger.Error.Printf("%s: %v", instance.InstanceID, err)
 				continue
 			}
 		}
+	}
+}
+
+func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
+	instances, err := gdb.GetAllInstances()
+	if err != nil {
+		logger.Error.Printf("GetAllInstances: %v", err)
+	}
+	for _, instance := range instances {
+		go bulk_messages.GenerateParticipantMessages(
+			clients,
+			mdb,
+			instance.InstanceID,
+			"Schedule for participant study messages",
+		)
+	}
+}
+
+func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
+	instances, err := gdb.GetAllInstances()
+	if err != nil {
+		logger.Error.Printf("GetAllInstances: %v", err)
+	}
+	for _, instance := range instances {
+		go bulk_messages.GenerateResearcherNotificationMessages(
+			clients,
+			mdb,
+			instance.InstanceID,
+			"Schedule for researcher notifications",
+		)
 	}
 }

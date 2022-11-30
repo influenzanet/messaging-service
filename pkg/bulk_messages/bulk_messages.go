@@ -39,20 +39,9 @@ func GenerateAutoMessages(
 			messageLabel,
 		)
 	case "scheduled-participant-messages":
-		GenerateScheduledParticipantMessages(
-			apiClients,
-			messageDBService,
-			instanceID,
-			autoMessage.StudyKey,
-			messageLabel,
-		)
+		logger.Warning.Printf("WARNING: using particpant messages through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v", instanceID, autoMessage.StudyKey)
 	case "researcher-notifications":
-		GenerateResearcherNotificationMessages(
-			apiClients,
-			messageDBService,
-			instanceID,
-			messageLabel,
-		)
+		logger.Warning.Printf("WARNING: using researcher notifications through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v", instanceID, autoMessage.StudyKey)
 	case "study-participants":
 		autoMessage.Template.StudyKey = autoMessage.StudyKey
 		GenerateForStudyParticipants(
@@ -198,11 +187,10 @@ func GenerateForStudyParticipants(
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel)
 }
 
-func GenerateScheduledParticipantMessages(
+func GenerateParticipantMessages(
 	apiClients *types.APIClients,
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
-	studyKey string,
 	messageLabel string,
 ) {
 	counters := types.InitMessageCounter()
@@ -226,72 +214,85 @@ func GenerateScheduledParticipantMessages(
 			break
 		}
 		for _, profile := range user.Profiles {
-			resp, err := apiClients.StudyService.GetParticipantMessages(context.Background(), &studyAPI.GetParticipantMessagesReq{
-				InstanceId: instanceID,
-				StudyKey:   studyKey,
-				ProfileId:  profile.Id,
+			studiesForUser, err := apiClients.StudyService.GetStudiesForUser(context.Background(), &studyAPI.GetStudiesForUserReq{
+				Token: &api_types.TokenInfos{
+					Id:         user.Id,
+					InstanceId: instanceID,
+					ProfilId:   profile.Id,
+				},
 			})
 			if err != nil {
-				// log needed only in debug mode, to prevent too much errors when profile is not a participant
-				logger.Debug.Printf("%s - %s - %s: %v", instanceID, studyKey, profile.Id, err)
+				logger.Debug.Printf("%s - %s: %v", instanceID, profile.Id, err)
 				continue
 			}
-
-			sentMessages := []string{}
-			for _, m := range resp.Messages {
-				template, ok := messageTemplateCache[m.Type]
-				if !ok {
-					template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, studyKey)
-					if err != nil {
-						logger.Error.Printf("template for '%s' could not be found. [%s:%s]", m.Type, instanceID, studyKey)
-						continue
-					}
-					messageTemplateCache[m.Type] = template
-				}
-
-				contentInfos := map[string]string{}
-				contentInfos["profileAlias"] = profile.Alias
-				// make payload accessible for the template eninge:
-				for k, v := range m.Payload {
-					contentInfos[k] = v
-				}
-				outgoing, err := prepareOutgoingEmail(
-					user,
-					apiClients,
-					messageDBService,
-					instanceID,
-					template,
-					contentInfos,
-					true,
-				)
-				if err != nil {
-					counters.IncreaseCounter(false)
-					logger.Error.Printf("unexpected error: %v", err)
-					continue
-				}
-
-				_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
-				if err != nil {
-					counters.IncreaseCounter(false)
-					logger.Error.Printf("unexpected error: %v", err)
-					continue
-				}
-				counters.IncreaseCounter(true)
-
-				sentMessages = append(sentMessages, m.Id)
-			}
-
-			// delete messages when generated:
-			if len(sentMessages) > 0 {
-				_, err = apiClients.StudyService.DeleteMessagesFromParticipant(context.Background(), &studyAPI.DeleteMessagesFromParticipantReq{
+			for _, study := range studiesForUser.GetStudies() {
+				resp, err := apiClients.StudyService.GetParticipantMessages(context.Background(), &studyAPI.GetParticipantMessagesReq{
 					InstanceId: instanceID,
-					StudyKey:   studyKey,
+					StudyKey:   study.Key,
 					ProfileId:  profile.Id,
-					MessageIds: sentMessages,
 				})
 				if err != nil {
-					logger.Error.Printf("unexpected error: %v", err)
+					// log needed only in debug mode, to prevent too much errors when profile is not a participant
+					logger.Debug.Printf("%s - %s - %s: %v", instanceID, study.Key, profile.Id, err)
 					continue
+				}
+
+				sentMessages := []string{}
+				for _, m := range resp.Messages {
+					template, ok := messageTemplateCache[m.Type]
+					if !ok {
+						template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, study.Key)
+						if err != nil {
+							logger.Error.Printf("template for '%s' could not be found. [%s:%s]", m.Type, instanceID, study.Key)
+							continue
+						}
+						messageTemplateCache[m.Type] = template
+					}
+
+					contentInfos := map[string]string{}
+					contentInfos["profileAlias"] = profile.Alias
+					// make payload accessible for the template eninge:
+					for k, v := range m.Payload {
+						contentInfos[k] = v
+					}
+					outgoing, err := prepareOutgoingEmail(
+						user,
+						apiClients,
+						messageDBService,
+						instanceID,
+						template,
+						contentInfos,
+						true,
+					)
+					if err != nil {
+						counters.IncreaseCounter(false)
+						logger.Error.Printf("unexpected error: %v", err)
+						continue
+					}
+
+					_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
+					if err != nil {
+						counters.IncreaseCounter(false)
+						logger.Error.Printf("unexpected error: %v", err)
+						continue
+					}
+					counters.IncreaseCounter(true)
+
+					sentMessages = append(sentMessages, m.Id)
+				}
+
+				// delete messages when generated:
+				if len(sentMessages) > 0 {
+					_, err = apiClients.StudyService.DeleteMessagesFromParticipant(context.Background(), &studyAPI.DeleteMessagesFromParticipantReq{
+						InstanceId: instanceID,
+						StudyKey:   study.Key,
+						ProfileId:  profile.Id,
+						MessageIds: sentMessages,
+					})
+					if err != nil {
+						logger.Error.Printf("unexpected error: %v", err)
+						continue
+					}
 				}
 			}
 		}
