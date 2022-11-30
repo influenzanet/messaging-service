@@ -274,6 +274,16 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 			if flagNextTimeInPast {
 				logger.Warning.Printf("Next time for sending auto messsages is outdated, adding period until valid date is reached")
 			}
+			if messageDef.Until > 0 {
+				if messageDef.NextTime > messageDef.Until {
+					logger.Info.Printf("Termination date for auto message schedule is reached, auto message will be deleted")
+					err = mdb.DeleteAutoMessage(instance.InstanceID, messageDef.ID.Hex())
+					if err != nil {
+						logger.Error.Printf("%s: %v", instance.InstanceID, err)
+					}
+					return
+				}
+			}
 			_, err := mdb.SaveAutoMessage(instance.InstanceID, messageDef)
 			if err != nil {
 				logger.Error.Printf("%s: %v", instance.InstanceID, err)
