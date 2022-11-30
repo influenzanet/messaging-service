@@ -55,7 +55,9 @@ func (s *messagingServer) SaveAutoMessage(ctx context.Context, req *api.SaveAuto
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-
+	if 0 < reqMsg.Until && reqMsg.Until < reqMsg.NextTime {
+		return nil, status.Error(codes.InvalidArgument, "invalid termination date of auto message schedule")
+	}
 	autoMsg, err := s.messageDBservice.SaveAutoMessage(req.Token.InstanceId, *reqMsg)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
