@@ -16,6 +16,7 @@ type AutoMessage struct {
 	NextTime  int64              `bson:"nextTime"`
 	Period    int64              `bson:"period"`
 	Label     string             `bson:"label"`
+	Until     int64              `bson:"until"`
 }
 
 func AutoMessageFromAPI(obj *api.AutoMessage) *AutoMessage {
