@@ -33,6 +33,7 @@ func AutoMessageFromAPI(obj *api.AutoMessage) *AutoMessage {
 		NextTime:  obj.NextTime,
 		Period:    obj.Period,
 		Label:     obj.Label,
+		Until:     obj.Until,
 	}
 }
 
@@ -49,5 +50,6 @@ func (obj *AutoMessage) ToAPI() *api.AutoMessage {
 		NextTime:  obj.NextTime,
 		Period:    obj.Period,
 		Label:     obj.Label,
+		Until:     obj.Until,
 	}
 }
