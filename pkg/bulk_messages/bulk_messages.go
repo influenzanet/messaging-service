@@ -259,6 +259,7 @@ func GenerateParticipantMessages(
 					if !ok {
 						template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, study.Key)
 						if err != nil {
+							counters.IncreaseCounter(false)
 							logger.Error.Printf("template for '%s' could not be found. [%s:%s]", m.Type, instanceID, study.Key)
 							continue
 						}
@@ -338,6 +339,7 @@ func GenerateResearcherNotificationMessages(
 		if !ok {
 			template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, m.StudyKey)
 			if err != nil {
+				counters.IncreaseCounter(false)
 				logger.Error.Printf("template for '%s' could not be found. [%s:%s]", m.Type, instanceID, m.StudyKey)
 				continue
 			}
