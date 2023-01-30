@@ -125,6 +125,11 @@ func TestSaveAutoMessageEndpoint(t *testing.T) {
 			Token: userToken,
 			AutoMessage: &api.AutoMessage{
 				Type: "test1",
+				Template: &api.EmailTemplate{
+					Translations: []*api.LocalizedTemplate{
+						{Lang: "de", TemplateDef: "test", Subject: ""},
+					},
+				},
 			},
 		})
 		if err != nil {
@@ -144,6 +149,11 @@ func TestSaveAutoMessageEndpoint(t *testing.T) {
 			AutoMessage: &api.AutoMessage{
 				Id:   id,
 				Type: "test1",
+				Template: &api.EmailTemplate{
+					Translations: []*api.LocalizedTemplate{
+						{Lang: "de", TemplateDef: "test", Subject: ""},
+					},
+				},
 			},
 		})
 		if err != nil {

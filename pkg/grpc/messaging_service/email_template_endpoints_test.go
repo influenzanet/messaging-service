@@ -124,6 +124,9 @@ func TestSaveEmailTemplateEndpoint(t *testing.T) {
 			Template: &api.EmailTemplate{
 				MessageType:     "test",
 				DefaultLanguage: "de",
+				Translations: []*api.LocalizedTemplate{
+					{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
+				},
 			},
 		})
 		if err != nil {
@@ -143,6 +146,9 @@ func TestSaveEmailTemplateEndpoint(t *testing.T) {
 				MessageType:     "test",
 				StudyKey:        "testStudy",
 				DefaultLanguage: "en",
+				Translations: []*api.LocalizedTemplate{
+					{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
+				},
 			},
 		})
 		if err != nil {
@@ -161,6 +167,9 @@ func TestSaveEmailTemplateEndpoint(t *testing.T) {
 			Template: &api.EmailTemplate{
 				MessageType:     "test",
 				DefaultLanguage: "de",
+				Translations: []*api.LocalizedTemplate{
+					{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
+				},
 			},
 		})
 		if err != nil {
@@ -180,6 +189,9 @@ func TestSaveEmailTemplateEndpoint(t *testing.T) {
 				MessageType:     "test",
 				StudyKey:        "testStudy",
 				DefaultLanguage: "de",
+				Translations: []*api.LocalizedTemplate{
+					{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
+				},
 			},
 		})
 		if err != nil {
@@ -209,12 +221,18 @@ func TestDeleteEmailTemplateEndpoint(t *testing.T) {
 		},
 	}
 
-	_, err := s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "B"})
+	_, err := s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "B",
+		Translations: []types.LocalizedTemplate{
+			{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
+		},
+	})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return
 	}
-	_, err = s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "A", StudyKey: "al"})
+	_, err = s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "A", StudyKey: "al", Translations: []types.LocalizedTemplate{
+		{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
+	}})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return

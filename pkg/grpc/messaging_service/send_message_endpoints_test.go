@@ -65,7 +65,7 @@ func TestSendMessageToAllUsersEndpoint(t *testing.T) {
 			Template: &api.EmailTemplate{
 				MessageType: "newsletter",
 				Translations: []*api.LocalizedTemplate{
-					{Lang: "en", Subject: "test", TemplateDef: ""},
+					{Lang: "en", Subject: "test", TemplateDef: "dGVzdA=="},
 				},
 			},
 		})
@@ -130,7 +130,7 @@ func TestSendMessageToStudyParticipantsEndpoint(t *testing.T) {
 			Template: &api.EmailTemplate{
 				MessageType: "newsletter",
 				Translations: []*api.LocalizedTemplate{
-					{Lang: "en", Subject: "test", TemplateDef: ""},
+					{Lang: "en", Subject: "test", TemplateDef: "dGVzdA=="},
 				},
 			},
 		})
@@ -153,7 +153,11 @@ func TestSendInstantEmailEndpoint(t *testing.T) {
 		},
 	}
 
-	_, err := s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "test-type"})
+	_, err := s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "test-type",
+		DefaultLanguage: "de",
+		Translations: []types.LocalizedTemplate{{
+			Lang: "de", TemplateDef: "dGVzdA==",
+		}}})
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return
