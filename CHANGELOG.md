@@ -1,16 +1,18 @@
 # Changelog
 
-## [unreleased] - ???
+## [v1.3.0] - 2023-01-30
 
 ### Added
 
-- [PR #12](https://github.com/influenzanet/messaging-service/pull/12) 
+- [PR #12](https://github.com/influenzanet/messaging-service/pull/12)
   - Scheduled messages for participants are now fetched and sent regularly with specified frequency for all studies. Researcher notifications are also fetched and sent with specified frequency. Uploading auto message schedules for these message types is omitted.
-  - The next scheduled time for auto messages is ensured to be a valid future date in order to prevent them to be send multiple times.
-  - A new object ID is generated for emails moved from outgoing to send. 
+    - New env variables: `MESSAGE_SCHEDULER_INTERVAL_PARTICIPANT_MESSAGE`, `MESSAGE_SCHEDULER_INTERVAL_RESEARCHER_NOTIFICATION`
+  - The next scheduled time for auto messages is ensured to be a valid future date in order to prevent them to be sent multiple times.
+  - A new object ID is generated for emails moved from outgoing to send to prevent issues where messages could not be marked as sent.
   - Checks are added to prevent empty email templates and empty list of translations.
 - [PR #10](https://github.com/influenzanet/messaging-service/pull/10) Checks if go template engine is able to parse and execute new email templates. This prevents uploading incorrect email templates.
 - [PR #11](https://github.com/influenzanet/messaging-service/pull/11) Improvement on log messages and raise error when no instances are found to help discover issues during initial setup.
+- Skip users with account types other than "email", and produce DEBUG log for them instead of errors.
 
 ## [v1.2.0] - 2022-10-06
 

@@ -39,9 +39,9 @@ func GenerateAutoMessages(
 			messageLabel,
 		)
 	case "scheduled-participant-messages":
-		logger.Warning.Printf("WARNING: using particpant messages through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v", instanceID, autoMessage.StudyKey)
+		logger.Warning.Printf("using 'particpant messages' through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v, Message ID: %s", instanceID, autoMessage.StudyKey, autoMessage.ID)
 	case "researcher-notifications":
-		logger.Warning.Printf("WARNING: using researcher notifications through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v", instanceID, autoMessage.StudyKey)
+		logger.Warning.Printf("using 'researcher notifications' through auto-message schedules is deprecated, please remove this schedule, InstanceID: %v, StudyKey: %v, Message ID: %s", instanceID, autoMessage.StudyKey, autoMessage.ID)
 	case "study-participants":
 		autoMessage.Template.StudyKey = autoMessage.StudyKey
 		GenerateForStudyParticipants(
@@ -86,6 +86,11 @@ func GenerateForAllUsers(
 		}
 
 		if !isSubscribed(user, messageTemplate.MessageType) {
+			continue
+		}
+
+		if !hasAccountType(user, "email") {
+			logger.Debug.Printf("skip user %s with account type %s", user.Id, user.Account.Type)
 			continue
 		}
 
@@ -146,6 +151,11 @@ func GenerateForStudyParticipants(
 		}
 
 		if !isSubscribed(user, messageTemplate.MessageType) {
+			continue
+		}
+
+		if !hasAccountType(user, "email") {
+			logger.Debug.Printf("skip user %s with account type %s", user.Id, user.Account.Type)
 			continue
 		}
 
@@ -213,6 +223,12 @@ func GenerateParticipantMessages(
 			logger.Error.Printf("%v", err)
 			break
 		}
+
+		if !hasAccountType(user, "email") {
+			logger.Debug.Printf("skip user %s with account type %s", user.Id, user.Account.Type)
+			continue
+		}
+
 		for _, profile := range user.Profiles {
 			studiesForUser, err := apiClients.StudyService.GetStudiesForUser(context.Background(), &studyAPI.GetStudiesForUserReq{
 				Token: &api_types.TokenInfos{
@@ -461,6 +477,10 @@ func isSubscribed(user *umAPI.User, messageType string) bool {
 		return user.ContactPreferences.SubscribedToNewsletter
 	}
 	return true
+}
+
+func hasAccountType(user *umAPI.User, accountType string) bool {
+	return user.Account.Type == accountType
 }
 
 func expressionArgFromMessageToStudyAPI(arg *api.ExpressionArg) *studyAPI.ExpressionArg {

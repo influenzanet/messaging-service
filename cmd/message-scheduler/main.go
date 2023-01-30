@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -272,10 +273,10 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 				messageDef.NextTime += messageDef.Period
 			}
 			if flagNextTimeInPast {
-				logger.Warning.Printf("Next time for sending auto messsages is outdated, adding period until valid date is reached")
+				logger.Warning.Printf("MessageID: %s (%s) - `nextTime` for sending auto messsages was outdated - updated value: %d", messageDef.ID, messageDef.Label, messageDef.NextTime)
 			}
 			if 0 < messageDef.Until && messageDef.Until < messageDef.NextTime {
-				logger.Info.Printf("Termination date for auto message schedule is reached, schedule will be deleted")
+				logger.Info.Printf("MessageID: %s (%s) - Termination date for auto message schedule is reached, schedule will be deleted", messageDef.ID, messageDef.Label)
 				err = mdb.DeleteAutoMessage(instance.InstanceID, messageDef.ID.Hex())
 				if err != nil {
 					logger.Error.Printf("%s: %v", instance.InstanceID, err)
@@ -301,7 +302,7 @@ func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 			clients,
 			mdb,
 			instance.InstanceID,
-			"Schedule for participant study messages",
+			fmt.Sprintf("Schedule for participant study messages for `%s`", instance.InstanceID),
 		)
 	}
 }
@@ -316,7 +317,7 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 			clients,
 			mdb,
 			instance.InstanceID,
-			"Schedule for researcher notifications",
+			fmt.Sprintf("Schedule for researcher notifications for `%s`", instance.InstanceID),
 		)
 	}
 }
