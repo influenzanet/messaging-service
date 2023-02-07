@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/coneno/logger"
@@ -214,6 +215,7 @@ func GenerateParticipantMessages(
 	}
 
 	messageTemplateCache := map[string]types.EmailTemplate{}
+	sentMessageCountByType := map[string]int{}
 	for {
 		user, err := stream.Recv()
 		if err == io.EOF {
@@ -295,6 +297,13 @@ func GenerateParticipantMessages(
 					}
 					counters.IncreaseCounter(true)
 
+					_, ok = sentMessageCountByType[m.Type]
+					if !ok {
+						sentMessageCountByType[m.Type] = 1
+					} else {
+						sentMessageCountByType[m.Type] += 1
+					}
+
 					sentMessages = append(sentMessages, m.Id)
 				}
 
@@ -315,7 +324,18 @@ func GenerateParticipantMessages(
 		}
 	}
 	counters.Stop()
-	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for auto email '%s'.", counters.Total, counters.Failed, "scheduled participant", counters.Duration, messageLabel)
+
+	msgCounts := []string{}
+	for k, v := range sentMessageCountByType {
+		msgCounts = append(msgCounts, fmt.Sprintf("%s: %d", k, v))
+	}
+
+	msgCountsLog := strings.Join(msgCounts, ", ")
+	if msgCountsLog == "" {
+		msgCountsLog = "none"
+	}
+
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %ds for %s. Message counts: [%s]", counters.Total, counters.Failed, "scheduled participant", counters.Duration, messageLabel, msgCountsLog)
 }
 
 func GenerateResearcherNotificationMessages(

@@ -302,7 +302,7 @@ func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 			clients,
 			mdb,
 			instance.InstanceID,
-			fmt.Sprintf("Schedule for participant study messages for `%s`", instance.InstanceID),
+			fmt.Sprintf("`%s`", instance.InstanceID),
 		)
 	}
 }
