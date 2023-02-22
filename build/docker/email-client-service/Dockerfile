@@ -1,7 +1,7 @@
 ##########################
 # STAGE 1
 ##########################
-FROM golang:1.15-alpine as builder
+FROM golang:1.18-alpine as builder
 RUN apk update && apk add --no-cache git ca-certificates && update-ca-certificates
 RUN mkdir -p /go/src/github.com/influenzanet/messaging-service
 ENV GO111MODULE=on
