@@ -579,7 +579,7 @@ func (mr *MockStudyServiceApiClientMockRecorder) GetStudySurveyInfos(arg0, arg1 
 }
 
 // GetSurveyDefForStudy mocks base method.
-func (m *MockStudyServiceApiClient) GetSurveyDefForStudy(arg0 context.Context, arg1 *api.SurveyReferenceRequest, arg2 ...grpc.CallOption) (*api.Survey, error) {
+func (m *MockStudyServiceApiClient) GetSurveyDefForStudy(arg0 context.Context, arg1 *api.SurveyVersionReferenceRequest, arg2 ...grpc.CallOption) (*api.Survey, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
@@ -636,6 +636,46 @@ func (mr *MockStudyServiceApiClientMockRecorder) GetSurveyInfoPreviewCSV(arg0, a
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSurveyInfoPreviewCSV", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetSurveyInfoPreviewCSV), varargs...)
+}
+
+// GetSurveyKeys mocks base method.
+func (m *MockStudyServiceApiClient) GetSurveyKeys(arg0 context.Context, arg1 *api.GetSurveyKeysRequest, arg2 ...grpc.CallOption) (*api.SurveyKeys, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetSurveyKeys", varargs...)
+	ret0, _ := ret[0].(*api.SurveyKeys)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSurveyKeys indicates an expected call of GetSurveyKeys.
+func (mr *MockStudyServiceApiClientMockRecorder) GetSurveyKeys(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSurveyKeys", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetSurveyKeys), varargs...)
+}
+
+// GetSurveyVersionInfos mocks base method.
+func (m *MockStudyServiceApiClient) GetSurveyVersionInfos(arg0 context.Context, arg1 *api.SurveyReferenceRequest, arg2 ...grpc.CallOption) (*api.SurveyVersions, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetSurveyVersionInfos", varargs...)
+	ret0, _ := ret[0].(*api.SurveyVersions)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSurveyVersionInfos indicates an expected call of GetSurveyVersionInfos.
+func (mr *MockStudyServiceApiClientMockRecorder) GetSurveyVersionInfos(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSurveyVersionInfos", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetSurveyVersionInfos), varargs...)
 }
 
 // HasParticipantStateWithCondition mocks base method.
@@ -738,24 +778,24 @@ func (mr *MockStudyServiceApiClientMockRecorder) RemoveStudyMember(arg0, arg1 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveStudyMember", reflect.TypeOf((*MockStudyServiceApiClient)(nil).RemoveStudyMember), varargs...)
 }
 
-// RemoveSurveyFromStudy mocks base method.
-func (m *MockStudyServiceApiClient) RemoveSurveyFromStudy(arg0 context.Context, arg1 *api.SurveyReferenceRequest, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
+// RemoveSurveyVersion mocks base method.
+func (m *MockStudyServiceApiClient) RemoveSurveyVersion(arg0 context.Context, arg1 *api.SurveyVersionReferenceRequest, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{arg0, arg1}
 	for _, a := range arg2 {
 		varargs = append(varargs, a)
 	}
-	ret := m.ctrl.Call(m, "RemoveSurveyFromStudy", varargs...)
+	ret := m.ctrl.Call(m, "RemoveSurveyVersion", varargs...)
 	ret0, _ := ret[0].(*api.ServiceStatus)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// RemoveSurveyFromStudy indicates an expected call of RemoveSurveyFromStudy.
-func (mr *MockStudyServiceApiClientMockRecorder) RemoveSurveyFromStudy(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+// RemoveSurveyVersion indicates an expected call of RemoveSurveyVersion.
+func (mr *MockStudyServiceApiClientMockRecorder) RemoveSurveyVersion(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSurveyFromStudy", reflect.TypeOf((*MockStudyServiceApiClient)(nil).RemoveSurveyFromStudy), varargs...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSurveyVersion", reflect.TypeOf((*MockStudyServiceApiClient)(nil).RemoveSurveyVersion), varargs...)
 }
 
 // RunRules mocks base method.
@@ -1016,6 +1056,26 @@ func (mr *MockStudyServiceApiClientMockRecorder) SubmitResponse(arg0, arg1 inter
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{arg0, arg1}, arg2...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubmitResponse", reflect.TypeOf((*MockStudyServiceApiClient)(nil).SubmitResponse), varargs...)
+}
+
+// UnpublishSurvey mocks base method.
+func (m *MockStudyServiceApiClient) UnpublishSurvey(arg0 context.Context, arg1 *api.SurveyReferenceRequest, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UnpublishSurvey", varargs...)
+	ret0, _ := ret[0].(*api.ServiceStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UnpublishSurvey indicates an expected call of UnpublishSurvey.
+func (mr *MockStudyServiceApiClientMockRecorder) UnpublishSurvey(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnpublishSurvey", reflect.TypeOf((*MockStudyServiceApiClient)(nil).UnpublishSurvey), varargs...)
 }
 
 // UpdateResearcherNotificationSubscriptions mocks base method.

@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.3.1] - 2023-02-22
+
+### Changed
+
+- When generating participant messages, the `profileId` field is also available in the template data. This can be used to generate a link to open a survey for a specific participant.
+
 ## [v1.3.0] - 2023-01-30
 
 ### Added

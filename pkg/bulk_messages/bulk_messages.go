@@ -270,6 +270,7 @@ func GenerateParticipantMessages(
 
 					contentInfos := map[string]string{}
 					contentInfos["profileAlias"] = profile.Alias
+					contentInfos["profileId"] = profile.Id
 					// make payload accessible for the template eninge:
 					for k, v := range m.Payload {
 						contentInfos[k] = v
