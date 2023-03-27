@@ -64,7 +64,7 @@ func (sc *SmtpClients) SendMail(
 		if errReconnect != nil {
 			logger.Error.Printf("cannot reconnect pool for %s", sc.servers.Servers[index].Host)
 		} else {
-			logger.Error.Printf("successfully reconnected to %s", sc.servers.Servers[index].Host)
+			logger.Info.Printf("successfully reconnected to %s", sc.servers.Servers[index].Host)
 			sc.connectionPool[index] = *pool
 		}
 	}
