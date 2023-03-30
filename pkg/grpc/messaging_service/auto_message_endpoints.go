@@ -3,7 +3,9 @@ package messaging_service
 import (
 	"context"
 	"fmt"
+	"time"
 
+	"github.com/coneno/logger"
 	"github.com/influenzanet/go-utils/pkg/constants"
 	"github.com/influenzanet/go-utils/pkg/token_checks"
 	loggingAPI "github.com/influenzanet/logging-service/pkg/api"
@@ -55,8 +57,15 @@ func (s *messagingServer) SaveAutoMessage(ctx context.Context, req *api.SaveAuto
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
-	if 0 < reqMsg.Until && reqMsg.Until < reqMsg.NextTime {
-		return nil, status.Error(codes.InvalidArgument, "invalid termination date of auto message schedule")
+	if 0 < reqMsg.Until {
+		if reqMsg.Until < time.Now().Unix() {
+			logger.Error.Println("Termination Date of auto message schedule ", time.Unix(reqMsg.Until, 0), " is outdated")
+			return nil, status.Error(codes.InvalidArgument, "invalid termination date of auto message schedule, is in past")
+		}
+		if reqMsg.Until < reqMsg.NextTime {
+			logger.Error.Println("Termination Date of auto message schedule ", time.Unix(reqMsg.Until, 0), " is earlier than Start Date ", time.Unix(reqMsg.NextTime, 0))
+			return nil, status.Error(codes.InvalidArgument, "invalid termination date of auto message schedule, earlier than start date")
+		}
 	}
 	autoMsg, err := s.messageDBservice.SaveAutoMessage(req.Token.InstanceId, *reqMsg)
 	if err != nil {
