@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coneno/logger"
@@ -28,7 +29,9 @@ func GenerateAutoMessages(
 	autoMessage types.AutoMessage,
 	ignoreWeekday bool,
 	messageLabel string,
+	wg *sync.WaitGroup,
 ) {
+	defer wg.Done()
 	switch autoMessage.Type {
 	case "all-users":
 		GenerateForAllUsers(
@@ -203,7 +206,9 @@ func GenerateParticipantMessages(
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
 	messageLabel string,
+	wg *sync.WaitGroup,
 ) {
+	defer wg.Done()
 	counters := types.InitMessageCounter()
 
 	currentWeekday := time.Now().Weekday()
@@ -344,7 +349,9 @@ func GenerateResearcherNotificationMessages(
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
 	messageLabel string,
+	wg *sync.WaitGroup,
 ) {
+	defer wg.Done()
 	counters := types.InitMessageCounter()
 
 	messageTemplateCache := map[string]types.EmailTemplate{}

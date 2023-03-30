@@ -6,6 +6,7 @@ require (
 	github.com/coneno/logger v1.2.2
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.2
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/influenzanet/go-utils v0.2.11
 	github.com/influenzanet/logging-service v0.2.0
 	github.com/influenzanet/study-service v1.4.0
