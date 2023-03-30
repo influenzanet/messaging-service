@@ -131,9 +131,7 @@ func runnerForHighPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globa
 
 	lastAttemptOlderThan := int64(float64(freq) * 0.8)
 	for {
-		threadID := generateThreadID("hpOE")
-		logger.Info.Println(threadID, ": Start Process of fetching and sending high prio outgoing emails...")
-		go handleOutgoingEmails(mdb, gdb, clients, lastAttemptOlderThan, true, threadID)
+		go handleOutgoingEmails(mdb, gdb, clients, lastAttemptOlderThan, true)
 		time.Sleep(period)
 	}
 }
@@ -144,9 +142,7 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 
 	olderThan := int64(float64(freq) * 0.8)
 	for {
-		threadID := generateThreadID("lpOE")
-		logger.Info.Println(threadID, ": Start Process of fetching and sending low prio outgoing emails...")
-		go handleOutgoingEmails(mdb, gdb, clients, olderThan, false, threadID)
+		go handleOutgoingEmails(mdb, gdb, clients, olderThan, false)
 		time.Sleep(period)
 	}
 }
@@ -159,9 +155,7 @@ func runnerForParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb
 	period := time.Duration(freq) * time.Second
 	logInitialLoopStartedMsg("participant messages", period)
 	for {
-		threadID := generateThreadID("PM")
-		logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled participant messages...")
-		go handleParticipantMessages(mdb, gdb, clients, threadID)
+		go handleParticipantMessages(mdb, gdb, clients)
 		time.Sleep(period)
 	}
 }
@@ -174,9 +168,7 @@ func runnerForResearcherNotifications(mdb *messagedb.MessageDBService, gdb *glob
 	period := time.Duration(freq) * time.Second
 	logInitialLoopStartedMsg("researcher notifications", period)
 	for {
-		threadID := generateThreadID("RN")
-		logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled researcher notifications...")
-		go handleResearcherNotifications(mdb, gdb, clients, threadID)
+		go handleResearcherNotifications(mdb, gdb, clients)
 		time.Sleep(period)
 	}
 }
@@ -185,14 +177,22 @@ func runnerForAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.Global
 	period := time.Duration(freq) * time.Second
 	logInitialLoopStartedMsg("auto messages", period)
 	for {
-		threadID := generateThreadID("BM")
-		logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled bulk messages...")
-		go handleAutoMessages(mdb, gdb, clients, threadID)
+		go handleAutoMessages(mdb, gdb, clients)
 		time.Sleep(period)
 	}
 }
 
-func handleOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, lastAttemptOlderThan int64, onlyHighPrio bool, threadID string) {
+func handleOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, lastAttemptOlderThan int64, onlyHighPrio bool) {
+	threadName := "lpOE"
+	if onlyHighPrio {
+		threadName = "hpOE"
+	}
+	threadID := generateThreadID(threadName)
+	if onlyHighPrio {
+		logger.Info.Println(threadID, ": Start Process of fetching and sending high prio outgoing emails...")
+	} else {
+		logger.Info.Println(threadID, ": Start Process of fetching and sending low prio outgoing emails...")
+	}
 	var wg sync.WaitGroup
 	instances, err := gdb.GetAllInstances()
 	wg.Add(len(instances))
@@ -257,7 +257,9 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 	logger.Info.Printf("[%s] Finished processing %d (%d sent, %d failed) messages%s in %d s.", instanceID, counters.Total, counters.Success, counters.Failed, prioText, counters.Duration)
 }
 
-func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, threadID string) {
+func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
+	threadID := generateThreadID("BM")
+	logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled bulk messages...")
 	var wg sync.WaitGroup
 	instances, err := gdb.GetAllInstances()
 	wg.Add(len(instances))
@@ -313,7 +315,9 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 	logger.Info.Println(threadID, ": Finish Process of fetching and sending scheduled bulk messages")
 }
 
-func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, threadID string) {
+func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
+	threadID := generateThreadID("PM")
+	logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled participant messages...")
 	var wg sync.WaitGroup
 	instances, err := gdb.GetAllInstances()
 	wg.Add(len(instances))
@@ -333,7 +337,9 @@ func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 	logger.Info.Println(threadID, ": Finish Process of fetching and sending scheduled participant messages")
 }
 
-func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, threadID string) {
+func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
+	threadID := generateThreadID("RN")
+	logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled researcher notifications...")
 	var wg sync.WaitGroup
 	instances, err := gdb.GetAllInstances()
 	wg.Add(len(instances))
