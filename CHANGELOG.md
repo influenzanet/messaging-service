@@ -1,5 +1,11 @@
 # Changelog
 
+## ????? - 2023-03-30
+
+### Added
+
+- Logging provides information about starting and finishing processes of generating and sending participant messages, researcher notifications, auto messages, low and high prio emails. Each process can be identified by its own thread ID.
+
 ## [v1.3.1] - 2023-02-22
 
 ### Changed
