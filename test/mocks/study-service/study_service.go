@@ -718,6 +718,26 @@ func (mr *MockStudyServiceApiClientMockRecorder) LeaveStudy(arg0, arg1 interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LeaveStudy", reflect.TypeOf((*MockStudyServiceApiClient)(nil).LeaveStudy), varargs...)
 }
 
+// ProfileDeleted mocks base method.
+func (m *MockStudyServiceApiClient) ProfileDeleted(arg0 context.Context, arg1 *api_types.TokenInfos, arg2 ...grpc.CallOption) (*api.ServiceStatus, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ProfileDeleted", varargs...)
+	ret0, _ := ret[0].(*api.ServiceStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ProfileDeleted indicates an expected call of ProfileDeleted.
+func (mr *MockStudyServiceApiClientMockRecorder) ProfileDeleted(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProfileDeleted", reflect.TypeOf((*MockStudyServiceApiClient)(nil).ProfileDeleted), varargs...)
+}
+
 // RegisterTemporaryParticipant mocks base method.
 func (m *MockStudyServiceApiClient) RegisterTemporaryParticipant(arg0 context.Context, arg1 *api.RegisterTempParticipantReq, arg2 ...grpc.CallOption) (*api.RegisterTempParticipantResponse, error) {
 	m.ctrl.T.Helper()

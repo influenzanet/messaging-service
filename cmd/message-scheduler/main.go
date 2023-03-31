@@ -184,30 +184,26 @@ func runnerForAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.Global
 
 func handleOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, lastAttemptOlderThan int64, onlyHighPrio bool) {
 	threadName := "lpOE"
+	taskDescription := "fetching and sending low prio outgoing emails"
 	if onlyHighPrio {
 		threadName = "hpOE"
+		taskDescription = "fetching and sending high prio outgoing emails"
 	}
+
 	threadID := generateThreadID(threadName)
-	if onlyHighPrio {
-		logger.Info.Println(threadID, ": Start Process of fetching and sending high prio outgoing emails...")
-	} else {
-		logger.Info.Println(threadID, ": Start Process of fetching and sending low prio outgoing emails...")
-	}
+	logger.Info.Printf("--> Process <%s> started: %s...", threadID, taskDescription)
+
 	var wg sync.WaitGroup
 	instances, err := gdb.GetAllInstances()
-	wg.Add(len(instances))
 	if err != nil {
 		logger.Error.Printf("%v", err)
 	}
 	for _, instance := range instances {
+		wg.Add(1)
 		go handleOutgoingForInstanceID(mdb, instance.InstanceID, clients, lastAttemptOlderThan, onlyHighPrio, &wg)
 	}
 	wg.Wait()
-	if onlyHighPrio {
-		logger.Info.Println(threadID, ": Finish Process of fetching and sending high prio outgoing emails")
-	} else {
-		logger.Info.Println(threadID, ": Finish Process of fetching and sending low prio outgoing emails")
-	}
+	logger.Info.Printf("<-- Process <%s> finished: %s", threadID, taskDescription)
 }
 
 func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID string, clients *types.APIClients, lastAttemptOlderThan int64, onlyHighPrio bool, wg *sync.WaitGroup) {
@@ -259,10 +255,10 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 
 func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
 	threadID := generateThreadID("BM")
-	logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled bulk messages...")
+	logger.Info.Printf("--> Process <%s> started: fetching and sending scheduled auto messages...", threadID)
+
 	var wg sync.WaitGroup
 	instances, err := gdb.GetAllInstances()
-	wg.Add(len(instances))
 	if err != nil {
 		logger.Error.Printf("GetAllInstances: %v", err)
 	}
@@ -277,6 +273,7 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 		}
 
 		for _, messageDef := range activeMessages {
+			wg.Add(1)
 			go bulk_messages.GenerateAutoMessages(
 				clients,
 				mdb,
@@ -312,19 +309,19 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 		}
 	}
 	wg.Wait()
-	logger.Info.Println(threadID, ": Finish Process of fetching and sending scheduled bulk messages")
+	logger.Info.Printf("<-- Process <%s> finished: fetching and sending scheduled auto messages", threadID)
 }
 
 func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
 	threadID := generateThreadID("PM")
-	logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled participant messages...")
+	logger.Info.Printf("--> Process <%s> started: fetching and sending scheduled participant messages...", threadID)
 	var wg sync.WaitGroup
 	instances, err := gdb.GetAllInstances()
-	wg.Add(len(instances))
 	if err != nil {
 		logger.Error.Printf("GetAllInstances: %v", err)
 	}
 	for _, instance := range instances {
+		wg.Add(1)
 		go bulk_messages.GenerateParticipantMessages(
 			clients,
 			mdb,
@@ -334,19 +331,20 @@ func handleParticipantMessages(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 		)
 	}
 	wg.Wait()
-	logger.Info.Println(threadID, ": Finish Process of fetching and sending scheduled participant messages")
+	logger.Info.Printf("<-- Process <%s> finished: fetching and sending scheduled participant messages.", threadID)
 }
 
 func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
 	threadID := generateThreadID("RN")
-	logger.Info.Println(threadID, ": Start Process of fetching and sending scheduled researcher notifications...")
+	logger.Info.Printf("--> Process <%s> started: fetching and sending researcher notifications", threadID)
+
 	var wg sync.WaitGroup
 	instances, err := gdb.GetAllInstances()
-	wg.Add(len(instances))
 	if err != nil {
 		logger.Error.Printf("GetAllInstances: %v", err)
 	}
 	for _, instance := range instances {
+		wg.Add(1)
 		go bulk_messages.GenerateResearcherNotificationMessages(
 			clients,
 			mdb,
@@ -356,7 +354,7 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 		)
 	}
 	wg.Wait()
-	logger.Info.Println(threadID, ": Finish Process of fetching and sending scheduled researcher notifications")
+	logger.Info.Printf("<-- Process <%s> finished: fetching and sending researcher notifications", threadID)
 }
 
 func generateThreadID(threadName string) string {
