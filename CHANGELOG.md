@@ -4,6 +4,7 @@
 
 ### Changed
 
+- If a schedule is uploaded that contains invalid value for the `until` field, the schedule is not uploaded and an error is returned.
 - Logging provides information about starting and finishing processes of generating and sending participant messages, researcher notifications, auto messages, low and high prio emails. Each process can be identified by its own thread ID.
 
 ## [v1.3.1] - 2023-02-22
