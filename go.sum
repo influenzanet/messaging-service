@@ -81,8 +81,8 @@ github.com/influenzanet/go-utils v0.2.11 h1:qbrGWRccKRx2r1Z9egflEAAothtg/0JrYvBC
 github.com/influenzanet/go-utils v0.2.11/go.mod h1:HXfbMhhFVD74BfTEoSwv2YE65sBcW1ep0OObtniR/jQ=
 github.com/influenzanet/logging-service v0.2.0 h1:SVcNPhZEGP27Lhl4idzFf1ClCRMpNXfx7TGtstNjqdk=
 github.com/influenzanet/logging-service v0.2.0/go.mod h1:QbzZVLsV4NyW6poTRFONtOuz3MEWuofmfK+hDuibCxM=
-github.com/influenzanet/study-service v1.5.0 h1:0D8rZUpc3pGTrYn7mSDCNaDG8Qu9zizbjw5PKbEEWW4=
-github.com/influenzanet/study-service v1.5.0/go.mod h1:T7mRs/Mmhcf05HDnhG9Cf05Ve2KxoIa7+kLYv3c1fps=
+github.com/influenzanet/study-service v1.5.1-0.20230419102421-94f13517cb12 h1:PB8Hx/NVFHCNQyDZ8+ulJjTKH94OIEmoPgUA/670xDs=
+github.com/influenzanet/study-service v1.5.1-0.20230419102421-94f13517cb12/go.mod h1:T7mRs/Mmhcf05HDnhG9Cf05Ve2KxoIa7+kLYv3c1fps=
 github.com/influenzanet/user-management-service v1.1.1 h1:IJOrmdRBH5RGKUeV8k7uaBU/IWcKmEsFHRVbCsrjx9M=
 github.com/influenzanet/user-management-service v1.1.1/go.mod h1:bi5IVL0pjfaq9wMMJObjj16duoagQIjE26S7FBr0OnM=
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=

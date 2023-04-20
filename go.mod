@@ -9,7 +9,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/influenzanet/go-utils v0.2.11
 	github.com/influenzanet/logging-service v0.2.0
-	github.com/influenzanet/study-service v1.5.0
+	github.com/influenzanet/study-service v1.5.1-0.20230419102421-94f13517cb12
 	github.com/influenzanet/user-management-service v1.1.1
 	github.com/jordan-wright/email v4.0.1-0.20200917010138-e1c00e156980+incompatible
 	go.mongodb.org/mongo-driver v1.11.3

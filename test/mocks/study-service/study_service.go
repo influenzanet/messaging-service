@@ -518,6 +518,26 @@ func (mr *MockStudyServiceApiClientMockRecorder) GetStudiesForUser(arg0, arg1 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStudiesForUser", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetStudiesForUser), varargs...)
 }
 
+// GetStudiesWithPendingParticipantMessages mocks base method.
+func (m *MockStudyServiceApiClient) GetStudiesWithPendingParticipantMessages(arg0 context.Context, arg1 *api.GetStudiesWithPendingParticipantMessagesReq, arg2 ...grpc.CallOption) (*api.Studies, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetStudiesWithPendingParticipantMessages", varargs...)
+	ret0, _ := ret[0].(*api.Studies)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetStudiesWithPendingParticipantMessages indicates an expected call of GetStudiesWithPendingParticipantMessages.
+func (mr *MockStudyServiceApiClientMockRecorder) GetStudiesWithPendingParticipantMessages(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStudiesWithPendingParticipantMessages", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetStudiesWithPendingParticipantMessages), varargs...)
+}
+
 // GetStudy mocks base method.
 func (m *MockStudyServiceApiClient) GetStudy(arg0 context.Context, arg1 *api.StudyReferenceReq, arg2 ...grpc.CallOption) (*api.Study, error) {
 	m.ctrl.T.Helper()
