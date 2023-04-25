@@ -209,6 +209,15 @@ func GenerateParticipantMessages(
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
+
+	studiesWithPendingMessages, err := apiClients.StudyService.GetStudiesWithPendingParticipantMessages(context.Background(), &studyAPI.GetStudiesWithPendingParticipantMessagesReq{
+		InstanceId: instanceID,
+	})
+	if len(studiesWithPendingMessages.GetStudies()) == 0 {
+		logger.Info.Printf("No pending participant messages, skip loop")
+		return
+	}
+
 	counters := types.InitMessageCounter()
 
 	currentWeekday := time.Now().Weekday()
