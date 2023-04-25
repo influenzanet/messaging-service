@@ -1,5 +1,11 @@
 # Changelog
 
+## 
+
+### Changed
+
+- Before participant messages are generated, it is checked if there are any studies with pending participant messages to be sent now. If not, generating participant messages is skipped.
+
 ## [v1.3.2] - 2023-03-31
 
 ### Changed
