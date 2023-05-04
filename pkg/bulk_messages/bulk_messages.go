@@ -123,7 +123,7 @@ func GenerateForAllUsers(
 		counters.IncreaseCounter(true)
 	}
 	counters.Stop()
-	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel)
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel, instanceID)
 }
 
 func GenerateForStudyParticipants(
@@ -198,7 +198,7 @@ func GenerateForStudyParticipants(
 		counters.IncreaseCounter(true)
 	}
 	counters.Stop()
-	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel)
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel, instanceID)
 }
 
 func GenerateParticipantMessages(
