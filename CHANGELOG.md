@@ -1,5 +1,11 @@
 # Changelog
 
+## ???
+
+### Added
+
+- Add instance ID in logging information about generating auto messages.
+
 ## [v1.3.2] - 2023-03-31
 
 ### Changed
