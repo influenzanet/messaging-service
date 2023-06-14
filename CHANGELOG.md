@@ -1,10 +1,12 @@
 # Changelog
 
-## 
+##
 
 ### Changed
 
 - Before participant messages are generated, it is checked if there are any studies with pending participant messages to be sent now. If not, generating participant messages is skipped.
+
+- New env variable `GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON` can be used to define global constants that can be used in email templates via a JSON file. This is useful to define global variables that are used in multiple email templates. The content of this file must be a valid JSON string. Example: `{"baseUrl": "https://example.com"}`
 
 ## [v1.3.2] - 2023-03-31
 

@@ -3,8 +3,10 @@ package bulk_messages
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +23,10 @@ import (
 )
 
 const loginTokenLifeTime = 7 * 24 * 60 * 60 // 7 days
+
+const (
+	ENV_GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON = "GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON"
+)
 
 func GenerateAutoMessages(
 	apiClients *types.APIClients,
@@ -72,6 +78,8 @@ func GenerateForAllUsers(
 ) {
 	counters := types.InitMessageCounter()
 
+	globalTemplateInfos := loadTemplateInfoConfig()
+
 	currentWeekday := time.Now().Weekday()
 	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday), ignoreWeekday)
 	if err != nil {
@@ -99,6 +107,9 @@ func GenerateForAllUsers(
 		}
 
 		contentInfos := map[string]string{}
+		for k, v := range globalTemplateInfos {
+			contentInfos[k] = v
+		}
 		outgoing, err := prepareOutgoingEmail(
 			user,
 			apiClients,
@@ -137,6 +148,8 @@ func GenerateForStudyParticipants(
 ) {
 	counters := types.InitMessageCounter()
 
+	globalTemplateInfos := loadTemplateInfoConfig()
+
 	currentWeekday := time.Now().Weekday()
 	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday), ignoreWeekday)
 	if err != nil {
@@ -174,6 +187,9 @@ func GenerateForStudyParticipants(
 		}
 
 		contentInfos := map[string]string{}
+		for k, v := range globalTemplateInfos {
+			contentInfos[k] = v
+		}
 		outgoing, err := prepareOutgoingEmail(
 			user,
 			apiClients,
@@ -219,6 +235,8 @@ func GenerateParticipantMessages(
 	}
 
 	counters := types.InitMessageCounter()
+
+	globalTemplateInfos := loadTemplateInfoConfig()
 
 	currentWeekday := time.Now().Weekday()
 	ignoreWeekday := true
@@ -283,6 +301,9 @@ func GenerateParticipantMessages(
 					}
 
 					contentInfos := map[string]string{}
+					for k, v := range globalTemplateInfos {
+						contentInfos[k] = v
+					}
 					contentInfos["profileAlias"] = profile.Alias
 					contentInfos["profileId"] = profile.Id
 					// make payload accessible for the template eninge:
@@ -363,6 +384,8 @@ func GenerateResearcherNotificationMessages(
 	defer wg.Done()
 	counters := types.InitMessageCounter()
 
+	globalTemplateInfos := loadTemplateInfoConfig()
+
 	messageTemplateCache := map[string]types.EmailTemplate{}
 
 	messages, err := apiClients.StudyService.GetResearcherMessages(context.Background(), &studyAPI.GetReseacherMessagesReq{InstanceId: instanceID})
@@ -384,6 +407,9 @@ func GenerateResearcherNotificationMessages(
 		}
 
 		contentInfos := map[string]string{}
+		for k, v := range globalTemplateInfos {
+			contentInfos[k] = v
+		}
 		contentInfos["participantID"] = m.ParticipantId
 		// Merge payload with content infos:
 		for k, v := range m.Payload {
@@ -664,4 +690,31 @@ func getUnsubscribeToken(
 		return "", err
 	}
 	return resp.Token, nil
+}
+
+func loadTemplateInfoConfig() map[string]string {
+	// if filename defined through env variable, use it
+	filename := os.Getenv(ENV_GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON)
+	if filename == "" {
+		return nil
+	}
+
+	// load file
+	file, err := os.Open(filename)
+	if err != nil {
+		logger.Error.Printf("Error loading template info config file: %v", err)
+		return nil
+	}
+	defer file.Close()
+
+	// parse file
+	var config map[string]string
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&config)
+	if err != nil {
+		logger.Error.Printf("Error parsing template info config file: %v", err)
+		return nil
+	}
+
+	return config
 }
