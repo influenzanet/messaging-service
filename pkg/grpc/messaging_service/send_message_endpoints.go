@@ -101,6 +101,11 @@ func (s *messagingServer) SendInstantEmail(ctx context.Context, req *api.SendEma
 	if req.ContentInfos == nil {
 		req.ContentInfos = map[string]string{}
 	}
+	globalTemplateInfos := templates.LoadGlobalEmailTemplateConstants()
+	for k, v := range globalTemplateInfos {
+		req.ContentInfos[k] = v
+	}
+
 	req.ContentInfos["language"] = req.PreferredLanguage
 	// execute template
 	templateName := req.InstanceId + req.MessageType + req.PreferredLanguage

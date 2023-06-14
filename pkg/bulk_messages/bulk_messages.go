@@ -3,10 +3,8 @@ package bulk_messages
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -23,10 +21,6 @@ import (
 )
 
 const loginTokenLifeTime = 7 * 24 * 60 * 60 // 7 days
-
-const (
-	ENV_GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON = "GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON"
-)
 
 func GenerateAutoMessages(
 	apiClients *types.APIClients,
@@ -78,7 +72,7 @@ func GenerateForAllUsers(
 ) {
 	counters := types.InitMessageCounter()
 
-	globalTemplateInfos := loadTemplateInfoConfig()
+	globalTemplateInfos := templates.LoadGlobalEmailTemplateConstants()
 
 	currentWeekday := time.Now().Weekday()
 	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday), ignoreWeekday)
@@ -148,7 +142,7 @@ func GenerateForStudyParticipants(
 ) {
 	counters := types.InitMessageCounter()
 
-	globalTemplateInfos := loadTemplateInfoConfig()
+	globalTemplateInfos := templates.LoadGlobalEmailTemplateConstants()
 
 	currentWeekday := time.Now().Weekday()
 	stream, err := getFilteredUserStream(apiClients, instanceID, messageTemplate.MessageType, int32(currentWeekday), ignoreWeekday)
@@ -236,7 +230,7 @@ func GenerateParticipantMessages(
 
 	counters := types.InitMessageCounter()
 
-	globalTemplateInfos := loadTemplateInfoConfig()
+	globalTemplateInfos := templates.LoadGlobalEmailTemplateConstants()
 
 	currentWeekday := time.Now().Weekday()
 	ignoreWeekday := true
@@ -384,7 +378,7 @@ func GenerateResearcherNotificationMessages(
 	defer wg.Done()
 	counters := types.InitMessageCounter()
 
-	globalTemplateInfos := loadTemplateInfoConfig()
+	globalTemplateInfos := templates.LoadGlobalEmailTemplateConstants()
 
 	messageTemplateCache := map[string]types.EmailTemplate{}
 
@@ -690,31 +684,4 @@ func getUnsubscribeToken(
 		return "", err
 	}
 	return resp.Token, nil
-}
-
-func loadTemplateInfoConfig() map[string]string {
-	// if filename defined through env variable, use it
-	filename := os.Getenv(ENV_GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON)
-	if filename == "" {
-		return nil
-	}
-
-	// load file
-	file, err := os.Open(filename)
-	if err != nil {
-		logger.Error.Printf("Error loading template info config file: %v", err)
-		return nil
-	}
-	defer file.Close()
-
-	// parse file
-	var config map[string]string
-	decoder := json.NewDecoder(file)
-	err = decoder.Decode(&config)
-	if err != nil {
-		logger.Error.Printf("Error parsing template info config file: %v", err)
-		return nil
-	}
-
-	return config
 }

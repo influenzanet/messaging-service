@@ -3,12 +3,18 @@ package templates
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"html/template"
+	"os"
 	"strings"
 
 	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/pkg/types"
+)
+
+const (
+	ENV_GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON = "GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON"
 )
 
 func GetTemplateTranslation(tDef types.EmailTemplate, lang string) types.LocalizedTemplate {
@@ -65,4 +71,31 @@ func CheckAllTranslationsParsable(tempTranslations types.EmailTemplate) (err err
 		}
 	}
 	return nil
+}
+
+func LoadGlobalEmailTemplateConstants() map[string]string {
+	// if filename defined through env variable, use it
+	filename := os.Getenv(ENV_GLOBAL_EMAIL_TEMPLATE_CONSTANTS_JSON)
+	if filename == "" {
+		return nil
+	}
+
+	// load file
+	file, err := os.Open(filename)
+	if err != nil {
+		logger.Error.Printf("Error loading template info config file: %v", err)
+		return nil
+	}
+	defer file.Close()
+
+	// parse file
+	var config map[string]string
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&config)
+	if err != nil {
+		logger.Error.Printf("Error parsing template info config file: %v", err)
+		return nil
+	}
+
+	return config
 }
