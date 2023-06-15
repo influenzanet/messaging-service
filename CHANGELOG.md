@@ -1,6 +1,8 @@
 # Changelog
 
-## [v1.4.0]
+## [v1.4.0] - 2023-06-15
+
+**Important note:** This release require a study-service version >= 1.6.0 to work properly with participant messages.
 
 ### Added
 

@@ -378,6 +378,46 @@ func (mr *MockStudyServiceApiClientMockRecorder) GetParticipantMessages(arg0, ar
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParticipantMessages", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetParticipantMessages), varargs...)
 }
 
+// GetParticipantStateByID mocks base method.
+func (m *MockStudyServiceApiClient) GetParticipantStateByID(arg0 context.Context, arg1 *api.ParticipantStateByIDQuery, arg2 ...grpc.CallOption) (*api.ParticipantState, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetParticipantStateByID", varargs...)
+	ret0, _ := ret[0].(*api.ParticipantState)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetParticipantStateByID indicates an expected call of GetParticipantStateByID.
+func (mr *MockStudyServiceApiClientMockRecorder) GetParticipantStateByID(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParticipantStateByID", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetParticipantStateByID), varargs...)
+}
+
+// GetParticipantStatesWithPagination mocks base method.
+func (m *MockStudyServiceApiClient) GetParticipantStatesWithPagination(arg0 context.Context, arg1 *api.GetPStatesWithPaginationQuery, arg2 ...grpc.CallOption) (*api.ParticipantStatesWithPagination, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetParticipantStatesWithPagination", varargs...)
+	ret0, _ := ret[0].(*api.ParticipantStatesWithPagination)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetParticipantStatesWithPagination indicates an expected call of GetParticipantStatesWithPagination.
+func (mr *MockStudyServiceApiClientMockRecorder) GetParticipantStatesWithPagination(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetParticipantStatesWithPagination", reflect.TypeOf((*MockStudyServiceApiClient)(nil).GetParticipantStatesWithPagination), varargs...)
+}
+
 // GetReportsForUser mocks base method.
 func (m *MockStudyServiceApiClient) GetReportsForUser(arg0 context.Context, arg1 *api.GetReportsForUserReq, arg2 ...grpc.CallOption) (*api.ReportHistory, error) {
 	m.ctrl.T.Helper()
