@@ -209,19 +209,14 @@ func (s *messagingServer) AddEmailToOutgoing(ctx context.Context, req *api.SendE
 		logger.Error.Printf("Error while saving to outgoing: %v", err)
 		return &api.ServiceStatus{
 			Version: apiVersion,
-			Msg:     "failed sending message, added to outgoing",
+			Msg:     "failed adding message to outgoing",
 			Status:  api.ServiceStatus_PROBLEM,
 		}, nil
 	}
 
-	_, err = s.messageDBservice.AddToSentEmails(req.InstanceId, outgoingEmail)
-	if err != nil {
-		logger.Error.Printf("Saving to sent: %v", err)
-	}
-
 	return &api.ServiceStatus{
 		Version: apiVersion,
-		Msg:     "message sent",
+		Msg:     "message added to ougoing",
 		Status:  api.ServiceStatus_NORMAL,
 	}, nil
 }
