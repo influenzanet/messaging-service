@@ -158,7 +158,7 @@ func (s *messagingServer) SendInstantEmail(ctx context.Context, req *api.SendEma
 	}, nil
 }
 
-func (s *messagingServer) AddEmailToOutgoing(ctx context.Context, req *api.SendEmailReq) (*api.ServiceStatus, error) {
+func (s *messagingServer) QueueEmailTemplateForSending(ctx context.Context, req *api.SendEmailReq) (*api.ServiceStatus, error) {
 	if req == nil || req.InstanceId == "" || len(req.To) < 1 || req.MessageType == "" {
 		return nil, status.Error(codes.InvalidArgument, "missing argument")
 	}

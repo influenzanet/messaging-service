@@ -25,6 +25,7 @@ const _ = grpc.SupportPackageIsVersion7
 type MessagingServiceApiClient interface {
 	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ServiceStatus, error)
 	SendInstantEmail(ctx context.Context, in *SendEmailReq, opts ...grpc.CallOption) (*ServiceStatus, error)
+	QueueEmailTemplateForSending(ctx context.Context, in *SendEmailReq, opts ...grpc.CallOption) (*ServiceStatus, error)
 	SendMessageToAllUsers(ctx context.Context, in *SendMessageToAllUsersReq, opts ...grpc.CallOption) (*ServiceStatus, error)
 	SendMessageToStudyParticipants(ctx context.Context, in *SendMessageToStudyParticipantsReq, opts ...grpc.CallOption) (*ServiceStatus, error)
 	GetAutoMessages(ctx context.Context, in *GetAutoMessagesReq, opts ...grpc.CallOption) (*AutoMessages, error)
@@ -55,6 +56,15 @@ func (c *messagingServiceApiClient) Status(ctx context.Context, in *emptypb.Empt
 func (c *messagingServiceApiClient) SendInstantEmail(ctx context.Context, in *SendEmailReq, opts ...grpc.CallOption) (*ServiceStatus, error) {
 	out := new(ServiceStatus)
 	err := c.cc.Invoke(ctx, "/influenzanet.message_service.MessagingServiceApi/SendInstantEmail", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *messagingServiceApiClient) QueueEmailTemplateForSending(ctx context.Context, in *SendEmailReq, opts ...grpc.CallOption) (*ServiceStatus, error) {
+	out := new(ServiceStatus)
+	err := c.cc.Invoke(ctx, "/influenzanet.message_service.MessagingServiceApi/QueueEmailTemplateForSending", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -139,6 +149,7 @@ func (c *messagingServiceApiClient) DeleteEmailTemplate(ctx context.Context, in 
 type MessagingServiceApiServer interface {
 	Status(context.Context, *emptypb.Empty) (*ServiceStatus, error)
 	SendInstantEmail(context.Context, *SendEmailReq) (*ServiceStatus, error)
+	QueueEmailTemplateForSending(context.Context, *SendEmailReq) (*ServiceStatus, error)
 	SendMessageToAllUsers(context.Context, *SendMessageToAllUsersReq) (*ServiceStatus, error)
 	SendMessageToStudyParticipants(context.Context, *SendMessageToStudyParticipantsReq) (*ServiceStatus, error)
 	GetAutoMessages(context.Context, *GetAutoMessagesReq) (*AutoMessages, error)
@@ -159,6 +170,9 @@ func (UnimplementedMessagingServiceApiServer) Status(context.Context, *emptypb.E
 }
 func (UnimplementedMessagingServiceApiServer) SendInstantEmail(context.Context, *SendEmailReq) (*ServiceStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendInstantEmail not implemented")
+}
+func (UnimplementedMessagingServiceApiServer) QueueEmailTemplateForSending(context.Context, *SendEmailReq) (*ServiceStatus, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueueEmailTemplateForSending not implemented")
 }
 func (UnimplementedMessagingServiceApiServer) SendMessageToAllUsers(context.Context, *SendMessageToAllUsersReq) (*ServiceStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendMessageToAllUsers not implemented")
@@ -229,6 +243,24 @@ func _MessagingServiceApi_SendInstantEmail_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServiceApiServer).SendInstantEmail(ctx, req.(*SendEmailReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MessagingServiceApi_QueueEmailTemplateForSending_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SendEmailReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceApiServer).QueueEmailTemplateForSending(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/influenzanet.message_service.MessagingServiceApi/QueueEmailTemplateForSending",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceApiServer).QueueEmailTemplateForSending(ctx, req.(*SendEmailReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -391,6 +423,10 @@ var MessagingServiceApi_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SendInstantEmail",
 			Handler:    _MessagingServiceApi_SendInstantEmail_Handler,
+		},
+		{
+			MethodName: "QueueEmailTemplateForSending",
+			Handler:    _MessagingServiceApi_QueueEmailTemplateForSending_Handler,
 		},
 		{
 			MethodName: "SendMessageToAllUsers",
