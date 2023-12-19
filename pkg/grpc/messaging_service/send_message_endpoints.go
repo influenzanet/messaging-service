@@ -157,3 +157,71 @@ func (s *messagingServer) SendInstantEmail(ctx context.Context, req *api.SendEma
 		Status:  api.ServiceStatus_NORMAL,
 	}, nil
 }
+
+func (s *messagingServer) AddEmailToOutgoing(ctx context.Context, req *api.SendEmailReq) (*api.ServiceStatus, error) {
+	if req == nil || req.InstanceId == "" || len(req.To) < 1 || req.MessageType == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing argument")
+	}
+
+	templateDef, err := s.messageDBservice.FindEmailTemplateByType(req.InstanceId, req.MessageType, req.StudyKey)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "template not found")
+	}
+
+	translation := templates.GetTemplateTranslation(templateDef, req.PreferredLanguage)
+
+	decodedTemplate, err := base64.StdEncoding.DecodeString(translation.TemplateDef)
+	if err != nil {
+		return nil, status.Error(codes.Internal, err.Error())
+	}
+
+	if req.ContentInfos == nil {
+		req.ContentInfos = map[string]string{}
+	}
+	globalTemplateInfos := templates.LoadGlobalEmailTemplateConstants()
+	for k, v := range globalTemplateInfos {
+		req.ContentInfos[k] = v
+	}
+
+	req.ContentInfos["language"] = req.PreferredLanguage
+	// execute template
+	templateName := req.InstanceId + req.MessageType + req.PreferredLanguage
+	content, err := templates.ResolveTemplate(
+		templateName,
+		string(decodedTemplate),
+		req.ContentInfos,
+	)
+	if err != nil {
+		return nil, status.Error(codes.Internal, "content could not be generated")
+	}
+
+	outgoingEmail := types.OutgoingEmail{
+		MessageType:     req.MessageType,
+		To:              req.To,
+		HeaderOverrides: templateDef.HeaderOverrides,
+		Subject:         translation.Subject,
+		Content:         content,
+		HighPrio:        !req.UseLowPrio,
+	}
+
+	_, err = s.messageDBservice.AddToOutgoingEmails(req.InstanceId, outgoingEmail)
+	if err != nil {
+		logger.Error.Printf("Error while saving to outgoing: %v", err)
+		return &api.ServiceStatus{
+			Version: apiVersion,
+			Msg:     "failed sending message, added to outgoing",
+			Status:  api.ServiceStatus_PROBLEM,
+		}, nil
+	}
+
+	_, err = s.messageDBservice.AddToSentEmails(req.InstanceId, outgoingEmail)
+	if err != nil {
+		logger.Error.Printf("Saving to sent: %v", err)
+	}
+
+	return &api.ServiceStatus{
+		Version: apiVersion,
+		Msg:     "message sent",
+		Status:  api.ServiceStatus_NORMAL,
+	}, nil
+}
