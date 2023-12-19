@@ -47,25 +47,25 @@ func initConfig() Config {
 
 	hp, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_HIGH_PRIO"))
 	if err != nil {
-		logger.Error.Fatal(err)
+		logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_INTERVAL_HIGH_PRIO: %v", err)
 	}
 
 	lp, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_LOW_PRIO"))
 	if err != nil {
-		logger.Error.Fatal(err)
+		logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_INTERVAL_LOW_PRIO: %v", err)
 	}
 
 	am, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_AUTO_MESSAGE"))
 	if err != nil {
-		logger.Error.Fatal(err)
+		logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_INTERVAL_AUTO_MESSAGE: %v", err)
 	}
 	pm, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_PARTICIPANT_MESSAGE"))
 	if err != nil {
-		logger.Error.Fatal(err)
+		logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_INTERVAL_PARTICIPANT_MESSAGE: %v", err)
 	}
 	rn, err := strconv.Atoi(os.Getenv("MESSAGE_SCHEDULER_INTERVAL_RESEARCHER_NOTIFICATION"))
 	if err != nil {
-		logger.Error.Fatal(err)
+		logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_INTERVAL_RESEARCHER_NOTIFICATION: %v", err)
 	}
 
 	conf.LogLevel = config.GetLogLevel()
