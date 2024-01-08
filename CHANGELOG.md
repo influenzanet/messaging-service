@@ -1,5 +1,11 @@
 # Changelog
 
+## ??? - 2024-01-08
+
+### Added
+
+- New endpoint to generate a message based on an existing template to a specified email address with specified payload and queue it in the outgoing.
+
 ## [v1.4.0] - 2023-06-15
 
 **Important note:** This release require a study-service version >= 1.6.0 to work properly with participant messages.
