@@ -1,8 +1,12 @@
 # Changelog
 
+## [1.5.1] - 2024-01-22
+
 ### Changed
 
-- Improved error message, when outgoing email could not be deleted.
+- Increase "thread lock timer interval" for outgoing messages from 0.8 *period to 2.5* period. This should prevent the issue where messages are picked up by multiple threads if a process took too long to finish. (E.g. mail server down, and message sending is retried multiple times.)
+- If message sending failed, reset `lastSendAttempt` to 0, so that the message can be sent again in the next process.
+- Improved error messages for handling outgoing messages.
 
 ## [v1.5.0] - 2024-01-08
 

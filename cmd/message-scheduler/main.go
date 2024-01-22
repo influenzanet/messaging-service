@@ -140,7 +140,7 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 	period := time.Duration(freq) * time.Second
 	logInitialLoopStartedMsg("low prio outgoing emails", period)
 
-	olderThan := int64(float64(freq) * 0.8)
+	olderThan := int64(float64(freq) * 2.5)
 	for {
 		go handleOutgoingEmails(mdb, gdb, clients, olderThan, false)
 		time.Sleep(period)
@@ -228,8 +228,13 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 				HighPrio:        email.HighPrio,
 			})
 			if err != nil {
-				logger.Error.Printf("Could not send email in instance %s: %v", instanceID, err)
+				logger.Error.Printf("Could not send email ('%s') in instance %s: %v", email.MessageType, instanceID, err)
 				counters.IncreaseCounter(false)
+
+				err = mdb.ResetLastSendAttemptForOutgoing(instanceID, email.ID.Hex())
+				if err != nil {
+					logger.Error.Printf("Error while resetting lastSendAttempt for a message ('%s') in instance %s: %v", email.MessageType, instanceID, err)
+				}
 				continue
 			}
 

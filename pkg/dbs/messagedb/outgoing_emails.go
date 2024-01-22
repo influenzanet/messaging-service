@@ -61,6 +61,24 @@ func (dbService *MessageDBService) FetchOutgoingEmails(instanceID string, amount
 	return emails, nil
 }
 
+func (dbService *MessageDBService) ResetLastSendAttemptForOutgoing(instaceID string, id string) error {
+	ctx, cancel := dbService.getContext()
+	defer cancel()
+
+	_id, _ := primitive.ObjectIDFromHex(id)
+	filter := bson.M{"_id": _id}
+	update := bson.M{"$set": bson.M{"lastSendAttempt": 0}}
+
+	res, err := dbService.collectionRefOutgoingEmails(instaceID).UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if res.ModifiedCount < 1 {
+		return errors.New("no outgoing email found with the given id")
+	}
+	return nil
+}
+
 func (dbService *MessageDBService) DeleteOutgoingEmail(instanceID string, id string) error {
 	ctx, cancel := dbService.getContext()
 	defer cancel()
