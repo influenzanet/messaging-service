@@ -17,6 +17,7 @@ func (mc *MessageCounter) IncreaseCounter(success bool) {
 	} else {
 		mc.Failed += 1
 	}
+	mc.Duration = time.Now().Unix() - mc.StartTime
 }
 
 func (mc *MessageCounter) Stop() {

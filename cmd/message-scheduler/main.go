@@ -125,11 +125,15 @@ func logInitialLoopStartedMsg(loopName string, period time.Duration) {
 	logger.Info.Printf("Starting loop for '%s' with a period of %s", loopName, period)
 }
 
+func getThreadLockInterval(freq int) int64 {
+	return int64(float64(freq) * 2.5)
+}
+
 func runnerForHighPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
 	period := time.Duration(freq) * time.Second
 	logInitialLoopStartedMsg("high prio outgoing emails", period)
 
-	lastAttemptOlderThan := int64(float64(freq) * 0.8)
+	lastAttemptOlderThan := getThreadLockInterval(freq)
 	for {
 		go handleOutgoingEmails(mdb, gdb, clients, lastAttemptOlderThan, true)
 		time.Sleep(period)
@@ -140,7 +144,7 @@ func runnerForLowPrioOutgoingEmails(mdb *messagedb.MessageDBService, gdb *global
 	period := time.Duration(freq) * time.Second
 	logInitialLoopStartedMsg("low prio outgoing emails", period)
 
-	olderThan := int64(float64(freq) * 2.5)
+	olderThan := getThreadLockInterval(freq)
 	for {
 		go handleOutgoingEmails(mdb, gdb, clients, olderThan, false)
 		time.Sleep(period)
@@ -220,6 +224,18 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 		}
 
 		for _, email := range emails {
+			if counters.Duration > int64(float64(lastAttemptOlderThan)*0.9) {
+				// if process takes too long, skip remaining messages of this batch
+				logger.Warning.Printf("Skip sending message ('%s') in instance %s because batch duration was too long (%d)", email.MessageType, instanceID, counters.Duration)
+				counters.IncreaseCounter(false)
+
+				err = mdb.ResetLastSendAttemptForOutgoing(instanceID, email.ID.Hex())
+				if err != nil {
+					logger.Error.Printf("Error while resetting lastSendAttempt for a message ('%s') in instance %s: %v", email.MessageType, instanceID, err)
+				}
+				continue
+			}
+
 			_, err := clients.EmailClientService.SendEmail(context.Background(), &emailAPI.SendEmailReq{
 				To:              email.To,
 				HeaderOverrides: email.HeaderOverrides.ToEmailClientAPI(),
