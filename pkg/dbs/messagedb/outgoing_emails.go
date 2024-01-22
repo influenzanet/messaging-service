@@ -73,7 +73,7 @@ func (dbService *MessageDBService) DeleteOutgoingEmail(instanceID string, id str
 		return err
 	}
 	if res.DeletedCount < 1 {
-		return errors.New("no user found with the given id")
+		return errors.New("no outgoing email found with the given id")
 	}
 	return nil
 }

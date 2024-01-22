@@ -240,7 +240,7 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 			}
 			err = mdb.DeleteOutgoingEmail(instanceID, email.ID.Hex())
 			if err != nil {
-				logger.Error.Printf("Error while deleting outgoing: %v", err)
+				logger.Error.Printf("Error while deleting outgoing email of type '%s': %v", email.MessageType, err)
 			}
 			counters.IncreaseCounter(true)
 		}

@@ -1,5 +1,9 @@
 # Changelog
 
+### Changed
+
+- Improved error message, when outgoing email could not be deleted.
+
 ## [v1.5.0] - 2024-01-08
 
 ### Added
