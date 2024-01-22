@@ -17,7 +17,7 @@ func (dbService *MessageDBService) SaveAutoMessage(instanceID string, messageDef
 	if !messageDef.ID.IsZero() {
 		filter := bson.M{"_id": messageDef.ID}
 
-		upsert := true
+		upsert := false
 		rd := options.After
 		options := options.FindOneAndReplaceOptions{
 			Upsert:         &upsert,
