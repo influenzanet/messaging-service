@@ -1,5 +1,11 @@
 # Changelog
 
+## [v1.5.2] - 2024-02-08
+
+### Changed
+
+- Issue fix: counter if batch processing takes too long was not reset after the batch was processed. This could lead to a situation where no messages are sent in the next process, because the counter was already too high. Now the counter is reset after each batch.
+
 ## [v1.5.1] - 2024-01-22
 
 ### Changed

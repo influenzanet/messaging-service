@@ -222,9 +222,11 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 		if len(emails) < 1 {
 			break
 		}
+		lastFetch := time.Now().Unix()
 
 		for _, email := range emails {
-			if counters.Duration > int64(float64(lastAttemptOlderThan)*0.9) {
+			batchDuration := time.Now().Unix() - lastFetch
+			if batchDuration > int64(float64(lastAttemptOlderThan)*0.9) {
 				// if process takes too long, skip remaining messages of this batch
 				logger.Warning.Printf("Skip sending message ('%s') in instance %s because batch duration was too long (%d)", email.MessageType, instanceID, counters.Duration)
 				counters.IncreaseCounter(false)
