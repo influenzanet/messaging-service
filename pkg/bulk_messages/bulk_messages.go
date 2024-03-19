@@ -621,7 +621,7 @@ func getEmailsByIds(contacts []*umAPI.ContactInfo, ids []string) []string {
 	for _, c := range contacts {
 		if c.Type == "email" {
 			for _, id := range ids {
-				if c.Id == id {
+				if c.Id == id && c.ConfirmedAt > 0 {
 					emails = append(emails, c.GetEmail())
 				}
 			}
