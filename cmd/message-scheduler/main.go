@@ -273,7 +273,7 @@ func handleOutgoingForInstanceID(mdb *messagedb.MessageDBService, instanceID str
 	if onlyHighPrio {
 		prioText = " with high prio"
 	}
-	logger.Info.Printf("[%s] Finished processing %d (%d sent, %d failed) messages%s in %d s.", instanceID, counters.Total, counters.Success, counters.Failed, prioText, counters.Duration)
+	logger.Info.Printf("[%s] Finished processing %d messages%s in %d s.", instanceID, counters.Success, prioText, counters.Duration)
 }
 
 func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients) {
