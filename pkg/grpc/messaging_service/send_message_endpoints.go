@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"time"
 
 	"github.com/coneno/logger"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -15,7 +16,7 @@ import (
 	"github.com/influenzanet/messaging-service/pkg/bulk_messages"
 	"github.com/influenzanet/messaging-service/pkg/templates"
 	"github.com/influenzanet/messaging-service/pkg/types"
-
+	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -26,6 +27,107 @@ func (s *messagingServer) Status(ctx context.Context, _ *empty.Empty) (*api.Serv
 		Msg:     "service running",
 		Version: apiVersion,
 	}, nil
+}
+
+func (s *messagingServer) SendNotification(ctx context.Context, req *api.SendNotificationReq) (*api.ServiceStatus, error) {
+	if req == nil || req.InstanceId == "" || req.UserId == "" || req.MessageType == "" {
+		return nil, status.Error(codes.InvalidArgument, "missing arguments")
+	}
+
+	// 1. Recupera le preferenze dell'utente dal user-management-service
+	// ATTENZIONE: Questa chiamata richiede un token di autenticazione valido tra servizi.
+	// Qui si assume che il token sia gestito a livello di infrastruttura (es. tramite un proxy o header gRPC).
+	// Per ora, passiamo un token vuoto, ma questo dovrà essere gestito in produzione.
+	userRef := &umAPI.UserReference{
+		Token: &umAPI.TokenInfos{
+			InstanceId: req.InstanceId,
+			Id:         req.UserId,
+		},
+	}
+	prefs, err := s.clients.UserManagementService.GetUserContactPreferences(ctx, userRef)
+
+	if err != nil {
+		logger.Error.Printf("SendNotification: failed to get user preferences for %s: %v", req.UserId, err)
+		return nil, status.Error(codes.Internal, "cannot get user preferences")
+	}
+
+	// 2. Itera sui canali preferiti e prova a inviare
+	var sent bool
+	var lastErr error
+	for _, channel := range prefs.PreferredChannels {
+		var errChan error
+		switch channel {
+		case "whatsapp":
+			if prefs.PhoneNumber != "" {
+				errChan = s.sendWhatsAppWithRetry(ctx, req.InstanceId, prefs.PhoneNumber, req.MessageType, req.UserId, req.ContentParams)
+			} else {
+				errChan = fmt.Errorf("phone number not available for user %s", req.UserId)
+			}
+		case "email":
+			if prefs.Email != "" {
+				// Riusiamo la logica di invio email esistente
+				_, errChan = s.SendInstantEmail(ctx, &api.SendEmailReq{
+					InstanceId:   req.InstanceId,
+					To:           []string{prefs.Email},
+					MessageType:  req.MessageType,
+					ContentInfos: req.ContentParams,
+				})
+			} else {
+				errChan = fmt.Errorf("email not available for user %s", req.UserId)
+			}
+		default:
+			logger.Warning.Printf("unsupported channel '%s' for user %s", channel, req.UserId)
+			continue
+		}
+
+		if errChan == nil {
+			sent = true
+			logger.Info.Printf("Notification for user %s sent successfully on channel %s", req.UserId, channel)
+			break // Messaggio inviato con successo, esci dal loop
+		}
+		lastErr = errChan
+		logger.Warning.Printf("Failed to send notification for user %s on channel %s: %v", req.UserId, channel, errChan)
+	}
+
+	if !sent {
+		logger.Error.Printf("Failed to send notification for user %s on all preferred channels. Last error: %v", req.UserId, lastErr)
+		return nil, status.Error(codes.Internal, "failed to send notification on all channels")
+	}
+
+	return &api.ServiceStatus{
+		Status:  api.ServiceStatus_NORMAL,
+		Msg:     "Notification sent successfully",
+		Version: apiVersion,
+	}, nil
+}
+
+func (s *messagingServer) sendWhatsAppWithRetry(ctx context.Context, instanceID, phone, messageType, lang string, params map[string]string) error {
+	retryDelays := []time.Duration{1 * time.Second, 5 * time.Second, 10 * time.Second} // Strategia di retry
+	var lastErr error
+
+	logger.Debug.Printf("Attempting to send WhatsApp to %s for message type %s", phone, messageType)
+
+	sendMessageReq := &umAPI.SendMessageRequest{
+		InstanceId:    instanceID,
+		ToPhoneNumber: phone,
+		MessageType:   messageType, // Questo sarà il nome del template WhatsApp
+		Lang:          lang,
+		ContentParams: params,
+	}
+
+	for i, delay := range retryDelays {
+		// Chiamata gRPC al user-management-service
+		_, err := s.clients.UserManagementService.SendMessage(ctx, sendMessageReq)
+		if err == nil {
+			logger.Info.Printf("WhatsApp message sent successfully to %s on attempt %d", phone, i+1)
+			return nil // Successo
+		}
+		lastErr = err
+		logger.Warning.Printf("WhatsApp attempt %d failed for %s: %v. Retrying in %v", i+1, phone, err, delay)
+		time.Sleep(delay)
+	}
+
+	return fmt.Errorf("failed to send to whatsapp after multiple retries: %w", lastErr)
 }
 
 func (s *messagingServer) SendMessageToAllUsers(ctx context.Context, req *api.SendMessageToAllUsersReq) (*api.ServiceStatus, error) {

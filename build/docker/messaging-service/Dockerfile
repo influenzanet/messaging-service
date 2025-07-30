@@ -1,16 +1,13 @@
 ##########################
 # STAGE 1
 ##########################
-FROM golang:1.18-alpine as builder
+FROM golang:1.19-alpine as builder
 RUN apk update && apk add --no-cache git ca-certificates && update-ca-certificates
-RUN mkdir -p /go/src/github.com/influenzanet/messaging-service
+RUN mkdir -p /go/src/github.com/influenzanet
 ENV GO111MODULE=on
-ADD . /go/src/github.com/influenzanet/messaging-service/
+ADD . /go/src/github.com/influenzanet/
 WORKDIR /go/src/github.com/influenzanet/messaging-service
-COPY go.mod .
-COPY go.sum .
-RUN go mod download
-COPY . .
+RUN go mod tidy -compat=1.17
 WORKDIR /go/src/github.com/influenzanet/messaging-service/cmd/messaging-service
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o app .
 

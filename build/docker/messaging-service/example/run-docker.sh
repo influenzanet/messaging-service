@@ -1,1 +1,0 @@
-docker run --env-file messaging-service-env.list -p 5004:5004 github.com/influenzanet/messaging-service:$1
