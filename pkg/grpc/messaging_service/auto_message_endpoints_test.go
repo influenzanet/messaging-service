@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
 	"github.com/influenzanet/go-utils/pkg/api_types"
 	api "github.com/influenzanet/messaging-service/pkg/api/messaging_service"
 	"github.com/influenzanet/messaging-service/pkg/types"
 	loggingMock "github.com/influenzanet/messaging-service/test/mocks/logging_service"
+	"go.uber.org/mock/gomock"
 )
 
 func TestGetAutoMessagesEndpoint(t *testing.T) {

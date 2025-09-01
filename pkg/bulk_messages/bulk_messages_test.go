@@ -3,9 +3,9 @@ package bulk_messages
 import (
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	userMock "github.com/influenzanet/messaging-service/test/mocks/user-management-service"
 	"github.com/influenzanet/user-management-service/pkg/api"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )

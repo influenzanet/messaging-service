@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/influenzanet/go-utils/pkg/api_types"
 	api "github.com/influenzanet/messaging-service/pkg/api/messaging_service"
 	"github.com/influenzanet/messaging-service/pkg/types"
@@ -12,6 +11,7 @@ import (
 	loggingMock "github.com/influenzanet/messaging-service/test/mocks/logging_service"
 	studyMock "github.com/influenzanet/messaging-service/test/mocks/study-service"
 	userMock "github.com/influenzanet/messaging-service/test/mocks/user-management-service"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
