@@ -35,5 +35,3 @@ require (
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240108191215-35c7eff3a6b1 // indirect
 )
-
-replace github.com/influenzanet/user-management-service => ../user-management-service

@@ -3,9 +3,9 @@
 ##########################
 FROM golang:1.23-alpine AS builder
 RUN apk update && apk add --no-cache git ca-certificates && update-ca-certificates
-RUN mkdir -p /go/src/github.com/influenzanet
+RUN mkdir -p /go/src/github.com/influenzanet/messaging-service
 ENV GO111MODULE=on
-COPY . /go/src/github.com/influenzanet/
+COPY . /go/src/github.com/influenzanet/messaging-service/
 WORKDIR /go/src/github.com/influenzanet/messaging-service
 RUN go mod download
 WORKDIR /go/src/github.com/influenzanet/messaging-service/cmd/messaging-service
