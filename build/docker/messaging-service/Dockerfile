@@ -3,11 +3,15 @@
 ##########################
 FROM golang:1.23-alpine AS builder
 RUN apk update && apk add --no-cache git ca-certificates && update-ca-certificates
-RUN mkdir -p /go/src/github.com/influenzanet/messaging-service
 ENV GO111MODULE=on
-COPY . /go/src/github.com/influenzanet/messaging-service/
+# Prepare module directory
 WORKDIR /go/src/github.com/influenzanet/messaging-service
+# Copy only go.mod and go.sum first for better caching
+COPY messaging-service/go.mod ./
+COPY messaging-service/go.sum ./
 RUN go mod download
+# Now copy the rest of the sources
+COPY messaging-service/ .
 WORKDIR /go/src/github.com/influenzanet/messaging-service/cmd/messaging-service
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o app .
 
