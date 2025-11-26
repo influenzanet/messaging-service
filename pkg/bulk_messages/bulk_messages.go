@@ -102,24 +102,21 @@ func GenerateForAllUsers(
 
 		// Handle WhatsApp notifications for weekly reminders
 		whatsappSent := false
-		logger.Debug.Printf("Checking WhatsApp eligibility for user %s: messageType=%s, subscribedToWhatsapp=%v",
-			user.Id, messageTemplate.MessageType, user.ContactPreferences.SubscribedToWhatsapp)
+		logger.Debug.Printf("Checking WhatsApp eligibility for user %s: messageType=%s, subscribedToWeekly=%v",
+			user.Id, messageTemplate.MessageType, user.ContactPreferences.SubscribedToWeekly)
 
-		if messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY && user.ContactPreferences.SubscribedToWhatsapp {
-			logger.Info.Printf("User %s is eligible for WhatsApp weekly reminder", user.Id)
-			phone := user.ContactPreferences.WhatsappNumber
-			if phone == "" {
-				// Fallback to phone in ContactInfos if WhatsappNumber not set
-				logger.Debug.Printf("WhatsappNumber empty for user %s, checking ContactInfos", user.Id)
-				for _, contact := range user.ContactInfos {
-					if contact.Type == "phone" && contact.ConfirmedAt > 0 {
-						phone = contact.GetPhone()
-						logger.Debug.Printf("Found phone in ContactInfos for user %s: %s", user.Id, phone)
-						break
-					}
+		// For weekly reminders, try WhatsApp first if user has a confirmed phone number
+		if messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY && user.ContactPreferences.SubscribedToWeekly {
+			logger.Info.Printf("User %s is eligible for weekly reminder, checking for phone number", user.Id)
+			phone := ""
+			// Check for phone in ContactInfos
+			logger.Debug.Printf("Checking ContactInfos for user %s", user.Id)
+			for _, contact := range user.ContactInfos {
+				if contact.Type == "phone" && contact.ConfirmedAt > 0 {
+					phone = contact.GetPhone()
+					logger.Debug.Printf("Found confirmed phone in ContactInfos for user %s: %s", user.Id, phone)
+					break
 				}
-			} else {
-				logger.Debug.Printf("Using WhatsappNumber for user %s: %s", user.Id, phone)
 			}
 
 			if phone != "" {
@@ -134,11 +131,11 @@ func GenerateForAllUsers(
 					logger.Info.Printf("Successfully sent WhatsApp weekly reminder to user %s", user.Id)
 				}
 			} else {
-				logger.Warning.Printf("User %s subscribed to WhatsApp but no phone number available", user.Id)
+				logger.Warning.Printf("User %s subscribed to weekly but no confirmed phone number available", user.Id)
 			}
 		} else {
-			logger.Debug.Printf("User %s not eligible for WhatsApp: messageType=%s (expected: %s), subscribedToWhatsapp=%v",
-				user.Id, messageTemplate.MessageType, constants.EMAIL_TYPE_WEEKLY, user.ContactPreferences.SubscribedToWhatsapp)
+			logger.Debug.Printf("User %s not eligible for WhatsApp: messageType=%s (expected: %s), subscribedToWeekly=%v",
+				user.Id, messageTemplate.MessageType, constants.EMAIL_TYPE_WEEKLY, user.ContactPreferences.SubscribedToWeekly)
 		}
 
 		// Send email if user is subscribed to email notifications
