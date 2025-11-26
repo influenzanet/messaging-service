@@ -102,31 +102,43 @@ func GenerateForAllUsers(
 
 		// Handle WhatsApp notifications for weekly reminders
 		whatsappSent := false
+		logger.Debug.Printf("Checking WhatsApp eligibility for user %s: messageType=%s, subscribedToWhatsapp=%v",
+			user.Id, messageTemplate.MessageType, user.ContactPreferences.SubscribedToWhatsapp)
+
 		if messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY && user.ContactPreferences.SubscribedToWhatsapp {
+			logger.Info.Printf("User %s is eligible for WhatsApp weekly reminder", user.Id)
 			phone := user.ContactPreferences.WhatsappNumber
 			if phone == "" {
 				// Fallback to phone in ContactInfos if WhatsappNumber not set
+				logger.Debug.Printf("WhatsappNumber empty for user %s, checking ContactInfos", user.Id)
 				for _, contact := range user.ContactInfos {
 					if contact.Type == "phone" && contact.ConfirmedAt > 0 {
 						phone = contact.GetPhone()
+						logger.Debug.Printf("Found phone in ContactInfos for user %s: %s", user.Id, phone)
 						break
 					}
 				}
+			} else {
+				logger.Debug.Printf("Using WhatsappNumber for user %s: %s", user.Id, phone)
 			}
 
 			if phone != "" {
-				err := sendWeeklyReminderWhatsApp(apiClients, instanceID, user.Id, phone, contentInfos)
+				logger.Info.Printf("Sending WhatsApp weekly reminder to user %s at %s", user.Id, phone)
+				err := sendWeeklyReminderWhatsApp(apiClients, instanceID, user.Id, phone, user.Account.PreferredLanguage, contentInfos)
 				if err != nil {
 					logger.Warning.Printf("Failed to send WhatsApp weekly reminder to user %s: %v", user.Id, err)
 					// Will try email if user is subscribed to email
 				} else {
 					counters.IncreaseCounter(true)
 					whatsappSent = true
-					logger.Debug.Printf("Successfully sent WhatsApp weekly reminder to user %s", user.Id)
+					logger.Info.Printf("Successfully sent WhatsApp weekly reminder to user %s", user.Id)
 				}
 			} else {
-				logger.Debug.Printf("User %s subscribed to WhatsApp but no phone number available", user.Id)
+				logger.Warning.Printf("User %s subscribed to WhatsApp but no phone number available", user.Id)
 			}
+		} else {
+			logger.Debug.Printf("User %s not eligible for WhatsApp: messageType=%s (expected: %s), subscribedToWhatsapp=%v",
+				user.Id, messageTemplate.MessageType, constants.EMAIL_TYPE_WEEKLY, user.ContactPreferences.SubscribedToWhatsapp)
 		}
 
 		// Send email if user is subscribed to email notifications
@@ -735,17 +747,26 @@ func sendWeeklyReminderWhatsApp(
 	instanceID string,
 	userID string,
 	phone string,
+	preferredLanguage string,
 	contentParams map[string]string,
 ) error {
+	logger.Info.Printf("Attempting to send WhatsApp weekly reminder to user %s at phone %s (lang: %s)", userID, phone, preferredLanguage)
+
 	// Call user-management-service to send WhatsApp message
-	// The template name and language are configured via environment variables
-	// in the user-management-service (ENV_WHATSAPP_WEEKLY_REMINDER_TEMPLATE_*)
+	// The template name "weekly_reminder" must match the template configured in Facebook Business Manager
 	_, err := apiClients.UserManagementService.SendMessage(context.Background(), &umAPI.SendMessageRequest{
 		InstanceId:    instanceID,
 		ToPhoneNumber: phone,
-		MessageType:   "weekly_reminder", // This should match the template name configured
-		Lang:          "it",              // TODO: could be derived from user preferences
+		MessageType:   "weekly_reminder", // This matches the template name in Facebook Business Manager
+		Lang:          preferredLanguage, // Use user's preferred language
 		ContentParams: contentParams,
 	})
-	return err
+
+	if err != nil {
+		logger.Error.Printf("Failed to send WhatsApp message to %s: %v", phone, err)
+		return err
+	}
+
+	logger.Info.Printf("Successfully sent WhatsApp weekly reminder to %s", phone)
+	return nil
 }
