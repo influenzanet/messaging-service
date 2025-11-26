@@ -95,15 +95,58 @@ func GenerateForAllUsers(
 			continue
 		}
 
+		contentInfos := map[string]string{}
+		for k, v := range globalTemplateInfos {
+			contentInfos[k] = v
+		}
+
+		// Handle WhatsApp notifications for weekly reminders
+		whatsappSent := false
+		if messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY && user.ContactPreferences.SubscribedToWhatsapp {
+			phone := user.ContactPreferences.WhatsappNumber
+			if phone == "" {
+				// Fallback to phone in ContactInfos if WhatsappNumber not set
+				for _, contact := range user.ContactInfos {
+					if contact.Type == "phone" && contact.ConfirmedAt > 0 {
+						phone = contact.GetPhone()
+						break
+					}
+				}
+			}
+
+			if phone != "" {
+				err := sendWeeklyReminderWhatsApp(apiClients, instanceID, user.Id, phone, contentInfos)
+				if err != nil {
+					logger.Warning.Printf("Failed to send WhatsApp weekly reminder to user %s: %v", user.Id, err)
+					// Will try email if user is subscribed to email
+				} else {
+					counters.IncreaseCounter(true)
+					whatsappSent = true
+					logger.Debug.Printf("Successfully sent WhatsApp weekly reminder to user %s", user.Id)
+				}
+			} else {
+				logger.Debug.Printf("User %s subscribed to WhatsApp but no phone number available", user.Id)
+			}
+		}
+
+		// Send email if user is subscribed to email notifications
+		// This will send even if WhatsApp was sent (allowing both channels)
+		if !user.ContactPreferences.SubscribedToNewsletter {
+			// User not subscribed to email notifications, skip email
+			if whatsappSent {
+				// Already sent via WhatsApp, nothing more to do
+				continue
+			}
+			logger.Debug.Printf("User %s not subscribed to email or WhatsApp, skipping", user.Id)
+			continue
+		}
+
+		// Send email (original logic)
 		if !hasAccountType(user, "email") {
 			logger.Debug.Printf("skip user %s with account type %s", user.Id, user.Account.Type)
 			continue
 		}
 
-		contentInfos := map[string]string{}
-		for k, v := range globalTemplateInfos {
-			contentInfos[k] = v
-		}
 		outgoing, err := prepareOutgoingEmail(
 			user,
 			apiClients,
@@ -684,4 +727,25 @@ func getUnsubscribeToken(
 		return "", err
 	}
 	return resp.Token, nil
+}
+
+// sendWeeklyReminderWhatsApp sends a weekly reminder notification via WhatsApp
+func sendWeeklyReminderWhatsApp(
+	apiClients *types.APIClients,
+	instanceID string,
+	userID string,
+	phone string,
+	contentParams map[string]string,
+) error {
+	// Call user-management-service to send WhatsApp message
+	// The template name and language are configured via environment variables
+	// in the user-management-service (ENV_WHATSAPP_WEEKLY_REMINDER_TEMPLATE_*)
+	_, err := apiClients.UserManagementService.SendMessage(context.Background(), &umAPI.SendMessageRequest{
+		InstanceId:    instanceID,
+		ToPhoneNumber: phone,
+		MessageType:   "weekly_reminder", // This should match the template name configured
+		Lang:          "it",              // TODO: could be derived from user preferences
+		ContentParams: contentParams,
+	})
+	return err
 }
