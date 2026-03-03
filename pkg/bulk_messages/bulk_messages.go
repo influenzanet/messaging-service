@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -95,67 +96,18 @@ func GenerateForAllUsers(
 			continue
 		}
 
-		contentInfos := map[string]string{}
-		for k, v := range globalTemplateInfos {
-			contentInfos[k] = v
-		}
-
-		// Handle WhatsApp notifications for weekly reminders
-		whatsappSent := false
-		logger.Debug.Printf("Checking WhatsApp eligibility for user %s: messageType=%s, subscribedToWeekly=%v",
-			user.Id, messageTemplate.MessageType, user.ContactPreferences.SubscribedToWeekly)
-
-		// For weekly reminders, try WhatsApp first if user has a confirmed phone number
-		if messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY && user.ContactPreferences.SubscribedToWeekly {
-			logger.Info.Printf("User %s is eligible for weekly reminder, checking for phone number", user.Id)
-			phone := ""
-			// Check for phone in ContactInfos
-			logger.Debug.Printf("Checking ContactInfos for user %s", user.Id)
-			for _, contact := range user.ContactInfos {
-				if contact.Type == "phone" && contact.ConfirmedAt > 0 {
-					phone = contact.GetPhone()
-					logger.Debug.Printf("Found confirmed phone in ContactInfos for user %s: %s", user.Id, phone)
-					break
-				}
-			}
-
-			if phone != "" {
-				logger.Info.Printf("Sending WhatsApp weekly reminder to user %s at %s", user.Id, phone)
-				err := sendWeeklyReminderWhatsApp(apiClients, instanceID, user.Id, phone, user.Account.PreferredLanguage, contentInfos)
-				if err != nil {
-					logger.Warning.Printf("Failed to send WhatsApp weekly reminder to user %s: %v", user.Id, err)
-					// Will try email if user is subscribed to email
-				} else {
-					counters.IncreaseCounter(true)
-					whatsappSent = true
-					logger.Info.Printf("Successfully sent WhatsApp weekly reminder to user %s", user.Id)
-				}
-			} else {
-				logger.Warning.Printf("User %s subscribed to weekly but no confirmed phone number available", user.Id)
-			}
-		} else {
-			logger.Debug.Printf("User %s not eligible for WhatsApp: messageType=%s (expected: %s), subscribedToWeekly=%v",
-				user.Id, messageTemplate.MessageType, constants.EMAIL_TYPE_WEEKLY, user.ContactPreferences.SubscribedToWeekly)
-		}
-
-		// Send email if user is subscribed to email notifications
-		// This will send even if WhatsApp was sent (allowing both channels)
-		if !user.ContactPreferences.SubscribedToNewsletter {
-			// User not subscribed to email notifications, skip email
-			if whatsappSent {
-				// Already sent via WhatsApp, nothing more to do
-				continue
-			}
-			logger.Debug.Printf("User %s not subscribed to email or WhatsApp, skipping", user.Id)
-			continue
-		}
-
-		// Send email (original logic)
 		if !hasAccountType(user, "email") {
 			logger.Debug.Printf("skip user %s with account type %s", user.Id, user.Account.Type)
 			continue
 		}
 
+		contentInfos := map[string]string{}
+		for k, v := range globalTemplateInfos {
+			contentInfos[k] = v
+		}
+
+		includeLoginToken := messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY ||
+			messageTemplate.MessageType == constants.EMAIL_TYPE_STUDY_REMINDER
 		outgoing, err := prepareOutgoingEmail(
 			user,
 			apiClients,
@@ -163,7 +115,7 @@ func GenerateForAllUsers(
 			instanceID,
 			messageTemplate,
 			contentInfos,
-			messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY || messageTemplate.MessageType == constants.EMAIL_TYPE_STUDY_REMINDER,
+			includeLoginToken,
 		)
 		if err != nil {
 			counters.IncreaseCounter(false)
@@ -171,11 +123,27 @@ func GenerateForAllUsers(
 			continue
 		}
 
-		_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
-		if err != nil {
-			counters.IncreaseCounter(false)
-			logger.Error.Printf("unexpected error: %v", err)
-			continue
+		// Build loginUrl from loginToken + webAppUrl (used by WA templates that need a direct link)
+		if token, ok := contentInfos["loginToken"]; ok {
+			if webURL, ok := contentInfos["webAppUrl"]; ok {
+				studyKey := contentInfos["studyKey"]
+				if studyKey != "" {
+					contentInfos["loginUrl"] = webURL + "/link/study-login?token=" + token + "&study=" + studyKey
+				} else {
+					contentInfos["loginUrl"] = webURL + "/link/login?token=" + token
+				}
+			}
+		}
+		contentInfos["subject"] = outgoing.Subject
+
+		waSent := trySendWhatsApp(apiClients, instanceID, user, messageTemplate, contentInfos)
+		if userPrefersChannel(user, "email") || !waSent {
+			_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
+			if err != nil {
+				counters.IncreaseCounter(false)
+				logger.Error.Printf("unexpected error: %v", err)
+				continue
+			}
 		}
 		counters.IncreaseCounter(true)
 	}
@@ -251,11 +219,26 @@ func GenerateForStudyParticipants(
 			continue
 		}
 
-		_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
-		if err != nil {
-			counters.IncreaseCounter(false)
-			logger.Error.Printf("unexpected error: %v", err)
-			continue
+		if token, ok := contentInfos["loginToken"]; ok {
+			if webURL, ok := contentInfos["webAppUrl"]; ok {
+				studyKey := contentInfos["studyKey"]
+				if studyKey != "" {
+					contentInfos["loginUrl"] = webURL + "/link/study-login?token=" + token + "&study=" + studyKey
+				} else {
+					contentInfos["loginUrl"] = webURL + "/link/login?token=" + token
+				}
+			}
+		}
+		contentInfos["subject"] = outgoing.Subject
+
+		waSent := trySendWhatsApp(apiClients, instanceID, user, messageTemplate, contentInfos)
+		if userPrefersChannel(user, "email") || !waSent {
+			_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
+			if err != nil {
+				counters.IncreaseCounter(false)
+				logger.Error.Printf("unexpected error: %v", err)
+				continue
+			}
 		}
 		counters.IncreaseCounter(true)
 	}
@@ -346,38 +329,52 @@ func GenerateParticipantMessages(
 						messageTemplateCache[m.Type] = template
 					}
 
-					contentInfos := map[string]string{}
-					for k, v := range globalTemplateInfos {
-						contentInfos[k] = v
-					}
-					contentInfos["profileAlias"] = profile.Alias
-					contentInfos["profileId"] = profile.Id
-					// make payload accessible for the template eninge:
-					for k, v := range m.Payload {
-						contentInfos[k] = v
-					}
-					outgoing, err := prepareOutgoingEmail(
-						user,
-						apiClients,
-						messageDBService,
-						instanceID,
-						template,
-						contentInfos,
-						true,
-					)
-					if err != nil {
-						counters.IncreaseCounter(false)
-						logger.Error.Printf("unexpected error: %v", err)
-						continue
-					}
+				contentInfos := map[string]string{}
+				for k, v := range globalTemplateInfos {
+					contentInfos[k] = v
+				}
+				contentInfos["profileAlias"] = profile.Alias
+				contentInfos["profileId"] = profile.Id
+				for k, v := range m.Payload {
+					contentInfos[k] = v
+				}
+				outgoing, err := prepareOutgoingEmail(
+					user,
+					apiClients,
+					messageDBService,
+					instanceID,
+					template,
+					contentInfos,
+					true,
+				)
+				if err != nil {
+					counters.IncreaseCounter(false)
+					logger.Error.Printf("unexpected error: %v", err)
+					continue
+				}
 
+				if token, ok := contentInfos["loginToken"]; ok {
+					if webURL, ok := contentInfos["webAppUrl"]; ok {
+						studyKey := contentInfos["studyKey"]
+						if studyKey != "" {
+							contentInfos["loginUrl"] = webURL + "/link/study-login?token=" + token + "&study=" + studyKey
+						} else {
+							contentInfos["loginUrl"] = webURL + "/link/login?token=" + token
+						}
+					}
+				}
+				contentInfos["subject"] = outgoing.Subject
+
+				waSent := trySendWhatsApp(apiClients, instanceID, user, template, contentInfos)
+				if userPrefersChannel(user, "email") || !waSent {
 					_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 					if err != nil {
 						counters.IncreaseCounter(false)
 						logger.Error.Printf("unexpected error: %v", err)
 						continue
 					}
-					counters.IncreaseCounter(true)
+				}
+				counters.IncreaseCounter(true)
 
 					_, ok = sentMessageCountByType[m.Type]
 					if !ok {
@@ -506,6 +503,99 @@ func GenerateResearcherNotificationMessages(
 
 	counters.Stop()
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for auto email '%s'.", counters.Total, counters.Failed, "researcher notifications", counters.Duration, messageLabel)
+}
+
+// maskPhone masks a phone number for safe logging (e.g. "+39 3** *** **12").
+func maskPhone(phone string) string {
+	if len(phone) <= 4 {
+		return "****"
+	}
+	return phone[:2] + strings.Repeat("*", len(phone)-4) + phone[len(phone)-2:]
+}
+
+// userPrefersChannel returns true if the given channel is in the user's preferred_channels.
+// If preferred_channels is nil or empty, defaults to true only for "email" (backward compatible).
+func userPrefersChannel(user *umAPI.User, channel string) bool {
+	channels := user.GetContactPreferences().GetPreferredChannels()
+	if len(channels) == 0 {
+		return channel == "email"
+	}
+	for _, c := range channels {
+		if c == channel {
+			return true
+		}
+	}
+	return false
+}
+
+// trySendWhatsApp attempts to send a WhatsApp notification for the given user and template.
+// Returns true if the message was delivered successfully, false in all other cases.
+//
+// Checks in order:
+//  1. WHATSAPP_ENABLED env var must be "true"
+//  2. User must have "whatsapp" in preferred_channels
+//  3. Template must have WhatsAppTemplateName configured
+//  4. User must have a WhatsApp number stored
+//  5. All required named params must be resolvable from contentInfos
+//  6. Delivery via UserManagementService.SendMessage with up to 3 attempts (1s, 5s, 10s back-off)
+func trySendWhatsApp(
+	apiClients *types.APIClients,
+	instanceID string,
+	user *umAPI.User,
+	template types.EmailTemplate,
+	contentInfos map[string]string,
+) bool {
+	if os.Getenv("WHATSAPP_ENABLED") != "true" {
+		return false
+	}
+	if !userPrefersChannel(user, "whatsapp") {
+		return false
+	}
+	if template.WhatsAppTemplateName == "" {
+		logger.Debug.Printf("trySendWhatsApp: no WA template for type=%s user=%s", template.MessageType, user.Id)
+		return false
+	}
+	phone := user.GetContactPreferences().GetWhatsappNumber()
+	if phone == "" {
+		logger.Warning.Printf("trySendWhatsApp: user %s prefers WhatsApp but has no number", user.Id)
+		return false
+	}
+
+	// Resolve named params: whatsappParams maps Meta param names → contentInfos keys
+	namedParams := map[string]string{}
+	for paramName, contentKey := range template.WhatsAppParams {
+		value, ok := contentInfos[contentKey]
+		if !ok {
+			logger.Warning.Printf("trySendWhatsApp: param '%s' (contentKey '%s') missing from contentInfos, user=%s type=%s", paramName, contentKey, user.Id, template.MessageType)
+			return false
+		}
+		namedParams[paramName] = value
+	}
+
+	lang := user.GetAccount().GetPreferredLanguage()
+
+	// Up to 3 delivery attempts with increasing back-off delays
+	delays := []time.Duration{1 * time.Second, 5 * time.Second, 10 * time.Second}
+	var lastErr error
+	for attempt, delay := range delays {
+		_, lastErr = apiClients.UserManagementService.SendMessage(context.Background(), &umAPI.SendMessageRequest{
+			InstanceId:    instanceID,
+			ToPhoneNumber: phone,
+			MessageType:   template.WhatsAppTemplateName,
+			Lang:          lang,
+			ContentParams: namedParams,
+		})
+		if lastErr == nil {
+			logger.Info.Printf("trySendWhatsApp: delivered type=%s to %s (attempt %d/3)", template.MessageType, maskPhone(phone), attempt+1)
+			return true
+		}
+		logger.Warning.Printf("trySendWhatsApp: attempt %d/3 failed user=%s type=%s: %v", attempt+1, user.Id, template.MessageType, lastErr)
+		if attempt < len(delays)-1 {
+			time.Sleep(delay)
+		}
+	}
+	logger.Error.Printf("trySendWhatsApp: all attempts failed user=%s type=%s phone=%s: %v", user.Id, template.MessageType, maskPhone(phone), lastErr)
+	return false
 }
 
 func prepareOutgoingEmail(
@@ -738,32 +828,3 @@ func getUnsubscribeToken(
 	return resp.Token, nil
 }
 
-// sendWeeklyReminderWhatsApp sends a weekly reminder notification via WhatsApp
-func sendWeeklyReminderWhatsApp(
-	apiClients *types.APIClients,
-	instanceID string,
-	userID string,
-	phone string,
-	preferredLanguage string,
-	contentParams map[string]string,
-) error {
-	logger.Info.Printf("Attempting to send WhatsApp weekly reminder to user %s at phone %s (lang: %s)", userID, phone, preferredLanguage)
-
-	// Call user-management-service to send WhatsApp message
-	// The template name "weekly_reminder" must match the template configured in Facebook Business Manager
-	_, err := apiClients.UserManagementService.SendMessage(context.Background(), &umAPI.SendMessageRequest{
-		InstanceId:    instanceID,
-		ToPhoneNumber: phone,
-		MessageType:   "weekly_reminder", // This matches the template name in Facebook Business Manager
-		Lang:          preferredLanguage, // Use user's preferred language
-		ContentParams: contentParams,
-	})
-
-	if err != nil {
-		logger.Error.Printf("Failed to send WhatsApp message to %s: %v", phone, err)
-		return err
-	}
-
-	logger.Info.Printf("Successfully sent WhatsApp weekly reminder to %s", phone)
-	return nil
-}
