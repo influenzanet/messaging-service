@@ -7,12 +7,14 @@ import (
 )
 
 type EmailTemplate struct {
-	ID              primitive.ObjectID  `bson:"_id,omitempty"`
-	MessageType     string              `bson:"messageType"` // e.g. 'registration','invitation'..), use constants EMAIL_TYPE_* in go-utils/pkg/constants
-	StudyKey        string              `bson:"studyKey,omitempty"`
-	DefaultLanguage string              `bson:"defaultLanguage"`
-	HeaderOverrides *HeaderOverrides    `bson:"headerOverrides"`
-	Translations    []LocalizedTemplate `bson:"translations"`
+	ID                   primitive.ObjectID  `bson:"_id,omitempty"`
+	MessageType          string              `bson:"messageType"` // e.g. 'registration','invitation'..), use constants EMAIL_TYPE_* in go-utils/pkg/constants
+	StudyKey             string              `bson:"studyKey,omitempty"`
+	DefaultLanguage      string              `bson:"defaultLanguage"`
+	HeaderOverrides      *HeaderOverrides    `bson:"headerOverrides"`
+	Translations         []LocalizedTemplate `bson:"translations"`
+	WhatsAppTemplateName string              `bson:"whatsappTemplateName,omitempty"`
+	WhatsAppParams       map[string]string   `bson:"whatsappParams,omitempty"`
 }
 
 type HeaderOverrides struct {
