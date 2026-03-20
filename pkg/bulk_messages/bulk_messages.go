@@ -106,7 +106,6 @@ func GenerateForAllUsers(
 			contentInfos[k] = v
 		}
 
-		logWADebug(user, messageTemplate)
 		includeLoginToken := messageTemplate.MessageType == constants.EMAIL_TYPE_WEEKLY ||
 			messageTemplate.MessageType == constants.EMAIL_TYPE_STUDY_REMINDER
 		outgoing, err := prepareOutgoingEmail(
@@ -150,17 +149,6 @@ func GenerateForAllUsers(
 	}
 	counters.Stop()
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel, instanceID)
-}
-
-// DEBUG: temporary log injection for WhatsApp troubleshooting
-func logWADebug(user *umAPI.User, tpl types.EmailTemplate) {
-	logger.Info.Printf("DEBUG-WA: user=%s channels=%v waNumber=%s templateWA=%s WHATSAPP_ENABLED=%s",
-		user.Id,
-		user.GetContactPreferences().GetPreferredChannels(),
-		user.GetContactPreferences().GetWhatsappNumber(),
-		tpl.WhatsAppTemplateName,
-		os.Getenv("WHATSAPP_ENABLED"),
-	)
 }
 
 func GenerateForStudyParticipants(
