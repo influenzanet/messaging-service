@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/influenzanet/messaging-service/internal/config"
 	emailAPI "github.com/influenzanet/messaging-service/pkg/api/email_client_service"
+	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"github.com/influenzanet/messaging-service/pkg/bulk_messages"
 	"github.com/influenzanet/messaging-service/pkg/dbs/globaldb"
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
@@ -32,6 +33,7 @@ type Config struct {
 		AutoMessage             int
 		ParticipantMessages     int
 		ResearcherNotifications int
+		WhatsApp                int
 	}
 	MessageDBConfig types.DBConfig
 	GlobalDBConfig  types.DBConfig
@@ -68,6 +70,15 @@ func initConfig() Config {
 		logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_INTERVAL_RESEARCHER_NOTIFICATION: %v", err)
 	}
 
+	wa := 0
+	waStr := os.Getenv("MESSAGE_SCHEDULER_INTERVAL_WHATSAPP")
+	if waStr != "" {
+		wa, err = strconv.Atoi(waStr)
+		if err != nil {
+			logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_INTERVAL_WHATSAPP: %v", err)
+		}
+	}
+
 	conf.LogLevel = config.GetLogLevel()
 
 	conf.Frequencies = struct {
@@ -76,12 +87,14 @@ func initConfig() Config {
 		AutoMessage             int
 		ParticipantMessages     int
 		ResearcherNotifications int
+		WhatsApp                int
 	}{
 		HighPrio:                hp,
 		LowPrio:                 lp,
 		AutoMessage:             am,
 		ParticipantMessages:     pm,
 		ResearcherNotifications: rn,
+		WhatsApp:                wa,
 	}
 	conf.ServiceURLs.UserManagementService = os.Getenv("ADDR_USER_MANAGEMENT_SERVICE")
 	conf.ServiceURLs.StudyService = os.Getenv("ADDR_STUDY_SERVICE")
@@ -118,6 +131,7 @@ func main() {
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)
 	go runnerForParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ParticipantMessages)
 	go runnerForResearcherNotifications(messageDBService, globalDBService, clients, conf.Frequencies.ResearcherNotifications)
+	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, clients, conf.Frequencies.WhatsApp)
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
@@ -378,6 +392,97 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 	}
 	wg.Wait()
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending researcher notifications", threadID)
+}
+
+func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
+	if freq <= 0 {
+		logger.Debug.Println("no period defined for outgoing whatsapp, loop is skipped.")
+		return
+	}
+	period := time.Duration(freq) * time.Second
+	logInitialLoopStartedMsg("outgoing whatsapp", period)
+
+	olderThan := getThreadLockInterval(freq)
+	for {
+		go handleOutgoingWhatsApp(mdb, gdb, clients, olderThan)
+		time.Sleep(period)
+	}
+}
+
+func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, lastAttemptOlderThan int64) {
+	threadID := generateThreadID("WA")
+	logger.Info.Printf("--> Process <%s> started: fetching and sending outgoing whatsapp messages...", threadID)
+
+	var wg sync.WaitGroup
+	instances, err := gdb.GetAllInstances()
+	if err != nil {
+		logger.Error.Printf("%v", err)
+	}
+	for _, instance := range instances {
+		wg.Add(1)
+		go handleOutgoingWhatsAppForInstance(mdb, instance.InstanceID, clients, lastAttemptOlderThan, &wg)
+	}
+	wg.Wait()
+	logger.Info.Printf("<-- Process <%s> finished: fetching and sending outgoing whatsapp messages", threadID)
+}
+
+func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, clients *types.APIClients, lastAttemptOlderThan int64, wg *sync.WaitGroup) {
+	defer wg.Done()
+	counters := types.InitMessageCounter()
+	for {
+		messages, err := mdb.FetchOutgoingWhatsApp(instanceID, outgoingBatchSize, lastAttemptOlderThan)
+		if err != nil {
+			logger.Error.Printf("%s: %v", instanceID, err)
+			break
+		}
+		if len(messages) < 1 {
+			break
+		}
+		lastFetch := time.Now().Unix()
+
+		for _, msg := range messages {
+			batchDuration := time.Now().Unix() - lastFetch
+			if batchDuration > int64(float64(lastAttemptOlderThan)*0.9) {
+				logger.Warning.Printf("Skip sending whatsapp ('%s') in instance %s because batch duration was too long", msg.MessageType, instanceID)
+				counters.IncreaseCounter(false)
+				err = mdb.ResetLastSendAttemptForOutgoingWhatsApp(instanceID, msg.ID.Hex())
+				if err != nil {
+					logger.Error.Printf("Error resetting lastSendAttempt for whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, err)
+				}
+				continue
+			}
+
+			_, err := clients.UserManagementService.SendMessage(context.Background(), &umAPI.SendMessageRequest{
+				InstanceId:    instanceID,
+				ToPhoneNumber: msg.ToPhoneNumber,
+				MessageType:   msg.TemplateName,
+				Lang:          msg.Lang,
+				ContentParams: msg.ContentParams,
+			})
+			if err != nil {
+				logger.Error.Printf("Could not send whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, err)
+				counters.IncreaseCounter(false)
+				err = mdb.ResetLastSendAttemptForOutgoingWhatsApp(instanceID, msg.ID.Hex())
+				if err != nil {
+					logger.Error.Printf("Error resetting lastSendAttempt for whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, err)
+				}
+				continue
+			}
+
+			_, err = mdb.AddToSentWhatsApp(instanceID, msg)
+			if err != nil {
+				logger.Error.Printf("Error saving to sent whatsapp: %v", err)
+				continue
+			}
+			err = mdb.DeleteOutgoingWhatsApp(instanceID, msg.ID.Hex())
+			if err != nil {
+				logger.Error.Printf("Error deleting outgoing whatsapp '%s': %v", msg.MessageType, err)
+			}
+			counters.IncreaseCounter(true)
+		}
+	}
+	counters.Stop()
+	logger.Info.Printf("[%s] Finished processing %d whatsapp messages in %d s.", instanceID, counters.Success, counters.Duration)
 }
 
 func generateThreadID(threadName string) string {

@@ -136,8 +136,13 @@ func GenerateForAllUsers(
 		}
 		contentInfos["subject"] = outgoing.Subject
 
-		waSent := trySendWhatsApp(apiClients, instanceID, user, messageTemplate, contentInfos)
-		if userPrefersChannel(user, "email") || !waSent {
+		waOutgoing := prepareOutgoingWhatsApp(user, messageTemplate, contentInfos)
+		if waOutgoing != nil {
+			if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
+				logger.Error.Printf("error saving outgoing whatsapp: %v", err)
+			}
+		}
+		if userPrefersChannel(user, "email") || waOutgoing == nil {
 			_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 			if err != nil {
 				counters.IncreaseCounter(false)
@@ -231,8 +236,13 @@ func GenerateForStudyParticipants(
 		}
 		contentInfos["subject"] = outgoing.Subject
 
-		waSent := trySendWhatsApp(apiClients, instanceID, user, messageTemplate, contentInfos)
-		if userPrefersChannel(user, "email") || !waSent {
+		waOutgoing := prepareOutgoingWhatsApp(user, messageTemplate, contentInfos)
+		if waOutgoing != nil {
+			if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
+				logger.Error.Printf("error saving outgoing whatsapp: %v", err)
+			}
+		}
+		if userPrefersChannel(user, "email") || waOutgoing == nil {
 			_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 			if err != nil {
 				counters.IncreaseCounter(false)
@@ -365,8 +375,13 @@ func GenerateParticipantMessages(
 				}
 				contentInfos["subject"] = outgoing.Subject
 
-				waSent := trySendWhatsApp(apiClients, instanceID, user, template, contentInfos)
-				if userPrefersChannel(user, "email") || !waSent {
+				waOutgoing := prepareOutgoingWhatsApp(user, template, contentInfos)
+				if waOutgoing != nil {
+					if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
+						logger.Error.Printf("error saving outgoing whatsapp: %v", err)
+					}
+				}
+				if userPrefersChannel(user, "email") || waOutgoing == nil {
 					_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 					if err != nil {
 						counters.IncreaseCounter(false)
@@ -505,14 +520,6 @@ func GenerateResearcherNotificationMessages(
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for auto email '%s'.", counters.Total, counters.Failed, "researcher notifications", counters.Duration, messageLabel)
 }
 
-// maskPhone masks a phone number for safe logging (e.g. "+39 3** *** **12").
-func maskPhone(phone string) string {
-	if len(phone) <= 4 {
-		return "****"
-	}
-	return phone[:2] + strings.Repeat("*", len(phone)-4) + phone[len(phone)-2:]
-}
-
 // userPrefersChannel returns true if the given channel is in the user's preferred_channels.
 // If preferred_channels is nil or empty, defaults to true only for "email" (backward compatible).
 func userPrefersChannel(user *umAPI.User, channel string) bool {
@@ -528,74 +535,46 @@ func userPrefersChannel(user *umAPI.User, channel string) bool {
 	return false
 }
 
-// trySendWhatsApp attempts to send a WhatsApp notification for the given user and template.
-// Returns true if the message was delivered successfully, false in all other cases.
-//
-// Checks in order:
-//  1. WHATSAPP_ENABLED env var must be "true"
-//  2. User must have "whatsapp" in preferred_channels
-//  3. Template must have WhatsAppTemplateName configured
-//  4. User must have a WhatsApp number stored
-//  5. All required named params must be resolvable from contentInfos
-//  6. Delivery via UserManagementService.SendMessage with up to 3 attempts (1s, 5s, 10s back-off)
-func trySendWhatsApp(
-	apiClients *types.APIClients,
-	instanceID string,
+// prepareOutgoingWhatsApp builds an OutgoingWhatsApp struct ready to be saved to the
+// outgoing-whatsapp collection. Returns nil if WhatsApp is not applicable for this user/template.
+func prepareOutgoingWhatsApp(
 	user *umAPI.User,
 	template types.EmailTemplate,
 	contentInfos map[string]string,
-) bool {
+) *types.OutgoingWhatsApp {
 	if os.Getenv("WHATSAPP_ENABLED") != "true" {
-		return false
+		return nil
 	}
 	if !userPrefersChannel(user, "whatsapp") {
-		return false
+		return nil
 	}
 	if template.WhatsAppTemplateName == "" {
-		logger.Debug.Printf("trySendWhatsApp: no WA template for type=%s user=%s", template.MessageType, user.Id)
-		return false
+		return nil
 	}
 	phone := user.GetContactPreferences().GetWhatsappNumber()
 	if phone == "" {
-		logger.Warning.Printf("trySendWhatsApp: user %s prefers WhatsApp but has no number", user.Id)
-		return false
+		logger.Warning.Printf("prepareOutgoingWhatsApp: user %s prefers WhatsApp but has no number", user.Id)
+		return nil
 	}
 
-	// Resolve named params: whatsappParams maps Meta param names → contentInfos keys
 	namedParams := map[string]string{}
 	for paramName, contentKey := range template.WhatsAppParams {
 		value, ok := contentInfos[contentKey]
 		if !ok {
-			logger.Warning.Printf("trySendWhatsApp: param '%s' (contentKey '%s') missing from contentInfos, user=%s type=%s", paramName, contentKey, user.Id, template.MessageType)
-			return false
+			logger.Warning.Printf("prepareOutgoingWhatsApp: param '%s' (contentKey '%s') missing, user=%s type=%s", paramName, contentKey, user.Id, template.MessageType)
+			return nil
 		}
 		namedParams[paramName] = value
 	}
 
-	lang := user.GetAccount().GetPreferredLanguage()
-
-	// Up to 3 delivery attempts with increasing back-off delays
-	delays := []time.Duration{1 * time.Second, 5 * time.Second, 10 * time.Second}
-	var lastErr error
-	for attempt, delay := range delays {
-		_, lastErr = apiClients.UserManagementService.SendMessage(context.Background(), &umAPI.SendMessageRequest{
-			InstanceId:    instanceID,
-			ToPhoneNumber: phone,
-			MessageType:   template.WhatsAppTemplateName,
-			Lang:          lang,
-			ContentParams: namedParams,
-		})
-		if lastErr == nil {
-			logger.Info.Printf("trySendWhatsApp: delivered type=%s to %s (attempt %d/3)", template.MessageType, maskPhone(phone), attempt+1)
-			return true
-		}
-		logger.Warning.Printf("trySendWhatsApp: attempt %d/3 failed user=%s type=%s: %v", attempt+1, user.Id, template.MessageType, lastErr)
-		if attempt < len(delays)-1 {
-			time.Sleep(delay)
-		}
+	return &types.OutgoingWhatsApp{
+		MessageType:   template.MessageType,
+		ToPhoneNumber: phone,
+		TemplateName:  template.WhatsAppTemplateName,
+		Lang:          user.GetAccount().GetPreferredLanguage(),
+		ContentParams: namedParams,
+		UserID:        user.Id,
 	}
-	logger.Error.Printf("trySendWhatsApp: all attempts failed user=%s type=%s phone=%s: %v", user.Id, template.MessageType, maskPhone(phone), lastErr)
-	return false
 }
 
 func prepareOutgoingEmail(
