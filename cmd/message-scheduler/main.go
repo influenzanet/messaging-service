@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	outgoingBatchSize = 20
+	outgoingBatchSize       = 20
+	maxWhatsAppSendAttempts = 5
 )
 
 // Config is the structure that holds all global configuration data
@@ -443,12 +444,9 @@ func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instance
 		for _, msg := range messages {
 			batchDuration := time.Now().Unix() - lastFetch
 			if batchDuration > int64(float64(lastAttemptOlderThan)*0.9) {
+				// Lock expires naturally after olderThan — no reset needed.
 				logger.Warning.Printf("Skip sending whatsapp ('%s') in instance %s because batch duration was too long", msg.MessageType, instanceID)
 				counters.IncreaseCounter(false)
-				err = mdb.ResetLastSendAttemptForOutgoingWhatsApp(instanceID, msg.ID.Hex())
-				if err != nil {
-					logger.Error.Printf("Error resetting lastSendAttempt for whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, err)
-				}
 				continue
 			}
 
@@ -460,11 +458,23 @@ func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instance
 				ContentParams: msg.ContentParams,
 			})
 			if err != nil {
-				logger.Error.Printf("Could not send whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, err)
+				logger.Error.Printf("Could not send whatsapp ('%s') in instance %s (attempt %d): %v", msg.MessageType, instanceID, msg.SendAttempt+1, err)
 				counters.IncreaseCounter(false)
-				err = mdb.ResetLastSendAttemptForOutgoingWhatsApp(instanceID, msg.ID.Hex())
-				if err != nil {
-					logger.Error.Printf("Error resetting lastSendAttempt for whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, err)
+
+				if msg.SendAttempt+1 >= maxWhatsAppSendAttempts {
+					// Permanently failed — archive and remove from queue.
+					logger.Warning.Printf("WhatsApp message '%s' in instance %s exceeded max attempts (%d), archiving", msg.MessageType, instanceID, maxWhatsAppSendAttempts)
+					if _, archErr := mdb.AddToSentWhatsApp(instanceID, msg); archErr != nil {
+						logger.Error.Printf("Error archiving failed whatsapp: %v", archErr)
+					}
+					if delErr := mdb.DeleteOutgoingWhatsApp(instanceID, msg.ID.Hex()); delErr != nil {
+						logger.Error.Printf("Error deleting failed whatsapp: %v", delErr)
+					}
+				} else {
+					// Increment counter; lastSendAttempt stays at lock value, providing natural backoff.
+					if incErr := mdb.IncrementSendAttemptForOutgoingWhatsApp(instanceID, msg.ID.Hex()); incErr != nil {
+						logger.Error.Printf("Error incrementing sendAttempt for whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, incErr)
+					}
 				}
 				continue
 			}

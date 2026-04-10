@@ -13,4 +13,5 @@ type OutgoingWhatsApp struct {
 	AddedAt         int64              `bson:"addedAt"`
 	HighPrio        bool               `bson:"highPrio"`
 	LastSendAttempt int64              `bson:"lastSendAttempt"`
+	SendAttempt     int                `bson:"sendAttempt"`
 }

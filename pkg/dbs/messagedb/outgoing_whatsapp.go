@@ -76,6 +76,20 @@ func (dbService *MessageDBService) ResetLastSendAttemptForOutgoingWhatsApp(insta
 	return nil
 }
 
+// IncrementSendAttemptForOutgoingWhatsApp bumps the retry counter without
+// resetting lastSendAttempt, so the natural lock timeout provides backoff.
+func (dbService *MessageDBService) IncrementSendAttemptForOutgoingWhatsApp(instanceID string, id string) error {
+	ctx, cancel := dbService.getContext()
+	defer cancel()
+
+	_id, _ := primitive.ObjectIDFromHex(id)
+	filter := bson.M{"_id": _id}
+	update := bson.M{"$inc": bson.M{"sendAttempt": 1}}
+
+	_, err := dbService.collectionRefOutgoingWhatsApp(instanceID).UpdateOne(ctx, filter, update)
+	return err
+}
+
 func (dbService *MessageDBService) DeleteOutgoingWhatsApp(instanceID string, id string) error {
 	ctx, cancel := dbService.getContext()
 	defer cancel()
