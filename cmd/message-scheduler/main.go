@@ -12,11 +12,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/influenzanet/messaging-service/internal/config"
 	emailAPI "github.com/influenzanet/messaging-service/pkg/api/email_client_service"
-	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"github.com/influenzanet/messaging-service/pkg/bulk_messages"
 	"github.com/influenzanet/messaging-service/pkg/dbs/globaldb"
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
 	gc "github.com/influenzanet/messaging-service/pkg/grpc/clients"
+	waClient "github.com/influenzanet/messaging-service/pkg/http/clients"
 	"github.com/influenzanet/messaging-service/pkg/types"
 )
 
@@ -128,11 +128,22 @@ func main() {
 	messageDBService := messagedb.NewMessageDBService(conf.MessageDBConfig)
 	globalDBService := globaldb.NewGlobalDBService(conf.GlobalDBConfig)
 
+	// WhatsApp client for direct HTTP delivery (optional, like C-3 pattern)
+	whatsAppClient := waClient.NewWhatsAppClient(
+		os.Getenv("WHATSAPP_API_TOKEN"),
+		os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
+	)
+	if whatsAppClient != nil {
+		logger.Info.Println("WhatsApp direct delivery enabled for message-scheduler")
+	} else {
+		logger.Warning.Println("WhatsApp direct delivery disabled: missing WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID")
+	}
+
 	go runnerForLowPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.LowPrio)
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)
 	go runnerForParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ParticipantMessages)
 	go runnerForResearcherNotifications(messageDBService, globalDBService, clients, conf.Frequencies.ResearcherNotifications)
-	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, clients, conf.Frequencies.WhatsApp)
+	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, whatsAppClient, conf.Frequencies.WhatsApp)
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
@@ -395,9 +406,13 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending researcher notifications", threadID)
 }
 
-func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, freq int) {
+func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, freq int) {
 	if freq <= 0 {
 		logger.Debug.Println("no period defined for outgoing whatsapp, loop is skipped.")
+		return
+	}
+	if wac == nil {
+		logger.Warning.Println("outgoing whatsapp runner disabled: no WhatsApp client configured")
 		return
 	}
 	period := time.Duration(freq) * time.Second
@@ -405,12 +420,12 @@ func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 
 	olderThan := getThreadLockInterval(freq)
 	for {
-		go handleOutgoingWhatsApp(mdb, gdb, clients, olderThan)
+		go handleOutgoingWhatsApp(mdb, gdb, wac, olderThan)
 		time.Sleep(period)
 	}
 }
 
-func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, clients *types.APIClients, lastAttemptOlderThan int64) {
+func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, lastAttemptOlderThan int64) {
 	threadID := generateThreadID("WA")
 	logger.Info.Printf("--> Process <%s> started: fetching and sending outgoing whatsapp messages...", threadID)
 
@@ -421,13 +436,13 @@ func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Globa
 	}
 	for _, instance := range instances {
 		wg.Add(1)
-		go handleOutgoingWhatsAppForInstance(mdb, instance.InstanceID, clients, lastAttemptOlderThan, &wg)
+		go handleOutgoingWhatsAppForInstance(mdb, instance.InstanceID, wac, lastAttemptOlderThan, &wg)
 	}
 	wg.Wait()
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending outgoing whatsapp messages", threadID)
 }
 
-func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, clients *types.APIClients, lastAttemptOlderThan int64, wg *sync.WaitGroup) {
+func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac *waClient.WhatsAppClient, lastAttemptOlderThan int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	counters := types.InitMessageCounter()
 	for {
@@ -450,13 +465,10 @@ func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instance
 				continue
 			}
 
-			_, err := clients.UserManagementService.SendMessage(context.Background(), &umAPI.SendMessageRequest{
-				InstanceId:    instanceID,
-				ToPhoneNumber: msg.ToPhoneNumber,
-				MessageType:   msg.TemplateName,
-				Lang:          msg.Lang,
-				ContentParams: msg.ContentParams,
-			})
+			// Direct HTTP call to Meta API (C-5 fix: eliminates gRPC hop, adds timeout via context)
+			sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			err := wac.SendTemplateMessage(sendCtx, msg.ToPhoneNumber, msg.TemplateName, msg.Lang, msg.ContentParams)
+			cancel()
 			if err != nil {
 				logger.Error.Printf("Could not send whatsapp ('%s') in instance %s (attempt %d): %v", msg.MessageType, instanceID, msg.SendAttempt+1, err)
 				counters.IncreaseCounter(false)
