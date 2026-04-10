@@ -535,6 +535,17 @@ func userPrefersChannel(user *umAPI.User, channel string) bool {
 	return false
 }
 
+// getVerifiedPhone returns the first verified phone number from the user's contact infos,
+// or empty string if none exists.
+func getVerifiedPhone(user *umAPI.User) string {
+	for _, ci := range user.GetContactInfos() {
+		if ci.GetType() == "phone" && ci.GetConfirmedAt() > 0 {
+			return ci.GetPhone()
+		}
+	}
+	return ""
+}
+
 // prepareOutgoingWhatsApp builds an OutgoingWhatsApp struct ready to be saved to the
 // outgoing-whatsapp collection. Returns nil if WhatsApp is not applicable for this user/template.
 func prepareOutgoingWhatsApp(
@@ -545,15 +556,21 @@ func prepareOutgoingWhatsApp(
 	if os.Getenv("WHATSAPP_ENABLED") != "true" {
 		return nil
 	}
-	if !userPrefersChannel(user, "whatsapp") {
-		return nil
-	}
 	if template.WhatsAppTemplateName == "" {
 		return nil
 	}
-	phone := user.GetContactPreferences().GetWhatsappNumber()
+
+	// Read phone from the authoritative source (ContactInfos) instead of the
+	// redundant WhatsappNumber field which is never populated (C-1 fix).
+	phone := getVerifiedPhone(user)
 	if phone == "" {
-		logger.Warning.Printf("prepareOutgoingWhatsApp: user %s prefers WhatsApp but has no number", user.Id)
+		return nil
+	}
+
+	// Fallback for pre-existing users: if NotificationChannels is empty but the
+	// user has a verified phone, treat them as WhatsApp-enabled.
+	channels := user.GetContactPreferences().GetPreferredChannels()
+	if len(channels) > 0 && !userPrefersChannel(user, "whatsapp") {
 		return nil
 	}
 
