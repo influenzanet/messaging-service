@@ -21,7 +21,6 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	MessagingServiceApi_Status_FullMethodName                         = "/influenzanet.message_service.MessagingServiceApi/Status"
-	MessagingServiceApi_SendNotification_FullMethodName               = "/influenzanet.message_service.MessagingServiceApi/SendNotification"
 	MessagingServiceApi_SendInstantEmail_FullMethodName               = "/influenzanet.message_service.MessagingServiceApi/SendInstantEmail"
 	MessagingServiceApi_QueueEmailTemplateForSending_FullMethodName   = "/influenzanet.message_service.MessagingServiceApi/QueueEmailTemplateForSending"
 	MessagingServiceApi_SendMessageToAllUsers_FullMethodName          = "/influenzanet.message_service.MessagingServiceApi/SendMessageToAllUsers"
@@ -39,8 +38,6 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type MessagingServiceApiClient interface {
 	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ServiceStatus, error)
-	// ---> NUOVO METODO PER LE NOTIFICHE <---
-	SendNotification(ctx context.Context, in *SendNotificationReq, opts ...grpc.CallOption) (*ServiceStatus, error)
 	SendInstantEmail(ctx context.Context, in *SendEmailReq, opts ...grpc.CallOption) (*ServiceStatus, error)
 	QueueEmailTemplateForSending(ctx context.Context, in *SendEmailReq, opts ...grpc.CallOption) (*ServiceStatus, error)
 	SendMessageToAllUsers(ctx context.Context, in *SendMessageToAllUsersReq, opts ...grpc.CallOption) (*ServiceStatus, error)
@@ -64,15 +61,6 @@ func NewMessagingServiceApiClient(cc grpc.ClientConnInterface) MessagingServiceA
 func (c *messagingServiceApiClient) Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ServiceStatus, error) {
 	out := new(ServiceStatus)
 	err := c.cc.Invoke(ctx, MessagingServiceApi_Status_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *messagingServiceApiClient) SendNotification(ctx context.Context, in *SendNotificationReq, opts ...grpc.CallOption) (*ServiceStatus, error) {
-	out := new(ServiceStatus)
-	err := c.cc.Invoke(ctx, MessagingServiceApi_SendNotification_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -174,8 +162,6 @@ func (c *messagingServiceApiClient) DeleteEmailTemplate(ctx context.Context, in 
 // for forward compatibility
 type MessagingServiceApiServer interface {
 	Status(context.Context, *emptypb.Empty) (*ServiceStatus, error)
-	// ---> NUOVO METODO PER LE NOTIFICHE <---
-	SendNotification(context.Context, *SendNotificationReq) (*ServiceStatus, error)
 	SendInstantEmail(context.Context, *SendEmailReq) (*ServiceStatus, error)
 	QueueEmailTemplateForSending(context.Context, *SendEmailReq) (*ServiceStatus, error)
 	SendMessageToAllUsers(context.Context, *SendMessageToAllUsersReq) (*ServiceStatus, error)
@@ -195,9 +181,6 @@ type UnimplementedMessagingServiceApiServer struct {
 
 func (UnimplementedMessagingServiceApiServer) Status(context.Context, *emptypb.Empty) (*ServiceStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
-}
-func (UnimplementedMessagingServiceApiServer) SendNotification(context.Context, *SendNotificationReq) (*ServiceStatus, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method SendNotification not implemented")
 }
 func (UnimplementedMessagingServiceApiServer) SendInstantEmail(context.Context, *SendEmailReq) (*ServiceStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SendInstantEmail not implemented")
@@ -256,24 +239,6 @@ func _MessagingServiceApi_Status_Handler(srv interface{}, ctx context.Context, d
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MessagingServiceApiServer).Status(ctx, req.(*emptypb.Empty))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
-func _MessagingServiceApi_SendNotification_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(SendNotificationReq)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MessagingServiceApiServer).SendNotification(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: MessagingServiceApi_SendNotification_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MessagingServiceApiServer).SendNotification(ctx, req.(*SendNotificationReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -468,10 +433,6 @@ var MessagingServiceApi_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Status",
 			Handler:    _MessagingServiceApi_Status_Handler,
-		},
-		{
-			MethodName: "SendNotification",
-			Handler:    _MessagingServiceApi_SendNotification_Handler,
 		},
 		{
 			MethodName: "SendInstantEmail",
