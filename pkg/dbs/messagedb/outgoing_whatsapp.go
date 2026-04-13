@@ -7,6 +7,7 @@ import (
 	"github.com/influenzanet/messaging-service/pkg/types"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 )
 
 func (dbService *MessageDBService) AddToOutgoingWhatsApp(instanceID string, msg types.OutgoingWhatsApp) (types.OutgoingWhatsApp, error) {
@@ -49,13 +50,18 @@ func (dbService *MessageDBService) FetchOutgoingWhatsApp(instanceID string, amou
 		var newMsg types.OutgoingWhatsApp
 		update := bson.M{"$set": bson.M{"lastSendAttempt": time.Now().Unix()}}
 		filter := bson.M{"lastSendAttempt": bson.M{"$lt": time.Now().Unix() - olderThan}}
-		if err := dbService.collectionRefOutgoingWhatsApp(instanceID).FindOneAndUpdate(ctx, filter, update).Decode(&newMsg); err != nil {
+		err = dbService.collectionRefOutgoingWhatsApp(instanceID).FindOneAndUpdate(ctx, filter, update).Decode(&newMsg)
+		if err != nil {
 			break
 		}
 		messages = append(messages, newMsg)
 		counter += 1
 	}
-	return messages, nil
+	// ErrNoDocuments means the batch is exhausted — not a real error.
+	if err == mongo.ErrNoDocuments {
+		return messages, nil
+	}
+	return messages, err
 }
 
 func (dbService *MessageDBService) ResetLastSendAttemptForOutgoingWhatsApp(instanceID string, id string) error {
