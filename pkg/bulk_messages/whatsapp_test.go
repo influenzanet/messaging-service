@@ -8,6 +8,40 @@ import (
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 )
 
+func TestBuildLoginURL(t *testing.T) {
+	t.Run("with studyKey - normal chars", func(t *testing.T) {
+		got := buildLoginURL("https://app.example.com", "abc123token", "flu-2025")
+		expected := "https://app.example.com/link/study-login?token=abc123token&study=flu-2025"
+		if got != expected {
+			t.Errorf("got %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("without studyKey", func(t *testing.T) {
+		got := buildLoginURL("https://app.example.com", "abc123token", "")
+		expected := "https://app.example.com/link/login?token=abc123token"
+		if got != expected {
+			t.Errorf("got %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("studyKey with special chars - escaped", func(t *testing.T) {
+		got := buildLoginURL("https://app.example.com", "abc123", "test&x=1")
+		expected := "https://app.example.com/link/study-login?token=abc123&study=test%26x%3D1"
+		if got != expected {
+			t.Errorf("got %q, want %q", got, expected)
+		}
+	})
+
+	t.Run("token with special chars - escaped", func(t *testing.T) {
+		got := buildLoginURL("https://app.example.com", "tok=en&bad", "study1")
+		expected := "https://app.example.com/link/study-login?token=tok%3Den%26bad&study=study1"
+		if got != expected {
+			t.Errorf("got %q, want %q", got, expected)
+		}
+	})
+}
+
 func TestGetVerifiedPhone(t *testing.T) {
 	t.Run("no contact infos", func(t *testing.T) {
 		user := &umAPI.User{}

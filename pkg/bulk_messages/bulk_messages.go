@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -22,6 +23,14 @@ import (
 )
 
 const loginTokenLifeTime = 7 * 24 * 60 * 60 // 7 days
+
+// buildLoginURL constructs a login URL with properly escaped query parameters.
+func buildLoginURL(webURL, token, studyKey string) string {
+	if studyKey != "" {
+		return webURL + "/link/study-login?token=" + url.QueryEscape(token) + "&study=" + url.QueryEscape(studyKey)
+	}
+	return webURL + "/link/login?token=" + url.QueryEscape(token)
+}
 
 func GenerateAutoMessages(
 	apiClients *types.APIClients,
@@ -123,15 +132,9 @@ func GenerateForAllUsers(
 			continue
 		}
 
-		// Build loginUrl from loginToken + webAppUrl (used by WA templates that need a direct link)
 		if token, ok := contentInfos["loginToken"]; ok {
 			if webURL, ok := contentInfos["webAppUrl"]; ok {
-				studyKey := contentInfos["studyKey"]
-				if studyKey != "" {
-					contentInfos["loginUrl"] = webURL + "/link/study-login?token=" + token + "&study=" + studyKey
-				} else {
-					contentInfos["loginUrl"] = webURL + "/link/login?token=" + token
-				}
+				contentInfos["loginUrl"] = buildLoginURL(webURL, token, contentInfos["studyKey"])
 			}
 		}
 		contentInfos["subject"] = outgoing.Subject
@@ -226,12 +229,7 @@ func GenerateForStudyParticipants(
 
 		if token, ok := contentInfos["loginToken"]; ok {
 			if webURL, ok := contentInfos["webAppUrl"]; ok {
-				studyKey := contentInfos["studyKey"]
-				if studyKey != "" {
-					contentInfos["loginUrl"] = webURL + "/link/study-login?token=" + token + "&study=" + studyKey
-				} else {
-					contentInfos["loginUrl"] = webURL + "/link/login?token=" + token
-				}
+				contentInfos["loginUrl"] = buildLoginURL(webURL, token, contentInfos["studyKey"])
 			}
 		}
 		contentInfos["subject"] = outgoing.Subject
@@ -365,12 +363,7 @@ func GenerateParticipantMessages(
 
 				if token, ok := contentInfos["loginToken"]; ok {
 					if webURL, ok := contentInfos["webAppUrl"]; ok {
-						studyKey := contentInfos["studyKey"]
-						if studyKey != "" {
-							contentInfos["loginUrl"] = webURL + "/link/study-login?token=" + token + "&study=" + studyKey
-						} else {
-							contentInfos["loginUrl"] = webURL + "/link/login?token=" + token
-						}
+						contentInfos["loginUrl"] = buildLoginURL(webURL, token, contentInfos["studyKey"])
 					}
 				}
 				contentInfos["subject"] = outgoing.Subject
