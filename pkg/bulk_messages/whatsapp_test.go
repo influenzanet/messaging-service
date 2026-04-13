@@ -59,6 +59,11 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	templateWithoutWA := types.EmailTemplate{
 		MessageType: "weekly",
 	}
+	templateWithParams := types.EmailTemplate{
+		MessageType:          "weekly",
+		WhatsAppTemplateName: "influenzanet_weekly_v1",
+		WhatsAppParams:       map[string]string{"study_name": "studyKey"},
+	}
 
 	verifiedPhoneUser := func(channels []string) *umAPI.User {
 		return &umAPI.User{
@@ -127,6 +132,28 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 		}
 		if got.TemplateName != "influenzanet_weekly_v1" {
 			t.Errorf("unexpected template name: %q", got.TemplateName)
+		}
+	})
+
+	t.Run("missing WhatsApp param key in contentInfos - returns nil (G-6)", func(t *testing.T) {
+		os.Setenv("WHATSAPP_ENABLED", "true")
+		defer os.Unsetenv("WHATSAPP_ENABLED")
+		// Template expects "studyKey" in contentInfos, but it's missing
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{})
+		if got != nil {
+			t.Error("expected nil when a required WhatsApp param is missing from contentInfos")
+		}
+	})
+
+	t.Run("WhatsApp param key present in contentInfos - generates message", func(t *testing.T) {
+		os.Setenv("WHATSAPP_ENABLED", "true")
+		defer os.Unsetenv("WHATSAPP_ENABLED")
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{"studyKey": "flu-2025"})
+		if got == nil {
+			t.Fatal("expected non-nil when all params are present")
+		}
+		if got.ContentParams["study_name"] != "flu-2025" {
+			t.Errorf("expected param study_name=flu-2025, got %q", got.ContentParams["study_name"])
 		}
 	})
 
