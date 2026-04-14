@@ -24,6 +24,13 @@ import (
 
 const loginTokenLifeTime = 7 * 24 * 60 * 60 // 7 days
 
+// Read once at init — config is immutable at runtime.
+var whatsAppEnabled = os.Getenv("WHATSAPP_ENABLED") == "true"
+
+func init() {
+	logger.Info.Printf("WhatsApp message generation enabled: %v", whatsAppEnabled)
+}
+
 // buildLoginURL constructs a login URL with properly escaped query parameters.
 func buildLoginURL(webURL, token, studyKey string) string {
 	if studyKey != "" {
@@ -546,7 +553,7 @@ func prepareOutgoingWhatsApp(
 	template types.EmailTemplate,
 	contentInfos map[string]string,
 ) *types.OutgoingWhatsApp {
-	if os.Getenv("WHATSAPP_ENABLED") != "true" {
+	if !whatsAppEnabled {
 		return nil
 	}
 	if template.WhatsAppTemplateName == "" {

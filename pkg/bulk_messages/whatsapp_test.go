@@ -1,7 +1,6 @@
 package bulk_messages
 
 import (
-	"os"
 	"testing"
 
 	"github.com/influenzanet/messaging-service/pkg/types"
@@ -120,7 +119,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	}
 
 	t.Run("WHATSAPP_ENABLED not set", func(t *testing.T) {
-		os.Unsetenv("WHATSAPP_ENABLED")
+		whatsAppEnabled = false
+		defer func() { whatsAppEnabled = false }()
 		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when WHATSAPP_ENABLED is not true")
@@ -128,8 +128,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("template without WhatsApp name", func(t *testing.T) {
-		os.Setenv("WHATSAPP_ENABLED", "true")
-		defer os.Unsetenv("WHATSAPP_ENABLED")
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
 		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithoutWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when template has no WhatsApp name")
@@ -137,8 +137,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("user without verified phone", func(t *testing.T) {
-		os.Setenv("WHATSAPP_ENABLED", "true")
-		defer os.Unsetenv("WHATSAPP_ENABLED")
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
 		got := prepareOutgoingWhatsApp(noPhoneUser, templateWithWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when user has no verified phone")
@@ -146,8 +146,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("user with channels=email only", func(t *testing.T) {
-		os.Setenv("WHATSAPP_ENABLED", "true")
-		defer os.Unsetenv("WHATSAPP_ENABLED")
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
 		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email"}), templateWithWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when user prefers email only")
@@ -155,8 +155,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("user with channels=email,whatsapp - generates message", func(t *testing.T) {
-		os.Setenv("WHATSAPP_ENABLED", "true")
-		defer os.Unsetenv("WHATSAPP_ENABLED")
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
 		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithWA, map[string]string{})
 		if got == nil {
 			t.Fatal("expected non-nil OutgoingWhatsApp")
@@ -170,8 +170,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("missing WhatsApp param key in contentInfos - returns nil (G-6)", func(t *testing.T) {
-		os.Setenv("WHATSAPP_ENABLED", "true")
-		defer os.Unsetenv("WHATSAPP_ENABLED")
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
 		// Template expects "studyKey" in contentInfos, but it's missing
 		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{})
 		if got != nil {
@@ -180,8 +180,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("WhatsApp param key present in contentInfos - generates message", func(t *testing.T) {
-		os.Setenv("WHATSAPP_ENABLED", "true")
-		defer os.Unsetenv("WHATSAPP_ENABLED")
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
 		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{"studyKey": "flu-2025"})
 		if got == nil {
 			t.Fatal("expected non-nil when all params are present")
@@ -192,8 +192,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("fallback: empty channels + verified phone - generates message", func(t *testing.T) {
-		os.Setenv("WHATSAPP_ENABLED", "true")
-		defer os.Unsetenv("WHATSAPP_ENABLED")
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
 		got := prepareOutgoingWhatsApp(verifiedPhoneUser(nil), templateWithWA, map[string]string{})
 		if got == nil {
 			t.Fatal("expected non-nil for fallback (empty channels + verified phone)")
