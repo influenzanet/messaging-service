@@ -1,2 +1,8 @@
 test.sh
 .DS_Store
+
+# Compiled binaries
+messaging-service
+email-client-service
+message-scheduler
+__debug_bin*
