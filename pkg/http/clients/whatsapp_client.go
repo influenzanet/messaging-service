@@ -12,7 +12,10 @@ import (
 	"github.com/coneno/logger"
 )
 
-const whatsAppHTTPTimeout = 30 * time.Second
+const (
+	whatsAppHTTPTimeout = 30 * time.Second
+	whatsAppAPIBaseURL  = "https://graph.facebook.com/v19.0"
+)
 
 // WhatsAppClient handles direct communication with the WhatsApp Business API
 // for bulk message delivery from the message-scheduler.
@@ -54,7 +57,7 @@ func maskPhone(phone string) string {
 
 // SendTemplateMessage sends a message using a specific WhatsApp template with named parameters.
 func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber, templateName, lang string, params map[string]string) error {
-	apiURL := fmt.Sprintf("https://graph.facebook.com/v19.0/%s/messages", c.phoneNumberID)
+	apiURL := fmt.Sprintf("%s/%s/messages", whatsAppAPIBaseURL, c.phoneNumberID)
 
 	whatsappLangCode := mapLanguageCode(lang)
 

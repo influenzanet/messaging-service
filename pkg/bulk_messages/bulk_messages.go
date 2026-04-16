@@ -22,7 +22,11 @@ import (
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 )
 
-const loginTokenLifeTime = 7 * 24 * 60 * 60 // 7 days
+const (
+	loginTokenLifeTime = 7 * 24 * 60 * 60 // 7 days
+	channelEmail       = "email"
+	channelWhatsApp    = "whatsapp"
+)
 
 // Read once at init — config is immutable at runtime.
 var whatsAppEnabled = os.Getenv("WHATSAPP_ENABLED") == "true"
@@ -37,6 +41,24 @@ func buildLoginURL(webURL, token, studyKey string) string {
 		return webURL + "/link/study-login?token=" + url.QueryEscape(token) + "&study=" + url.QueryEscape(studyKey)
 	}
 	return webURL + "/link/login?token=" + url.QueryEscape(token)
+}
+
+// saveOutgoingWhatsApp prepares and saves a WhatsApp message to the outgoing queue.
+// Returns the prepared message (nil if WhatsApp is not applicable for this user/template).
+func saveOutgoingWhatsApp(
+	messageDBService *messagedb.MessageDBService,
+	instanceID string,
+	user *umAPI.User,
+	template types.EmailTemplate,
+	contentInfos map[string]string,
+) *types.OutgoingWhatsApp {
+	waOutgoing := prepareOutgoingWhatsApp(user, template, contentInfos)
+	if waOutgoing != nil {
+		if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
+			logger.Error.Printf("error saving outgoing whatsapp: %v", err)
+		}
+	}
+	return waOutgoing
 }
 
 func GenerateAutoMessages(
@@ -146,13 +168,8 @@ func GenerateForAllUsers(
 		}
 		contentInfos["subject"] = outgoing.Subject
 
-		waOutgoing := prepareOutgoingWhatsApp(user, messageTemplate, contentInfos)
-		if waOutgoing != nil {
-			if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
-				logger.Error.Printf("error saving outgoing whatsapp: %v", err)
-			}
-		}
-		if userPrefersChannel(user, "email") || waOutgoing == nil {
+		waOutgoing := saveOutgoingWhatsApp(messageDBService, instanceID, user, messageTemplate, contentInfos)
+		if userPrefersChannel(user, channelEmail) || waOutgoing == nil {
 			_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 			if err != nil {
 				counters.IncreaseCounter(false)
@@ -241,13 +258,8 @@ func GenerateForStudyParticipants(
 		}
 		contentInfos["subject"] = outgoing.Subject
 
-		waOutgoing := prepareOutgoingWhatsApp(user, messageTemplate, contentInfos)
-		if waOutgoing != nil {
-			if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
-				logger.Error.Printf("error saving outgoing whatsapp: %v", err)
-			}
-		}
-		if userPrefersChannel(user, "email") || waOutgoing == nil {
+		waOutgoing := saveOutgoingWhatsApp(messageDBService, instanceID, user, messageTemplate, contentInfos)
+		if userPrefersChannel(user, channelEmail) || waOutgoing == nil {
 			_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 			if err != nil {
 				counters.IncreaseCounter(false)
@@ -375,13 +387,8 @@ func GenerateParticipantMessages(
 				}
 				contentInfos["subject"] = outgoing.Subject
 
-				waOutgoing := prepareOutgoingWhatsApp(user, template, contentInfos)
-				if waOutgoing != nil {
-					if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
-						logger.Error.Printf("error saving outgoing whatsapp: %v", err)
-					}
-				}
-				if userPrefersChannel(user, "email") || waOutgoing == nil {
+				waOutgoing := saveOutgoingWhatsApp(messageDBService, instanceID, user, template, contentInfos)
+				if userPrefersChannel(user, channelEmail) || waOutgoing == nil {
 					_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
 					if err != nil {
 						counters.IncreaseCounter(false)
@@ -525,7 +532,7 @@ func GenerateResearcherNotificationMessages(
 func userPrefersChannel(user *umAPI.User, channel string) bool {
 	channels := user.GetContactPreferences().GetPreferredChannels()
 	if len(channels) == 0 {
-		return channel == "email"
+		return channel == channelEmail
 	}
 	for _, c := range channels {
 		if c == channel {
@@ -570,7 +577,7 @@ func prepareOutgoingWhatsApp(
 	// Fallback for pre-existing users: if NotificationChannels is empty but the
 	// user has a verified phone, treat them as WhatsApp-enabled.
 	channels := user.GetContactPreferences().GetPreferredChannels()
-	if len(channels) > 0 && !userPrefersChannel(user, "whatsapp") {
+	if len(channels) > 0 && !userPrefersChannel(user, channelWhatsApp) {
 		return nil
 	}
 
