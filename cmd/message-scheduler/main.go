@@ -130,7 +130,7 @@ func main() {
 
 	// WhatsApp client for direct HTTP delivery (optional, like C-3 pattern)
 	whatsAppClient := waClient.NewWhatsAppClient(
-		os.Getenv("WHATSAPP_API_TOKEN"),
+		os.Getenv("WHATSAPP_TOKEN"),
 		os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
 	)
 	if whatsAppClient != nil {
