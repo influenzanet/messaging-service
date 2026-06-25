@@ -17,20 +17,14 @@ type GlobalDBService struct {
 }
 
 func NewGlobalDBService(configs types.DBConfig) *GlobalDBService {
-	var err error
-	dbClient, err := mongo.NewClient(
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(configs.Timeout)*time.Second)
+	defer cancel()
+
+	dbClient, err := mongo.Connect(ctx,
 		options.Client().ApplyURI(configs.URI),
 		options.Client().SetMaxConnIdleTime(time.Duration(configs.IdleConnTimeout)*time.Second),
 		options.Client().SetMaxPoolSize(configs.MaxPoolSize),
 	)
-	if err != nil {
-		logger.Error.Fatal(err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(configs.Timeout)*time.Second)
-	defer cancel()
-
-	err = dbClient.Connect(ctx)
 	if err != nil {
 		logger.Error.Fatal(err)
 	}
