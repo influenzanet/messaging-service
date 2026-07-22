@@ -23,6 +23,7 @@ type WhatsAppClient struct {
 	httpClient    *http.Client
 	apiToken      string
 	phoneNumberID string
+	apiBaseURL    string
 }
 
 // NewWhatsAppClient creates a new client instance. Returns nil if token or phoneID are empty.
@@ -34,6 +35,7 @@ func NewWhatsAppClient(token, phoneID string) *WhatsAppClient {
 		httpClient:    &http.Client{Timeout: whatsAppHTTPTimeout},
 		apiToken:      token,
 		phoneNumberID: phoneID,
+		apiBaseURL:    whatsAppAPIBaseURL,
 	}
 }
 
@@ -59,8 +61,13 @@ func maskPhone(phone string) string {
 }
 
 // SendTemplateMessage sends a message using a specific WhatsApp template with named parameters.
+// Param key conventions:
+//   - "header"            -> text HEADER component parameter
+//   - "header_image", "header_video", "header_document" -> media HEADER component (value is the asset link)
+//   - "button_<index>"    -> URL button parameter at the given index
+//   - anything else       -> named BODY parameter
 func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber, templateName, lang string, params map[string]string) error {
-	apiURL := fmt.Sprintf("%s/%s/messages", whatsAppAPIBaseURL, c.phoneNumberID)
+	apiURL := fmt.Sprintf("%s/%s/messages", c.apiBaseURL, c.phoneNumberID)
 
 	whatsappLangCode := mapLanguageCode(lang)
 
@@ -72,13 +79,30 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 	}
 
 	if len(params) > 0 {
+		var headerComponent map[string]interface{}
 		var bodyParams []map[string]interface{}
-		var components []map[string]interface{}
+		var buttonComponents []map[string]interface{}
 
 		for key, value := range params {
-			if strings.HasPrefix(key, "button_") {
+			switch {
+			case key == "header":
+				headerComponent = map[string]interface{}{
+					"type": "header",
+					"parameters": []map[string]interface{}{
+						{"type": "text", "text": value},
+					},
+				}
+			case strings.HasPrefix(key, "header_"):
+				mediaType := strings.TrimPrefix(key, "header_")
+				headerComponent = map[string]interface{}{
+					"type": "header",
+					"parameters": []map[string]interface{}{
+						{"type": mediaType, mediaType: map[string]interface{}{"link": value}},
+					},
+				}
+			case strings.HasPrefix(key, "button_"):
 				btnIndex := strings.TrimPrefix(key, "button_")
-				components = append(components, map[string]interface{}{
+				buttonComponents = append(buttonComponents, map[string]interface{}{
 					"type":     "button",
 					"sub_type": "url",
 					"index":    btnIndex,
@@ -86,7 +110,7 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 						{"type": "text", "text": value},
 					},
 				})
-			} else {
+			default:
 				bodyParams = append(bodyParams, map[string]interface{}{
 					"type":           "text",
 					"text":           value,
@@ -95,12 +119,17 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 			}
 		}
 
+		var components []map[string]interface{}
+		if headerComponent != nil {
+			components = append(components, headerComponent)
+		}
 		if len(bodyParams) > 0 {
 			components = append(components, map[string]interface{}{
 				"type":       "body",
 				"parameters": bodyParams,
 			})
 		}
+		components = append(components, buttonComponents...)
 		if len(components) > 0 {
 			template["components"] = components
 		}
