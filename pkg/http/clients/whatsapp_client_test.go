@@ -199,6 +199,56 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 		}
 	})
 
+	// Meta requires a template's parameters to be all named or all positional. The body has
+	// carried parameter_name since the named-parameter templates were introduced, so a text
+	// header on the same template needs a name too — "header:<name>" supplies it, while the
+	// bare "header" key stays positional for templates built that way.
+	t.Run("named text header carries its parameter name", func(t *testing.T) {
+		c, captured := newCaptureClient(t)
+		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
+			"header:campaign": "Weekly survey",
+			"name":            "Mario",
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		comps := captured.Template.Components
+		if len(comps) != 2 || comps[0].Type != "header" {
+			t.Fatalf("expected header and body components, got %+v", comps)
+		}
+		p := comps[0].Parameters
+		if len(p) != 1 || p[0]["type"] != "text" || p[0]["text"] != "Weekly survey" {
+			t.Fatalf("unexpected header parameters: %+v", p)
+		}
+		if p[0]["parameter_name"] != "campaign" {
+			t.Errorf("named header must carry parameter_name %q, got %+v", "campaign", p[0])
+		}
+		if comps[1].Parameters[0]["parameter_name"] != "name" {
+			t.Errorf("the named header key leaked into the body: %+v", comps[1].Parameters)
+		}
+	})
+
+	t.Run("rejects an unknown header media type instead of inventing one", func(t *testing.T) {
+		c, _ := newCaptureClient(t)
+		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
+			"header_banner": "https://example.com/asset",
+		})
+		if err == nil {
+			t.Error("a header_<type> key with a type Meta does not accept must be reported, not sent")
+		}
+	})
+
+	t.Run("rejects two header keys instead of picking one at random", func(t *testing.T) {
+		c, _ := newCaptureClient(t)
+		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
+			"header":       "Weekly survey",
+			"header_image": "https://example.com/asset",
+		})
+		if err == nil {
+			t.Error("two header keys are a configuration error: map iteration would otherwise decide which one wins")
+		}
+	})
+
 	t.Run("no params sends template without components", func(t *testing.T) {
 		c, captured := newCaptureClient(t)
 		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "en", nil)

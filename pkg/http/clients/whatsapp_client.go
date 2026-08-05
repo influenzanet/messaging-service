@@ -60,12 +60,22 @@ func maskPhone(phone string) string {
 	return phone[:3] + "***" + phone[len(phone)-4:]
 }
 
+// headerMediaTypes are the media types Meta accepts in a template HEADER component. A
+// "header_<type>" key with any other suffix is a configuration mistake, not a new media type.
+var headerMediaTypes = map[string]bool{"image": true, "video": true, "document": true}
+
 // SendTemplateMessage sends a message using a specific WhatsApp template with named parameters.
 // Param key conventions:
-//   - "header"            -> text HEADER component parameter
+//   - "header"            -> text HEADER parameter, positional (templates built with {{1}})
+//   - "header:<name>"     -> text HEADER parameter named <name> (templates built with {{name}});
+//     Meta requires every parameter of a template to be named or positional consistently, and
+//     BODY parameters are always sent named, so a text header on such a template needs its name
 //   - "header_image", "header_video", "header_document" -> media HEADER component (value is the asset link)
 //   - "button_<index>"    -> URL button parameter at the given index
 //   - anything else       -> named BODY parameter
+//
+// A template has at most one header: two header keys are rejected rather than resolved by map
+// iteration order, which would silently pick a different one on every send.
 func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber, templateName, lang string, params map[string]string) error {
 	apiURL := fmt.Sprintf("%s/%s/messages", c.apiBaseURL, c.phoneNumberID)
 
@@ -80,26 +90,44 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 
 	if len(params) > 0 {
 		var headerComponent map[string]interface{}
+		headerKey := ""
 		var bodyParams []map[string]interface{}
 		var buttonComponents []map[string]interface{}
 
 		for key, value := range params {
 			switch {
-			case key == "header":
-				headerComponent = map[string]interface{}{
-					"type": "header",
-					"parameters": []map[string]interface{}{
-						{"type": "text", "text": value},
-					},
+			case key == "header" || strings.HasPrefix(key, "header:"):
+				if headerComponent != nil {
+					return fmt.Errorf("template %s: both %q and %q set the header, a template has only one", templateName, headerKey, key)
 				}
+				param := map[string]interface{}{"type": "text", "text": value}
+				if strings.HasPrefix(key, "header:") {
+					name := strings.TrimPrefix(key, "header:")
+					if name == "" {
+						return fmt.Errorf("template %s: parameter key %q is missing the parameter name after the colon", templateName, key)
+					}
+					param["parameter_name"] = name
+				}
+				headerComponent = map[string]interface{}{
+					"type":       "header",
+					"parameters": []map[string]interface{}{param},
+				}
+				headerKey = key
 			case strings.HasPrefix(key, "header_"):
+				if headerComponent != nil {
+					return fmt.Errorf("template %s: both %q and %q set the header, a template has only one", templateName, headerKey, key)
+				}
 				mediaType := strings.TrimPrefix(key, "header_")
+				if !headerMediaTypes[mediaType] {
+					return fmt.Errorf("template %s: parameter key %q asks for header media type %q, which Meta does not accept", templateName, key, mediaType)
+				}
 				headerComponent = map[string]interface{}{
 					"type": "header",
 					"parameters": []map[string]interface{}{
 						{"type": mediaType, mediaType: map[string]interface{}{"link": value}},
 					},
 				}
+				headerKey = key
 			case strings.HasPrefix(key, "button_"):
 				btnIndex := strings.TrimPrefix(key, "button_")
 				buttonComponents = append(buttonComponents, map[string]interface{}{
