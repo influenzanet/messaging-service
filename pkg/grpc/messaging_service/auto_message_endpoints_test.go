@@ -24,12 +24,12 @@ func TestGetAutoMessagesEndpoint(t *testing.T) {
 		},
 	}
 
-	_, err := s.messageDBservice.SaveAutoMessage(testInstanceID, types.AutoMessage{Type: "B"})
+	_, err := s.messageDBservice.SaveAutoMessage(testInstanceID, types.AutoMessage{Type: "B"}, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return
 	}
-	_, err = s.messageDBservice.SaveAutoMessage(testInstanceID, types.AutoMessage{Type: "A", NextTime: time.Now().Unix() + 10})
+	_, err = s.messageDBservice.SaveAutoMessage(testInstanceID, types.AutoMessage{Type: "A", NextTime: time.Now().Unix() + 10}, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return
@@ -183,7 +183,7 @@ func TestDeleteAutoMessageEndpoint(t *testing.T) {
 		},
 	}
 
-	testAutoMessage, err := s.messageDBservice.SaveAutoMessage(testInstanceID, types.AutoMessage{Type: "B"})
+	testAutoMessage, err := s.messageDBservice.SaveAutoMessage(testInstanceID, types.AutoMessage{Type: "B"}, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return

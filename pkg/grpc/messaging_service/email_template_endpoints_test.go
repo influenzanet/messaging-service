@@ -23,12 +23,12 @@ func TestGetEmailTemplatesEndpoint(t *testing.T) {
 		},
 	}
 
-	_, err := s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "B"})
+	_, err := s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "B"}, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return
 	}
-	_, err = s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "A"})
+	_, err = s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "A"}, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return
@@ -225,14 +225,14 @@ func TestDeleteEmailTemplateEndpoint(t *testing.T) {
 		Translations: []types.LocalizedTemplate{
 			{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
 		},
-	})
+	}, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return
 	}
 	_, err = s.messageDBservice.SaveEmailTemplate(testInstanceID, types.EmailTemplate{MessageType: "A", StudyKey: "al", Translations: []types.LocalizedTemplate{
 		{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
-	}})
+	}}, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return
@@ -324,6 +324,108 @@ func TestDeleteEmailTemplateEndpoint(t *testing.T) {
 		if err == nil {
 			t.Error("should return error")
 			return
+		}
+	})
+}
+
+// End to end over the endpoint the CLI and the management API call: importing an e-mail template
+// must not switch off the WhatsApp channel of that message, which is what happened before the
+// binding became part of the contract.
+func TestSaveEmailTemplateKeepsWhatsAppBinding(t *testing.T) {
+	mockCtrl := gomock.NewController(t)
+	defer mockCtrl.Finish()
+	mockLoggingClient := loggingMock.NewMockLoggingServiceApiClient(mockCtrl)
+
+	s := messagingServer{
+		messageDBservice: testMessageDBService,
+		clients: &types.APIClients{
+			LoggingService: mockLoggingClient,
+		},
+	}
+	userToken := &api_types.TokenInfos{
+		Id:         "uid",
+		InstanceId: testInstanceID,
+		Payload: map[string]string{
+			"roles":    "PARTICIPANT,RESEARCHER",
+			"username": "testuser",
+		},
+	}
+
+	name := "weekly_reminder_v1"
+	messageType := "binding-endpoint-type"
+	translations := []*api.LocalizedTemplate{
+		{Lang: "de", TemplateDef: "dGVzdA==", Subject: ""},
+	}
+	defer func() {
+		if err := s.messageDBservice.DeleteEmailTemplate(testInstanceID, messageType, ""); err != nil {
+			t.Errorf("unexpected error during cleanup: %v", err)
+		}
+	}()
+
+	t.Run("a template sent with a binding stores it", func(t *testing.T) {
+		mockLoggingClient.EXPECT().SaveLogEvent(gomock.Any(), gomock.Any()).Return(nil, nil)
+		resp, err := s.SaveEmailTemplate(context.Background(), &api.SaveEmailTemplateReq{
+			Token: userToken,
+			Template: &api.EmailTemplate{
+				MessageType:          messageType,
+				DefaultLanguage:      "de",
+				Translations:         translations,
+				WhatsappTemplateName: &name,
+				WhatsappParams:       map[string]string{"nome": "profileAlias"},
+			},
+		})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if resp.GetWhatsappTemplateName() != name {
+			t.Errorf("expected the binding in the response, got %v", resp.WhatsappTemplateName)
+		}
+	})
+
+	t.Run("a template sent without the binding keeps it", func(t *testing.T) {
+		mockLoggingClient.EXPECT().SaveLogEvent(gomock.Any(), gomock.Any()).Return(nil, nil)
+		resp, err := s.SaveEmailTemplate(context.Background(), &api.SaveEmailTemplateReq{
+			Token: userToken,
+			Template: &api.EmailTemplate{
+				MessageType:     messageType,
+				DefaultLanguage: "en",
+				Translations:    translations,
+			},
+		})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if resp.DefaultLanguage != "en" {
+			t.Errorf("expected the e-mail fields to be replaced, got %v", resp.DefaultLanguage)
+		}
+		if resp.GetWhatsappTemplateName() != name {
+			t.Errorf("expected the binding to survive, got %v", resp.WhatsappTemplateName)
+		}
+		if resp.GetWhatsappParams()["nome"] != "profileAlias" {
+			t.Errorf("expected the params to survive, got %v", resp.WhatsappParams)
+		}
+	})
+
+	t.Run("a template sent with an empty binding clears it", func(t *testing.T) {
+		mockLoggingClient.EXPECT().SaveLogEvent(gomock.Any(), gomock.Any()).Return(nil, nil)
+		empty := ""
+		resp, err := s.SaveEmailTemplate(context.Background(), &api.SaveEmailTemplateReq{
+			Token: userToken,
+			Template: &api.EmailTemplate{
+				MessageType:          messageType,
+				DefaultLanguage:      "en",
+				Translations:         translations,
+				WhatsappTemplateName: &empty,
+			},
+		})
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if resp.GetWhatsappTemplateName() != "" || len(resp.GetWhatsappParams()) > 0 {
+			t.Errorf("expected the binding to be gone, got %v", resp)
 		}
 	})
 }

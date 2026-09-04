@@ -157,7 +157,7 @@ func TestSendInstantEmailEndpoint(t *testing.T) {
 		DefaultLanguage: "de",
 		Translations: []types.LocalizedTemplate{{
 			Lang: "de", TemplateDef: "dGVzdA==",
-		}}})
+		}}}, false)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 		return

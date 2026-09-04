@@ -67,7 +67,10 @@ func (s *messagingServer) SaveAutoMessage(ctx context.Context, req *api.SaveAuto
 			return nil, status.Error(codes.InvalidArgument, "invalid termination date of auto message schedule, earlier than start date")
 		}
 	}
-	autoMsg, err := s.messageDBservice.SaveAutoMessage(req.Token.InstanceId, *reqMsg)
+	// Same rule as for e-mail templates: no template name sent means the binding stays as stored.
+	template := req.AutoMessage.GetTemplate()
+	preserveWhatsAppBinding := template == nil || template.WhatsappTemplateName == nil
+	autoMsg, err := s.messageDBservice.SaveAutoMessage(req.Token.InstanceId, *reqMsg, preserveWhatsAppBinding)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}

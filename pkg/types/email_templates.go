@@ -100,12 +100,14 @@ func EmailTemplateFromAPI(obj *api.EmailTemplate) EmailTemplate {
 		translations[i] = LocalizedTemplateFromAPI(t)
 	}
 	return EmailTemplate{
-		ID:              _id,
-		MessageType:     obj.MessageType,
-		StudyKey:        obj.StudyKey,
-		DefaultLanguage: obj.DefaultLanguage,
-		HeaderOverrides: HeaderOverridesFromAPI(obj.HeaderOverrides),
-		Translations:    translations,
+		ID:                   _id,
+		MessageType:          obj.MessageType,
+		StudyKey:             obj.StudyKey,
+		DefaultLanguage:      obj.DefaultLanguage,
+		HeaderOverrides:      HeaderOverridesFromAPI(obj.HeaderOverrides),
+		Translations:         translations,
+		WhatsAppTemplateName: obj.GetWhatsappTemplateName(),
+		WhatsAppParams:       obj.GetWhatsappParams(),
 	}
 }
 
@@ -115,14 +117,22 @@ func (obj EmailTemplate) ToAPI() *api.EmailTemplate {
 	for i, t := range obj.Translations {
 		translations[i] = t.ToAPI()
 	}
-	return &api.EmailTemplate{
+	template := &api.EmailTemplate{
 		Id:              obj.ID.Hex(),
 		MessageType:     obj.MessageType,
 		StudyKey:        obj.StudyKey,
 		DefaultLanguage: obj.DefaultLanguage,
 		HeaderOverrides: obj.HeaderOverrides.ToAPI(),
 		Translations:    translations,
+		WhatsappParams:  obj.WhatsAppParams,
 	}
+	// The name is sent only when a binding exists, so a client that reads a message without one
+	// and sends it back does not read as asking to clear a binding set meanwhile.
+	if obj.WhatsAppTemplateName != "" {
+		name := obj.WhatsAppTemplateName
+		template.WhatsappTemplateName = &name
+	}
+	return template
 }
 
 func LocalizedTemplateFromAPI(obj *api.LocalizedTemplate) LocalizedTemplate {

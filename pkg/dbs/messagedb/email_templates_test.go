@@ -13,7 +13,7 @@ func TestEmailTemplatesDB(t *testing.T) {
 		DefaultLanguage: "en",
 	}
 	t.Run("save not existing template", func(t *testing.T) {
-		_, err := testDBService.SaveEmailTemplate(testInstanceID, t1)
+		_, err := testDBService.SaveEmailTemplate(testInstanceID, t1, false)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -21,7 +21,7 @@ func TestEmailTemplatesDB(t *testing.T) {
 
 	t.Run("save existing template", func(t *testing.T) {
 		t1.DefaultLanguage = "de"
-		res, err := testDBService.SaveEmailTemplate(testInstanceID, t1)
+		res, err := testDBService.SaveEmailTemplate(testInstanceID, t1, false)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 			return
@@ -64,7 +64,7 @@ func TestEmailTemplatesDB(t *testing.T) {
 		},
 	}
 	for _, temp := range testTemplates {
-		_, err := testDBService.SaveEmailTemplate(testInstanceID, temp)
+		_, err := testDBService.SaveEmailTemplate(testInstanceID, temp, false)
 		if err != nil {
 			t.Errorf("unexpected error when creating test templates: %v", err)
 			return
@@ -104,4 +104,77 @@ func TestEmailTemplatesDB(t *testing.T) {
 		}
 	})
 
+}
+
+// A save that carries no WhatsApp section must not silently drop the binding an operator
+// configured earlier: the CLI and the management API rebuild the message from the e-mail
+// definition alone, and every such save used to switch the WhatsApp channel of that message off.
+func TestSaveEmailTemplateWhatsAppBinding(t *testing.T) {
+	bound := types.EmailTemplate{
+		MessageType:          "binding-type",
+		StudyKey:             "binding-study",
+		DefaultLanguage:      "it",
+		WhatsAppTemplateName: "weekly_reminder_v1",
+		WhatsAppParams:       map[string]string{"nome": "profileAlias"},
+	}
+	withoutBinding := types.EmailTemplate{
+		MessageType:     bound.MessageType,
+		StudyKey:        bound.StudyKey,
+		DefaultLanguage: "en",
+	}
+	defer func() {
+		if err := testDBService.DeleteEmailTemplate(testInstanceID, bound.MessageType, bound.StudyKey); err != nil {
+			t.Errorf("unexpected error during cleanup: %v", err)
+		}
+	}()
+
+	t.Run("a save that carries the binding stores it", func(t *testing.T) {
+		res, err := testDBService.SaveEmailTemplate(testInstanceID, bound, false)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if res.WhatsAppTemplateName != bound.WhatsAppTemplateName || res.WhatsAppParams["nome"] != "profileAlias" {
+			t.Errorf("unexpected result: %v", res)
+		}
+	})
+
+	t.Run("a save without the binding preserves the stored one", func(t *testing.T) {
+		res, err := testDBService.SaveEmailTemplate(testInstanceID, withoutBinding, true)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if res.DefaultLanguage != "en" {
+			t.Errorf("expected the e-mail fields to be replaced, got %v", res)
+		}
+		if res.WhatsAppTemplateName != bound.WhatsAppTemplateName {
+			t.Errorf("expected the binding to survive, got %q", res.WhatsAppTemplateName)
+		}
+		if res.WhatsAppParams["nome"] != "profileAlias" {
+			t.Errorf("expected the params to survive, got %v", res.WhatsAppParams)
+		}
+	})
+
+	t.Run("a save that clears the binding removes it", func(t *testing.T) {
+		res, err := testDBService.SaveEmailTemplate(testInstanceID, withoutBinding, false)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if res.WhatsAppTemplateName != "" || len(res.WhatsAppParams) > 0 {
+			t.Errorf("expected the binding to be gone, got %v", res)
+		}
+	})
+
+	t.Run("preserving on a template that never had a binding adds nothing", func(t *testing.T) {
+		res, err := testDBService.SaveEmailTemplate(testInstanceID, withoutBinding, true)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if res.WhatsAppTemplateName != "" || len(res.WhatsAppParams) > 0 {
+			t.Errorf("expected no binding, got %v", res)
+		}
+	})
 }

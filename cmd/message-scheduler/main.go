@@ -350,7 +350,9 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 				}
 				return
 			}
-			_, err := mdb.SaveAutoMessage(instance.InstanceID, messageDef)
+			// The scheduler only advances the schedule of a message it read from the database, so
+			// it never carries an intent to change the WhatsApp binding.
+			_, err := mdb.SaveAutoMessage(instance.InstanceID, messageDef, true)
 			if err != nil {
 				logger.Error.Printf("%s: %v", instance.InstanceID, err)
 				continue

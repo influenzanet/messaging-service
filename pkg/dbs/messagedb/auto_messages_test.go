@@ -18,7 +18,7 @@ func TestAutoMessageDB(t *testing.T) {
 	}
 	t.Run("save not existing message", func(t *testing.T) {
 		var err error
-		t1, err = testDBService.SaveAutoMessage(testInstanceID, t1)
+		t1, err = testDBService.SaveAutoMessage(testInstanceID, t1, false)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
@@ -26,7 +26,7 @@ func TestAutoMessageDB(t *testing.T) {
 
 	t.Run("save existing message", func(t *testing.T) {
 		t1.Type = "testtype2"
-		res, err := testDBService.SaveAutoMessage(testInstanceID, t1)
+		res, err := testDBService.SaveAutoMessage(testInstanceID, t1, false)
 		if err != nil {
 			t.Errorf("unexpected error: %v", err)
 			return
@@ -63,7 +63,7 @@ func TestAutoMessageDB(t *testing.T) {
 		},
 	}
 	for _, temp := range testMessages {
-		_, err := testDBService.SaveAutoMessage(testInstanceID, temp)
+		_, err := testDBService.SaveAutoMessage(testInstanceID, temp, false)
 		if err != nil {
 			t.Errorf("unexpected error when creating test messages: %v", err)
 			return
@@ -93,4 +93,64 @@ func TestAutoMessageDB(t *testing.T) {
 		}
 	})
 
+}
+
+// Auto messages carry the same binding inside their template, and the scheduler re-saves them on
+// every run: the preserving save keeps an operator's WhatsApp configuration across those writes.
+func TestSaveAutoMessageWhatsAppBinding(t *testing.T) {
+	bound := types.AutoMessage{
+		Type:     "binding-type",
+		NextTime: time.Now().Unix() + 3600,
+		Template: types.EmailTemplate{
+			DefaultLanguage:      "it",
+			WhatsAppTemplateName: "weekly_reminder_v1",
+			WhatsAppParams:       map[string]string{"nome": "profileAlias"},
+		},
+	}
+
+	var err error
+	bound, err = testDBService.SaveAutoMessage(testInstanceID, bound, false)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+		return
+	}
+	defer func() {
+		if err := testDBService.DeleteAutoMessage(testInstanceID, bound.ID.Hex()); err != nil {
+			t.Errorf("unexpected error during cleanup: %v", err)
+		}
+	}()
+	if bound.Template.WhatsAppTemplateName != "weekly_reminder_v1" {
+		t.Errorf("expected the binding to be stored, got %v", bound.Template)
+	}
+
+	withoutBinding := bound
+	withoutBinding.Template = types.EmailTemplate{DefaultLanguage: "en"}
+
+	t.Run("a save without the binding preserves the stored one", func(t *testing.T) {
+		res, err := testDBService.SaveAutoMessage(testInstanceID, withoutBinding, true)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if res.Template.DefaultLanguage != "en" {
+			t.Errorf("expected the e-mail fields to be replaced, got %v", res.Template)
+		}
+		if res.Template.WhatsAppTemplateName != "weekly_reminder_v1" {
+			t.Errorf("expected the binding to survive, got %q", res.Template.WhatsAppTemplateName)
+		}
+		if res.Template.WhatsAppParams["nome"] != "profileAlias" {
+			t.Errorf("expected the params to survive, got %v", res.Template.WhatsAppParams)
+		}
+	})
+
+	t.Run("a save that clears the binding removes it", func(t *testing.T) {
+		res, err := testDBService.SaveAutoMessage(testInstanceID, withoutBinding, false)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if res.Template.WhatsAppTemplateName != "" || len(res.Template.WhatsAppParams) > 0 {
+			t.Errorf("expected the binding to be gone, got %v", res.Template)
+		}
+	})
 }

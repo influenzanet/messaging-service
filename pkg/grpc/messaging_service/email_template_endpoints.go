@@ -56,7 +56,10 @@ func (s *messagingServer) SaveEmailTemplate(ctx context.Context, req *api.SaveEm
 		return nil, status.Error(codes.Internal, err.Error())
 	}
 
-	templ, err = s.messageDBservice.SaveEmailTemplate(req.Token.InstanceId, templ)
+	// A client that sends no WhatsApp template name is saving the e-mail definition alone and is
+	// not asking to drop the binding: sending the name empty is how a binding is cleared.
+	preserveWhatsAppBinding := req.Template.WhatsappTemplateName == nil
+	templ, err = s.messageDBservice.SaveEmailTemplate(req.Token.InstanceId, templ, preserveWhatsAppBinding)
 	if err != nil {
 		return nil, status.Error(codes.Internal, err.Error())
 	}
