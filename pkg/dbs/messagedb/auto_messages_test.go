@@ -153,4 +153,31 @@ func TestSaveAutoMessageWhatsAppBinding(t *testing.T) {
 			t.Errorf("expected the binding to be gone, got %v", res.Template)
 		}
 	})
+
+	t.Run("the scheduler cannot bring a cleared binding back", func(t *testing.T) {
+		restored, err := testDBService.SaveAutoMessage(testInstanceID, bound, false)
+		if err != nil {
+			t.Errorf("unexpected error while arranging: %v", err)
+			return
+		}
+		// The scheduler saves the message as it read it, with the schedule advanced.
+		staleCopy := restored
+		staleCopy.NextTime += 3600
+		if _, err := testDBService.SaveAutoMessage(testInstanceID, withoutBinding, false); err != nil {
+			t.Errorf("unexpected error while clearing: %v", err)
+			return
+		}
+
+		res, err := testDBService.SaveAutoMessage(testInstanceID, staleCopy, true)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if res.Template.WhatsAppTemplateName != "" || len(res.Template.WhatsAppParams) > 0 {
+			t.Errorf("expected the cleared binding to stay cleared, got %v", res.Template)
+		}
+		if res.NextTime != staleCopy.NextTime {
+			t.Errorf("expected the schedule to advance to %d, got %d", staleCopy.NextTime, res.NextTime)
+		}
+	})
 }

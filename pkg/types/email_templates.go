@@ -99,6 +99,13 @@ func EmailTemplateFromAPI(obj *api.EmailTemplate) EmailTemplate {
 	for i, t := range obj.Translations {
 		translations[i] = LocalizedTemplateFromAPI(t)
 	}
+	// The binding is one unit: parameters are the arguments of the template named next to them,
+	// and cannot be delivered on their own. A request that names no template therefore carries no
+	// parameters either, so clearing a binding cannot leave its parameters behind.
+	whatsAppParams := obj.GetWhatsappParams()
+	if obj.GetWhatsappTemplateName() == "" {
+		whatsAppParams = nil
+	}
 	return EmailTemplate{
 		ID:                   _id,
 		MessageType:          obj.MessageType,
@@ -107,7 +114,7 @@ func EmailTemplateFromAPI(obj *api.EmailTemplate) EmailTemplate {
 		HeaderOverrides:      HeaderOverridesFromAPI(obj.HeaderOverrides),
 		Translations:         translations,
 		WhatsAppTemplateName: obj.GetWhatsappTemplateName(),
-		WhatsAppParams:       obj.GetWhatsappParams(),
+		WhatsAppParams:       whatsAppParams,
 	}
 }
 

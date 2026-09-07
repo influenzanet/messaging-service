@@ -41,6 +41,28 @@ func TestEmailTemplateWhatsAppBindingRoundTrip(t *testing.T) {
 		}
 	})
 
+	t.Run("from API drops params that name no template", func(t *testing.T) {
+		converted := EmailTemplateFromAPI(&api.EmailTemplate{
+			MessageType:    "weekly",
+			WhatsappParams: map[string]string{"nome": "profileAlias"},
+		})
+		if len(converted.WhatsAppParams) > 0 {
+			t.Errorf("expected no params without a template name, got %v", converted.WhatsAppParams)
+		}
+	})
+
+	t.Run("from API drops params when the binding is cleared", func(t *testing.T) {
+		cleared := ""
+		converted := EmailTemplateFromAPI(&api.EmailTemplate{
+			MessageType:          "weekly",
+			WhatsappTemplateName: &cleared,
+			WhatsappParams:       map[string]string{"nome": "profileAlias"},
+		})
+		if converted.WhatsAppTemplateName != "" || len(converted.WhatsAppParams) > 0 {
+			t.Errorf("expected the whole binding to be cleared, got %v", converted)
+		}
+	})
+
 	t.Run("to API omits the name when there is no binding", func(t *testing.T) {
 		converted := EmailTemplate{MessageType: "weekly"}.ToAPI()
 		if converted.WhatsappTemplateName != nil {

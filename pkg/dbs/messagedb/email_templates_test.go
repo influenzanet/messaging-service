@@ -177,4 +177,44 @@ func TestSaveEmailTemplateWhatsAppBinding(t *testing.T) {
 			t.Errorf("expected no binding, got %v", res)
 		}
 	})
+
+	t.Run("a stale copy cannot bring a cleared binding back", func(t *testing.T) {
+		if _, err := testDBService.SaveEmailTemplate(testInstanceID, bound, false); err != nil {
+			t.Errorf("unexpected error while arranging: %v", err)
+			return
+		}
+		// What a caller that read the template before the clear still holds in memory.
+		staleCopy := bound
+		if _, err := testDBService.SaveEmailTemplate(testInstanceID, withoutBinding, false); err != nil {
+			t.Errorf("unexpected error while clearing: %v", err)
+			return
+		}
+
+		res, err := testDBService.SaveEmailTemplate(testInstanceID, staleCopy, true)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if res.WhatsAppTemplateName != "" || len(res.WhatsAppParams) > 0 {
+			t.Errorf("expected the cleared binding to stay cleared, got %v", res)
+		}
+	})
+
+	t.Run("preserving does not store params the caller carries on its own", func(t *testing.T) {
+		if _, err := testDBService.SaveEmailTemplate(testInstanceID, withoutBinding, false); err != nil {
+			t.Errorf("unexpected error while arranging: %v", err)
+			return
+		}
+		paramsOnly := withoutBinding
+		paramsOnly.WhatsAppParams = map[string]string{"nome": "profileAlias"}
+
+		res, err := testDBService.SaveEmailTemplate(testInstanceID, paramsOnly, true)
+		if err != nil {
+			t.Errorf("unexpected error: %v", err)
+			return
+		}
+		if len(res.WhatsAppParams) > 0 {
+			t.Errorf("expected no params without a template name, got %v", res.WhatsAppParams)
+		}
+	})
 }

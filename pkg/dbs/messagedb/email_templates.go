@@ -2,6 +2,7 @@ package messagedb
 
 import (
 	"errors"
+	"slices"
 
 	"github.com/influenzanet/messaging-service/pkg/types"
 	"go.mongodb.org/mongo-driver/bson"
@@ -25,9 +26,8 @@ func keepStoredWhatsAppBinding(prefix string) bson.M {
 	return kept
 }
 
-// literalDocument wraps a document so the pipeline stores its values verbatim: without $literal a
-// subject holding a "$" would be parsed as a field path.
-func literalDocument(document interface{}) (bson.M, error) {
+// asBSONDocument marshals a value into an ordered BSON document.
+func asBSONDocument(document interface{}) (bson.D, error) {
 	raw, err := bson.Marshal(document)
 	if err != nil {
 		return nil, err
@@ -36,18 +36,45 @@ func literalDocument(document interface{}) (bson.M, error) {
 	if err := bson.Unmarshal(raw, &asDocument); err != nil {
 		return nil, err
 	}
+	return asDocument, nil
+}
+
+// literalDocument wraps a document so the pipeline stores its values verbatim: without $literal a
+// subject holding a "$" would be parsed as a field path.
+func literalDocument(document interface{}) (bson.M, error) {
+	asDocument, err := asBSONDocument(document)
+	if err != nil {
+		return nil, err
+	}
 	return bson.M{"$literal": asDocument}, nil
+}
+
+// withoutWhatsAppBinding drops the binding fields from an incoming document. A caller that reaches
+// the preserving path expressed no intent about the binding, so the copy it happens to carry must
+// not be written: without this a caller holding a stale copy, the scheduler above all, would write
+// a binding back over one that was cleared meanwhile.
+func withoutWhatsAppBinding(document bson.D) bson.D {
+	kept := make(bson.D, 0, len(document))
+	for _, element := range document {
+		if slices.Contains(whatsAppBindingFields, element.Key) {
+			continue
+		}
+		kept = append(kept, element)
+	}
+	return kept
 }
 
 // mergeKeepingWhatsAppBinding turns a document into the expression that writes it whole while
 // carrying the stored binding over, in one operation. Reading the binding first and replacing
-// afterwards would let a concurrent save land in between and lose it.
+// afterwards would let a concurrent save land in between and lose it. The incoming binding is
+// dropped first, so the result is the stored binding or none at all.
 func mergeKeepingWhatsAppBinding(document interface{}, prefix string) (bson.M, error) {
-	literal, err := literalDocument(document)
+	asDocument, err := asBSONDocument(document)
 	if err != nil {
 		return nil, err
 	}
-	return bson.M{"$mergeObjects": bson.A{literal, keepStoredWhatsAppBinding(prefix)}}, nil
+	incoming := bson.M{"$literal": withoutWhatsAppBinding(asDocument)}
+	return bson.M{"$mergeObjects": bson.A{incoming, keepStoredWhatsAppBinding(prefix)}}, nil
 }
 
 // SaveEmailTemplate writes the template, replacing the message definition as sent. When
