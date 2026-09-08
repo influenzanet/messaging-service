@@ -4,7 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -186,15 +189,30 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 	logger.Info.Printf("WhatsApp SendTemplateMessage -> to:%s template:%s lang:%s", maskPhone(toPhoneNumber), templateName, lang)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return err
+		return &WhatsAppSendError{cause: err}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		var respObj map[string]any
-		_ = json.NewDecoder(resp.Body).Decode(&respObj)
-		logger.Error.Printf("WhatsApp SendTemplateMessage failed status=%d resp=%v", resp.StatusCode, respObj)
-		return fmt.Errorf("failed to send template message, status code: %d", resp.StatusCode)
+		var respObj struct {
+			Error struct {
+				Code        int  `json:"code"`
+				Subcode     int  `json:"error_subcode"`
+				IsTransient bool `json:"is_transient"`
+			} `json:"error"`
+		}
+		decodeErr := json.NewDecoder(resp.Body).Decode(&respObj)
+		sendErr := &WhatsAppSendError{
+			StatusCode: resp.StatusCode, Code: respObj.Error.Code,
+			Subcode: respObj.Error.Subcode, IsTransient: respObj.Error.IsTransient,
+		}
+		var networkErr net.Error
+		if errors.As(decodeErr, &networkErr) || errors.Is(decodeErr, context.Canceled) || errors.Is(decodeErr, io.ErrUnexpectedEOF) {
+			// Timeouts/disconnects can occur after the response headers arrive.
+			sendErr.cause = decodeErr
+		}
+		logger.Error.Printf("WhatsApp SendTemplateMessage: %v", sendErr)
+		return sendErr
 	}
 	logger.Info.Println("WhatsApp SendTemplateMessage: delivered to API")
 

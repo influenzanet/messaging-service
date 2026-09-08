@@ -14,6 +14,28 @@ The email-client-service expects two configuration files at the MESSAGING_CONFIG
 
 The two files follow the same structure and allow the same configuration options. (See example in /test/configs)
 
+## WhatsApp scheduler retries
+
+Sender/API failures (HTTP 401/403, 408, 429, 5xx; Meta authentication/account,
+rate-limit and transient codes; transport errors) stop the current instance's tick
+without consuming any message's five-attempt retry budget. Claimed messages keep
+their existing `lastSendAttempt` lock and become eligible again after its normal
+expiry. This circuit is per tick/instance, not a persistent or cross-instance breaker.
+Meta pair-rate limit `131056` also preserves the retry budget, but only defers that
+recipient so the rest of the queue can proceed.
+
+Message-specific failures (including invalid template parameters) and unknown
+errors retain the existing five-attempt limit and archive behavior. The error
+classifier is in `pkg/http/clients/whatsapp_errors.go`; logs expose numeric HTTP/Meta
+codes, not Meta's free-form response body. No schema, environment variables or queue
+expiry policy are added. Messages affected by sender/API failures remain queued
+until recovery; automatic expiry and archive status are separate product decisions.
+
+Scheduler regression tests use an isolated MongoDB database for each test. Set
+`F04_TEST_MONGODB_URI` to a **test-only** MongoDB URI to run them (otherwise they skip).
+For example, run `go test -race ./cmd/message-scheduler ./pkg/http/clients` with that
+variable set. No real Meta messages are sent by these tests.
+
 ## Test
 Before running the test first you have to generate the client mock services:
 ```

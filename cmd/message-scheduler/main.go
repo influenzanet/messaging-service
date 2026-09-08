@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -444,9 +445,14 @@ func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Globa
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending outgoing whatsapp messages", threadID)
 }
 
-func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac *waClient.WhatsAppClient, lastAttemptOlderThan int64, wg *sync.WaitGroup) {
+type whatsAppSender interface {
+	SendTemplateMessage(context.Context, string, string, string, map[string]string) error
+}
+
+func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, lastAttemptOlderThan int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	counters := types.InitMessageCounter()
+processQueue:
 	for {
 		messages, err := mdb.FetchOutgoingWhatsApp(instanceID, outgoingBatchSize, lastAttemptOlderThan)
 		if err != nil {
@@ -474,6 +480,19 @@ func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instance
 			if err != nil {
 				logger.Error.Printf("Could not send whatsapp ('%s') in instance %s (attempt %d): %v", msg.MessageType, instanceID, msg.SendAttempt+1, err)
 				counters.IncreaseCounter(false)
+
+				var sendErr *waClient.WhatsAppSendError
+				if errors.As(err, &sendErr) {
+					switch sendErr.Class() {
+					case waClient.WhatsAppErrorAuth, waClient.WhatsAppErrorThrottled, waClient.WhatsAppErrorTransient:
+						// A sender/API outage must not exhaust the whole queue's retries.
+						// Keep all claimed locks until expiry; stop this instance's tick.
+						break processQueue
+					case waClient.WhatsAppErrorRecipientThrottled:
+						// Keep this message's lock, but let other recipients proceed.
+						continue
+					}
+				}
 
 				if msg.SendAttempt+1 >= maxWhatsAppSendAttempts {
 					// Permanently failed — archive and remove from queue.
