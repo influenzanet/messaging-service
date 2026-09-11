@@ -13,7 +13,26 @@ const (
 	WhatsAppErrorThrottled
 	WhatsAppErrorTransient
 	WhatsAppErrorRecipientThrottled
+	// WhatsAppErrorTemplate: the template itself cannot be used (paused or disabled), so every
+	// message of the campaign fails the same way until an operator acts on it.
+	WhatsAppErrorTemplate
 )
+
+func (c WhatsAppErrorClass) String() string {
+	switch c {
+	case WhatsAppErrorAuth:
+		return "authentication"
+	case WhatsAppErrorThrottled:
+		return "rate limit"
+	case WhatsAppErrorTransient:
+		return "transient"
+	case WhatsAppErrorRecipientThrottled:
+		return "recipient limit"
+	case WhatsAppErrorTemplate:
+		return "template unusable"
+	}
+	return "unknown"
+}
 
 // WhatsAppSendError retains machine-readable failure information, but deliberately
 // excludes Meta's free-form message and the response body: either may contain PII.
@@ -22,11 +41,21 @@ type WhatsAppSendError struct {
 	Code        int
 	Subcode     int
 	IsTransient bool
-	cause       error
+	// FbtraceID is the request identifier Meta support asks for; it carries no PII.
+	FbtraceID string
+	cause     error
 }
 
 func (e *WhatsAppSendError) Error() string {
-	return fmt.Sprintf("failed to send template message, status code: %d, Meta code: %d, subcode: %d", e.StatusCode, e.Code, e.Subcode)
+	msg := fmt.Sprintf("failed to send template message, status code: %d, Meta code: %d, subcode: %d", e.StatusCode, e.Code, e.Subcode)
+	if e.FbtraceID != "" {
+		msg += ", fbtrace_id: " + e.FbtraceID
+	}
+	if e.cause != nil {
+		// A transport error names the host and the failure, never the recipient or the token.
+		msg += ", cause: " + e.cause.Error()
+	}
+	return msg
 }
 
 func (e *WhatsAppSendError) Unwrap() error { return e.cause }
@@ -50,15 +79,23 @@ func (e *WhatsAppSendError) Class() WhatsAppErrorClass {
 		return WhatsAppErrorThrottled
 	case e.IsTransient:
 		return WhatsAppErrorTransient
+	case e.Code == 100 && e.Subcode == 33:
+		// The generic Graph shape of a deleted or unknown sender phone number.
+		return WhatsAppErrorAuth
 	}
 	switch e.Code {
-	case 3, 10, 190, 368, 131005, 131031, 131042, 133010:
-		// Permissions, token, account restrictions, payment or unregistered sender.
+	case 3, 10, 33, 190, 368, 131005, 131031, 131042, 131045, 133010:
+		// Permissions, token, account restrictions, payment, unregistered, deleted or
+		// misregistered sender.
 		return WhatsAppErrorAuth
 	case 4, 17, 341, 613, 80007, 130429, 131048:
 		return WhatsAppErrorThrottled
 	case 1, 2, 131000, 131016, 131057:
 		return WhatsAppErrorTransient
+	case 132015, 132016:
+		// Template paused for quality, or disabled. 132001 (unknown template) is left to the
+		// bounded retry: it is per language, and a mixed-language queue must keep moving.
+		return WhatsAppErrorTemplate
 	}
 	if e.Code >= 200 && e.Code <= 299 {
 		return WhatsAppErrorAuth

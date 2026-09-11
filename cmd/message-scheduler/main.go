@@ -449,11 +449,56 @@ type whatsAppSender interface {
 	SendTemplateMessage(context.Context, string, string, string, map[string]string) error
 }
 
+// recordFailedWhatsAppAttempt charges one failed attempt to the message: it is archived once
+// the attempts are exhausted, otherwise the counter moves and the lock provides the backoff.
+func recordFailedWhatsAppAttempt(mdb *messagedb.MessageDBService, instanceID string, msg types.OutgoingWhatsApp) {
+	if msg.SendAttempt+1 >= maxWhatsAppSendAttempts {
+		// Permanently failed — archive and remove from queue.
+		logger.Warning.Printf("WhatsApp message '%s' in instance %s exceeded max attempts (%d), archiving", msg.MessageType, instanceID, maxWhatsAppSendAttempts)
+		if _, archErr := mdb.AddToSentWhatsApp(instanceID, msg); archErr != nil {
+			logger.Error.Printf("Error archiving failed whatsapp: %v", archErr)
+		}
+		if delErr := mdb.DeleteOutgoingWhatsApp(instanceID, msg.ID.Hex()); delErr != nil {
+			logger.Error.Printf("Error deleting failed whatsapp: %v", delErr)
+		}
+		return
+	}
+	// Increment counter; lastSendAttempt stays at lock value, providing natural backoff.
+	if incErr := mdb.IncrementSendAttemptForOutgoingWhatsApp(instanceID, msg.ID.Hex()); incErr != nil {
+		logger.Error.Printf("Error incrementing sendAttempt for whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, incErr)
+	}
+}
+
 func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, lastAttemptOlderThan int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	counters := types.InitMessageCounter()
+
+	// A transient failure on one message is not proof of an outage: a timeout or a "retry
+	// later" from Meta can belong to that message alone. Such a failure is held until the next
+	// message that gets an answer from the sender: a second transient failure in a row means an
+	// outage and stops the tick with nothing charged; anything else means the held message was
+	// at fault and it is charged like any other failure. A failure left undecided at the end
+	// of the tick, or whose claim has meanwhile expired, is not charged.
+	var undecided *types.OutgoingWhatsApp
+	var undecidedClaimedAt int64
+	chargeUndecided := func() {
+		if undecided == nil {
+			return
+		}
+		if time.Now().Unix()-undecidedClaimedAt > int64(float64(lastAttemptOlderThan)*0.9) {
+			// The claim may have expired and the message be back in the queue under a new one:
+			// charging this copy could archive it while the other is being sent.
+			logger.Warning.Printf("[%s] WhatsApp message '%s' held too long to be decided, leaving it uncharged", instanceID, undecided.MessageType)
+		} else {
+			recordFailedWhatsAppAttempt(mdb, instanceID, *undecided)
+		}
+		undecided = nil
+	}
 processQueue:
 	for {
+		// Taken before the claims are written: the guard on a held failure must measure from
+		// the earliest moment one of this batch's claims can have been stored.
+		claimStart := time.Now().Unix()
 		messages, err := mdb.FetchOutgoingWhatsApp(instanceID, outgoingBatchSize, lastAttemptOlderThan)
 		if err != nil {
 			logger.Error.Printf("%s: %v", instanceID, err)
@@ -483,35 +528,37 @@ processQueue:
 
 				var sendErr *waClient.WhatsAppSendError
 				if errors.As(err, &sendErr) {
-					switch sendErr.Class() {
-					case waClient.WhatsAppErrorAuth, waClient.WhatsAppErrorThrottled, waClient.WhatsAppErrorTransient:
-						// A sender/API outage must not exhaust the whole queue's retries.
-						// Keep all claimed locks until expiry; stop this instance's tick.
+					switch class := sendErr.Class(); class {
+					case waClient.WhatsAppErrorAuth, waClient.WhatsAppErrorThrottled, waClient.WhatsAppErrorTemplate:
+						// Nothing a single message can cause: a sender/API outage or a paused
+						// template must not exhaust the whole queue's retries. Keep all claimed
+						// locks until expiry; stop this instance's tick.
+						logger.Error.Printf("[%s] stopping the WhatsApp tick on a sender-side failure (%s) at '%s'; nothing charged, locks left to expire", instanceID, class, msg.MessageType)
+						if undecided != nil {
+							logger.Warning.Printf("[%s] WhatsApp message '%s' was held as a transient failure and is left undecided by the stop", instanceID, undecided.MessageType)
+						}
 						break processQueue
+					case waClient.WhatsAppErrorTransient:
+						if undecided != nil {
+							logger.Error.Printf("[%s] stopping the WhatsApp tick: two consecutive transient failures ('%s', '%s'); nothing charged, locks left to expire", instanceID, undecided.MessageType, msg.MessageType)
+							break processQueue
+						}
+						held := msg
+						undecided = &held
+						undecidedClaimedAt = claimStart
+						continue
 					case waClient.WhatsAppErrorRecipientThrottled:
 						// Keep this message's lock, but let other recipients proceed.
 						continue
 					}
 				}
 
-				if msg.SendAttempt+1 >= maxWhatsAppSendAttempts {
-					// Permanently failed — archive and remove from queue.
-					logger.Warning.Printf("WhatsApp message '%s' in instance %s exceeded max attempts (%d), archiving", msg.MessageType, instanceID, maxWhatsAppSendAttempts)
-					if _, archErr := mdb.AddToSentWhatsApp(instanceID, msg); archErr != nil {
-						logger.Error.Printf("Error archiving failed whatsapp: %v", archErr)
-					}
-					if delErr := mdb.DeleteOutgoingWhatsApp(instanceID, msg.ID.Hex()); delErr != nil {
-						logger.Error.Printf("Error deleting failed whatsapp: %v", delErr)
-					}
-				} else {
-					// Increment counter; lastSendAttempt stays at lock value, providing natural backoff.
-					if incErr := mdb.IncrementSendAttemptForOutgoingWhatsApp(instanceID, msg.ID.Hex()); incErr != nil {
-						logger.Error.Printf("Error incrementing sendAttempt for whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, incErr)
-					}
-				}
+				chargeUndecided()
+				recordFailedWhatsAppAttempt(mdb, instanceID, msg)
 				continue
 			}
 
+			chargeUndecided()
 			_, err = mdb.AddToSentWhatsApp(instanceID, msg)
 			if err != nil {
 				logger.Error.Printf("Error saving to sent whatsapp: %v", err)

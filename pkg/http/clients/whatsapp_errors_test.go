@@ -14,11 +14,12 @@ import (
 
 func TestWhatsAppSendErrorClass(t *testing.T) {
 	for class, codes := range map[WhatsAppErrorClass][]int{
-		WhatsAppErrorAuth:               {3, 10, 190, 200, 250, 299, 368, 131005, 131031, 131042, 133010},
+		WhatsAppErrorAuth:               {3, 10, 33, 190, 200, 250, 299, 368, 131005, 131031, 131042, 131045, 133010},
 		WhatsAppErrorThrottled:          {4, 17, 341, 613, 80007, 130429, 131048},
 		WhatsAppErrorTransient:          {1, 2, 131000, 131016, 131057},
 		WhatsAppErrorRecipientThrottled: {131056},
-		WhatsAppErrorUnknown:            {0, 199, 300, 999999, 100, 131009, 131026, 131030, 132000, 132001, 132012, 132015, 132016},
+		WhatsAppErrorTemplate:           {132015, 132016},
+		WhatsAppErrorUnknown:            {0, 199, 300, 999999, 100, 131009, 131026, 131030, 131049, 132000, 132001, 132012},
 	} {
 		for _, code := range codes {
 			t.Run(fmt.Sprint(code), func(t *testing.T) {
@@ -45,6 +46,8 @@ func TestWhatsAppSendErrorClass(t *testing.T) {
 		{"unavailable", WhatsAppSendError{StatusCode: 503}, WhatsAppErrorTransient},
 		{"transient flag beats message error", WhatsAppSendError{StatusCode: 400, Code: 100, IsTransient: true}, WhatsAppErrorTransient},
 		{"transport", WhatsAppSendError{cause: context.DeadlineExceeded}, WhatsAppErrorTransient},
+		{"deleted sender as Graph subcode", WhatsAppSendError{StatusCode: 400, Code: 100, Subcode: 33}, WhatsAppErrorAuth},
+		{"code 100 with another subcode", WhatsAppSendError{StatusCode: 400, Code: 100, Subcode: 2494010}, WhatsAppErrorUnknown},
 		{"unknown bad request", WhatsAppSendError{StatusCode: 400}, WhatsAppErrorUnknown},
 		{"not found", WhatsAppSendError{StatusCode: 404}, WhatsAppErrorUnknown},
 		{"redirect", WhatsAppSendError{StatusCode: 302}, WhatsAppErrorUnknown},
@@ -168,4 +171,39 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 			t.Fatalf("expected a wrapped transient deadline error, got %v", err)
 		}
 	})
+}
+
+func TestWhatsAppSendErrorMessageCarriesTraceAndCause(t *testing.T) {
+	withTrace := &WhatsAppSendError{StatusCode: 400, Code: 132001, FbtraceID: "AbCdEf123"}
+	if got := withTrace.Error(); !strings.Contains(got, "fbtrace_id: AbCdEf123") {
+		t.Errorf("expected the Meta trace id in the message, got %q", got)
+	}
+	withCause := &WhatsAppSendError{cause: errors.New("dial tcp 1.2.3.4:443: connection refused")}
+	if got := withCause.Error(); !strings.Contains(got, "connection refused") {
+		t.Errorf("expected the transport cause in the message, got %q", got)
+	}
+	if got := (&WhatsAppSendError{StatusCode: 400, Code: 100}).Error(); strings.Contains(got, "fbtrace") || strings.Contains(got, "cause") {
+		t.Errorf("expected no trace or cause when there is none, got %q", got)
+	}
+}
+
+func TestSendTemplateMessageDecodesTheMetaTraceID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"error":{"code":132001,"message":"template not found","fbtrace_id":"A1b2C3d4"}}`)
+	}))
+	defer server.Close()
+	client := NewWhatsAppClient("test-token", "test-phone-id")
+	client.apiBaseURL = server.URL
+	err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
+	var sendErr *WhatsAppSendError
+	if !errors.As(err, &sendErr) {
+		t.Fatalf("expected a WhatsAppSendError, got %v", err)
+	}
+	if sendErr.FbtraceID != "A1b2C3d4" || !strings.Contains(err.Error(), "A1b2C3d4") {
+		t.Fatalf("expected the fbtrace_id to be decoded and reported, got %q", err.Error())
+	}
+	if strings.Contains(err.Error(), "template not found") {
+		t.Fatalf("Meta's free-form message must not be reported, got %q", err.Error())
+	}
 }

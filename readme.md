@@ -16,20 +16,41 @@ The two files follow the same structure and allow the same configuration options
 
 ## WhatsApp scheduler retries
 
-Sender/API failures (HTTP 401/403, 408, 429, 5xx; Meta authentication/account,
-rate-limit and transient codes; transport errors) stop the current instance's tick
-without consuming any message's five-attempt retry budget. Claimed messages keep
-their existing `lastSendAttempt` lock and become eligible again after its normal
-expiry. This circuit is per tick/instance, not a persistent or cross-instance breaker.
-Meta pair-rate limit `131056` also preserves the retry budget, but only defers that
-recipient so the rest of the queue can proceed.
+Failures that a single message cannot cause stop the current instance's tick at once,
+without consuming any message's five-attempt retry budget: HTTP 401/403, Meta
+authentication, account and sender-number codes (`33`, `131045`, and the Graph shape
+`100` with subcode `33`), HTTP 429 and Meta rate-limit codes other than `131056`, and a
+template Meta has paused or disabled (`132015`, `132016`). An HTTP 408 or 5xx status, or a
+transport error, is read as transient before any Meta code is considered. Every claimed
+message keeps its `lastSendAttempt` lock until its normal expiry. A paused or disabled
+template therefore also holds back the other campaigns of that instance until an operator
+acts on it: the stop is logged with the failure class and the message type.
 
-Message-specific failures (including invalid template parameters) and unknown
-errors retain the existing five-attempt limit and archive behavior. The error
-classifier is in `pkg/http/clients/whatsapp_errors.go`; logs expose numeric HTTP/Meta
-codes, not Meta's free-form response body. No schema, environment variables or queue
-expiry policy are added. Messages affected by sender/API failures remain queued
-until recovery; automatic expiry and archive status are separate product decisions.
+Transient failures (HTTP 408 and 5xx, Meta `is_transient` other than on `131056`, codes
+`1`, `2`, `131000`, `131016`, `131057`, transport errors) can belong to one message or to
+an outage, so one such failure is held: if the next message that reaches the sender fails
+transiently too, the tick stops with nothing charged; if it succeeds or fails for a
+message-specific reason, the held message was at fault and is charged one attempt like
+any other failure. A failure left undecided at the end of the tick, or whose claim may
+have expired meanwhile, is not charged. This keeps an outage from draining the queue and
+keeps one persistently failing message from blocking the messages behind it, at a price
+that is stated here: during a partial outage, a message that fails transiently while its
+neighbour succeeds is charged, and after five such charges it is archived undelivered;
+two messages that both keep failing transiently and sit next to each other in the fetch
+order are read as an outage on every tick, so nothing in the scheduler ever decides them,
+and they block that instance's queue until one of them is removed or delivers. The
+queue-age guard that would bound both remains a separate product decision. The circuit
+is per tick/instance, not a persistent or cross-instance breaker. Meta pair-rate limit
+`131056` preserves the retry budget but only defers that recipient, and does not decide a
+held failure.
+
+Message-specific failures (invalid template parameters, unknown template `132001`,
+per-user marketing limit `131049`, and any code the classifier does not know, including
+`100` unless an HTTP status, the transient flag or subcode `33` classifies the response
+first) retain the existing five-attempt limit and archive behavior. The error classifier is in
+`pkg/http/clients/whatsapp_errors.go`; logs expose numeric HTTP/Meta codes, Meta's
+`fbtrace_id` and the transport cause, never Meta's free-form response body. No schema,
+environment variables or queue expiry policy are added.
 
 Scheduler regression tests use an isolated MongoDB database for each test. Set
 `F04_TEST_MONGODB_URI` to a **test-only** MongoDB URI to run them (otherwise they skip).

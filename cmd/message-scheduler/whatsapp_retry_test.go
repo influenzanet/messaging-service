@@ -233,20 +233,24 @@ func TestWhatsAppGlobalOutageDoesNotConsumeAttemptsAndRecovers(t *testing.T) {
 }
 
 func TestWhatsAppGlobalFailureStopsTheWholeTick(t *testing.T) {
+	// Authentication, rate-limit and template conditions stop the tick at the first call;
+	// a transient failure is held once, so the tick stops at the second.
 	for _, tt := range []struct {
-		name string
-		err  error
+		name  string
+		err   error
+		calls int
 	}{
-		{"HTTP 401", &waClient.WhatsAppSendError{StatusCode: http.StatusUnauthorized}},
-		{"HTTP 400 Meta 190", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 190}},
-		{"HTTP 403", &waClient.WhatsAppSendError{StatusCode: http.StatusForbidden}},
-		{"HTTP 429", &waClient.WhatsAppSendError{StatusCode: http.StatusTooManyRequests}},
-		{"HTTP 400 Meta 130429", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 130429}},
-		{"HTTP 500", &waClient.WhatsAppSendError{StatusCode: http.StatusInternalServerError}},
-		{"HTTP 400 Meta 131016", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131016}},
-		{"HTTP 400 Meta 133010", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 133010}},
-		{"Meta transient flag", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 999, IsTransient: true}},
-		{"wrapped typed error", fmt.Errorf("send failed: %w", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 190})},
+		{"HTTP 401", &waClient.WhatsAppSendError{StatusCode: http.StatusUnauthorized}, 1},
+		{"HTTP 400 Meta 190", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 190}, 1},
+		{"HTTP 403", &waClient.WhatsAppSendError{StatusCode: http.StatusForbidden}, 1},
+		{"HTTP 400 Meta 33", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 33}, 1},
+		{"HTTP 429", &waClient.WhatsAppSendError{StatusCode: http.StatusTooManyRequests}, 1},
+		{"HTTP 400 Meta 130429", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 130429}, 1},
+		{"HTTP 400 Meta 133010", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 133010}, 1},
+		{"wrapped typed error", fmt.Errorf("send failed: %w", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 190}), 1},
+		{"HTTP 500", &waClient.WhatsAppSendError{StatusCode: http.StatusInternalServerError}, 2},
+		{"HTTP 400 Meta 131016", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131016}, 2},
+		{"Meta transient flag", &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 999, IsTransient: true}, 2},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			db := newSchedulerTestDB(t)
@@ -255,8 +259,8 @@ func TestWhatsAppGlobalFailureStopsTheWholeTick(t *testing.T) {
 
 			runWhatsAppHandler(db.service, sender, 60)
 
-			if sender.callCount() != 1 {
-				t.Fatalf("global failure must open the per-tick circuit after one call, got %d calls", sender.callCount())
+			if sender.callCount() != tt.calls {
+				t.Fatalf("global failure must open the per-tick circuit after %d call(s), got %d", tt.calls, sender.callCount())
 			}
 			if outgoing, sent := db.counts(t); outgoing != 2 || sent != 0 {
 				t.Fatalf("global failure changed queue contents: outgoing=%d sent=%d", outgoing, sent)
@@ -279,8 +283,8 @@ func TestWhatsAppGlobalFailureDoesNotFetchBeyondClaimedBatch(t *testing.T) {
 
 	runWhatsAppHandler(db.service, sender, 60)
 
-	if sender.callCount() != 1 {
-		t.Fatalf("global failure must stop the outer fetch loop, got %d calls", sender.callCount())
+	if sender.callCount() != 2 {
+		t.Fatalf("global failure must stop the outer fetch loop after two consecutive calls, got %d calls", sender.callCount())
 	}
 	if outgoing, sent := db.counts(t); outgoing != outgoingBatchSize+5 || sent != 0 {
 		t.Fatalf("global failure changed queue contents: outgoing=%d sent=%d", outgoing, sent)
@@ -456,5 +460,301 @@ func TestConcurrentWhatsAppTicksRespectActiveLease(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// selectiveWhatsAppSender fails only the messages addressed to failPhone.
+type selectiveWhatsAppSender struct {
+	mu        sync.Mutex
+	failPhone string
+	err       error
+	calls     int
+}
+
+func (s *selectiveWhatsAppSender) SendTemplateMessage(_ context.Context, to string, _ string, _ string, _ map[string]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	if to == s.failPhone {
+		return s.err
+	}
+	return nil
+}
+
+const poisonPhone = "+390000000000"
+
+func (db *schedulerTestDB) addTo(t *testing.T, phone string, sendAttempt int) {
+	t.Helper()
+	db.addToInLang(t, phone, "it", sendAttempt)
+}
+
+func (db *schedulerTestDB) addToInLang(t *testing.T, phone string, lang string, sendAttempt int) {
+	t.Helper()
+	if _, err := db.service.AddToOutgoingWhatsApp(schedulerTestInstanceID, types.OutgoingWhatsApp{
+		MessageType: "test", ToPhoneNumber: phone, TemplateName: "test_template", Lang: lang,
+		ContentParams: map[string]string{"name": "Mario"}, SendAttempt: sendAttempt,
+	}); err != nil {
+		t.Fatalf("add outgoing WhatsApp message: %v", err)
+	}
+}
+
+// langSelectiveWhatsAppSender fails every message sent in failLang.
+type langSelectiveWhatsAppSender struct {
+	mu       sync.Mutex
+	failLang string
+	err      error
+	calls    int
+}
+
+func (s *langSelectiveWhatsAppSender) SendTemplateMessage(_ context.Context, _ string, _ string, lang string, _ map[string]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.calls++
+	if lang == s.failLang {
+		return s.err
+	}
+	return nil
+}
+
+func (db *schedulerTestDB) attemptsOf(t *testing.T, phone string) int {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var msg types.OutgoingWhatsApp
+	if err := db.outgoing.FindOne(ctx, bson.M{"toPhoneNumber": phone}).Decode(&msg); err != nil {
+		t.Fatalf("read outgoing WhatsApp message to %s: %v", phone, err)
+	}
+	return msg.SendAttempt
+}
+
+// A single message that keeps failing with a sender-side error is not an outage: the
+// messages behind it must still go out, and the failure must count against it.
+func TestWhatsAppPoisonMessageDoesNotStallTheQueue(t *testing.T) {
+	transient := &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131000}
+	for _, tt := range []struct {
+		name          string
+		poisonAt      int // position of the poison message among six
+		startAttempts int
+		wantOutgoing  int64
+		wantSent      int64
+		wantAttempts  int // -1 when the poison must have been archived
+	}{
+		{"first of six, first failure", 0, 0, 1, 5, 1},
+		{"third of six, first failure", 2, 0, 1, 5, 1},
+		{"first of six, last allowed failure is archived", 0, maxWhatsAppSendAttempts - 1, 0, 6, -1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			db := newSchedulerTestDB(t)
+			for i := 0; i < 6; i++ {
+				if i == tt.poisonAt {
+					db.addTo(t, poisonPhone, tt.startAttempts)
+				} else {
+					db.addTo(t, fmt.Sprintf("+3911111111%02d", i), 0)
+				}
+			}
+			sender := &selectiveWhatsAppSender{failPhone: poisonPhone, err: transient}
+
+			runWhatsAppHandler(db.service, sender, 60)
+
+			if outgoing, sent := db.counts(t); outgoing != tt.wantOutgoing || sent != tt.wantSent {
+				t.Fatalf("queue after the tick: outgoing=%d sent=%d, want %d/%d", outgoing, sent, tt.wantOutgoing, tt.wantSent)
+			}
+			if tt.wantAttempts >= 0 {
+				if got := db.attemptsOf(t, poisonPhone); got != tt.wantAttempts {
+					t.Fatalf("poison message attempts = %d, want %d", got, tt.wantAttempts)
+				}
+			}
+		})
+	}
+}
+
+// A sender-side failure on the last message of the tick cannot be told apart from an
+// outage, so it is left as it is: no attempt consumed, lock released on expiry.
+func TestWhatsAppLoneSenderSideFailureIsLeftUntouched(t *testing.T) {
+	db := newSchedulerTestDB(t)
+	db.addTo(t, "+391111111100", 0)
+	db.addTo(t, poisonPhone, 0)
+	sender := &selectiveWhatsAppSender{failPhone: poisonPhone, err: &waClient.WhatsAppSendError{StatusCode: http.StatusServiceUnavailable}}
+
+	runWhatsAppHandler(db.service, sender, 60)
+
+	if outgoing, sent := db.counts(t); outgoing != 1 || sent != 1 {
+		t.Fatalf("expected the healthy message delivered and the other still queued, got outgoing=%d sent=%d", outgoing, sent)
+	}
+	if got := db.attemptsOf(t, poisonPhone); got != 0 {
+		t.Fatalf("an undecided sender-side failure must not consume an attempt, got %d", got)
+	}
+}
+
+// A recipient-level throttle in between says nothing about the sender, so the earlier
+// undecided failure waits for the next message that does.
+func TestWhatsAppRecipientThrottleDoesNotDecideAnEarlierFailure(t *testing.T) {
+	db := newSchedulerTestDB(t)
+	db.addTo(t, poisonPhone, 0)
+	db.addTo(t, "+391111111101", 0)
+	db.addTo(t, "+391111111102", 0)
+	sender := &scriptedWhatsAppSender{errors: []error{
+		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131000},
+		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056},
+		nil,
+	}}
+
+	runWhatsAppHandler(db.service, sender, 60)
+
+	if outgoing, sent := db.counts(t); outgoing != 2 || sent != 1 {
+		t.Fatalf("expected one delivery, got outgoing=%d sent=%d", outgoing, sent)
+	}
+	if got := db.attemptsOf(t, poisonPhone); got != 1 {
+		t.Fatalf("the failure before the throttle must be charged once the third message succeeds, got %d attempts", got)
+	}
+}
+
+// A template Meta has paused or disabled is a campaign-wide condition that only an operator
+// can lift: the tick stops at once and no message pays for it.
+func TestWhatsAppTemplateConditionStopsTheTick(t *testing.T) {
+	for _, code := range []int{132015, 132016} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			db := newSchedulerTestDB(t)
+			db.add(t, 3, 0)
+			sender := &fakeWhatsAppSender{err: &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: code}}
+
+			runWhatsAppHandler(db.service, sender, 60)
+
+			if sender.callCount() != 1 {
+				t.Fatalf("template condition must stop the tick at the first call, got %d", sender.callCount())
+			}
+			if outgoing, sent := db.counts(t); outgoing != 3 || sent != 0 {
+				t.Fatalf("template condition changed the queue: outgoing=%d sent=%d", outgoing, sent)
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if changed, err := db.outgoing.CountDocuments(ctx, bson.M{"sendAttempt": bson.M{"$ne": 0}}); err != nil {
+				t.Fatalf("inspect retry counters: %v", err)
+			} else if changed != 0 {
+				t.Fatalf("template condition consumed %d attempts", changed)
+			}
+		})
+	}
+}
+
+// An unknown template is a per-language condition: the messages in that language pay for
+// it one attempt at a time, and the messages in the other language keep flowing.
+func TestWhatsAppUnknownTemplateLanguageDoesNotStallTheOtherLanguage(t *testing.T) {
+	db := newSchedulerTestDB(t)
+	for i := 0; i < 6; i++ {
+		lang := "it"
+		if i%2 == 0 {
+			lang = "en"
+		}
+		db.addToInLang(t, fmt.Sprintf("+3911111111%02d", i), lang, 0)
+	}
+	// the template is approved in Italian only: every English send is rejected with 132001
+	sender := &langSelectiveWhatsAppSender{failLang: "en", err: &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 132001}}
+
+	runWhatsAppHandler(db.service, sender, 60)
+
+	if outgoing, sent := db.counts(t); outgoing != 3 || sent != 3 {
+		t.Fatalf("expected the Italian half delivered, got outgoing=%d sent=%d", outgoing, sent)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if stuck, err := db.outgoing.CountDocuments(ctx, bson.M{"lang": "en", "sendAttempt": 1}); err != nil {
+		t.Fatalf("inspect retry counters: %v", err)
+	} else if stuck != 3 {
+		t.Fatalf("expected the three English messages charged one attempt each, got %d", stuck)
+	}
+	if delivered, err := db.sent.CountDocuments(ctx, bson.M{"lang": "it"}); err != nil {
+		t.Fatalf("inspect the archive: %v", err)
+	} else if delivered != 3 {
+		t.Fatalf("expected the three Italian messages archived as delivered, got %d", delivered)
+	}
+}
+
+// A failure of the message's own (invalid parameters) decides an earlier held failure just
+// as a success does: the held message was at fault.
+func TestWhatsAppMessageSpecificFailureDecidesAnEarlierFailure(t *testing.T) {
+	db := newSchedulerTestDB(t)
+	db.addTo(t, poisonPhone, 0)
+	db.addTo(t, "+391111111101", 0)
+	sender := &scriptedWhatsAppSender{errors: []error{
+		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131000},
+		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 132012},
+	}}
+
+	runWhatsAppHandler(db.service, sender, 60)
+
+	if outgoing, sent := db.counts(t); outgoing != 2 || sent != 0 {
+		t.Fatalf("expected both messages still queued, got outgoing=%d sent=%d", outgoing, sent)
+	}
+	if got := db.attemptsOf(t, poisonPhone); got != 1 {
+		t.Fatalf("the held failure must be charged once the next message fails on its own, got %d", got)
+	}
+	if got := db.attemptsOf(t, "+391111111101"); got != 1 {
+		t.Fatalf("the message-specific failure must be charged as before, got %d", got)
+	}
+}
+
+// perPhoneWhatsAppSender scripts the outcome of each call per recipient and can delay one of
+// them long enough for the locks to expire.
+type perPhoneWhatsAppSender struct {
+	mu        sync.Mutex
+	script    map[string][]error
+	calls     map[string]int
+	slowPhone string
+	delay     time.Duration
+}
+
+func (s *perPhoneWhatsAppSender) SendTemplateMessage(_ context.Context, to string, _ string, _ string, _ map[string]string) error {
+	if to == s.slowPhone {
+		time.Sleep(s.delay)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.calls == nil {
+		s.calls = map[string]int{}
+	}
+	call := s.calls[to]
+	s.calls[to]++
+	if outcomes := s.script[to]; call < len(outcomes) {
+		return outcomes[call]
+	}
+	return nil
+}
+
+// A held failure whose claim has expired is not charged. The message may already have been
+// claimed again and sent by the same tick; charging the stale copy would archive it as failed
+// while the live copy is archived as delivered.
+func TestWhatsAppHeldFailureIsNotChargedAfterItsClaimExpired(t *testing.T) {
+	const other = "+391111111101"
+	db := newSchedulerTestDB(t)
+	db.addTo(t, poisonPhone, maxWhatsAppSendAttempts-1)
+	db.addTo(t, other, 0)
+	sender := &perPhoneWhatsAppSender{
+		script: map[string][]error{
+			// first call fails transiently, the re-claimed second call succeeds
+			poisonPhone: {&waClient.WhatsAppSendError{StatusCode: http.StatusServiceUnavailable}, nil},
+			// slow enough to outlive the 2 s lock; a recipient limit decides nothing, and the
+			// third claim succeeds so that the tick ends
+			other: {&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056}, &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056}, nil},
+		},
+		slowPhone: other,
+		delay:     3200 * time.Millisecond, // locks are compared in whole seconds
+	}
+
+	runWhatsAppHandler(db.service, sender, 2)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	archived, err := db.sent.CountDocuments(ctx, bson.M{"toPhoneNumber": poisonPhone})
+	if err != nil {
+		t.Fatalf("inspect the archive: %v", err)
+	}
+	if archived != 1 {
+		t.Fatalf("the delivered message must be archived exactly once, found %d archive rows", archived)
+	}
+	if queued, err := db.outgoing.CountDocuments(ctx, bson.M{"toPhoneNumber": poisonPhone}); err != nil {
+		t.Fatalf("inspect the queue: %v", err)
+	} else if queued != 0 {
+		t.Fatalf("the delivered message must have left the queue, found %d rows", queued)
 	}
 }

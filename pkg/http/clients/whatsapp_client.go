@@ -189,22 +189,26 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 	logger.Info.Printf("WhatsApp SendTemplateMessage -> to:%s template:%s lang:%s", maskPhone(toPhoneNumber), templateName, lang)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return &WhatsAppSendError{cause: err}
+		sendErr := &WhatsAppSendError{cause: err}
+		logger.Error.Printf("WhatsApp SendTemplateMessage: %v", sendErr)
+		return sendErr
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
 		var respObj struct {
 			Error struct {
-				Code        int  `json:"code"`
-				Subcode     int  `json:"error_subcode"`
-				IsTransient bool `json:"is_transient"`
+				Code        int    `json:"code"`
+				Subcode     int    `json:"error_subcode"`
+				IsTransient bool   `json:"is_transient"`
+				FbtraceID   string `json:"fbtrace_id"`
 			} `json:"error"`
 		}
 		decodeErr := json.NewDecoder(resp.Body).Decode(&respObj)
 		sendErr := &WhatsAppSendError{
 			StatusCode: resp.StatusCode, Code: respObj.Error.Code,
 			Subcode: respObj.Error.Subcode, IsTransient: respObj.Error.IsTransient,
+			FbtraceID: respObj.Error.FbtraceID,
 		}
 		var networkErr net.Error
 		if errors.As(decodeErr, &networkErr) || errors.Is(decodeErr, context.Canceled) || errors.Is(decodeErr, io.ErrUnexpectedEOF) {
