@@ -94,13 +94,18 @@ func TestGetVerifiedPhone(t *testing.T) {
 func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	templateWithWA := types.EmailTemplate{
 		MessageType:          "weekly",
+		DefaultLanguage:      "it",
+		Translations:         []types.LocalizedTemplate{{Lang: "it"}, {Lang: "en"}},
 		WhatsAppTemplateName: "influenzanet_weekly_v1",
 	}
 	templateWithoutWA := types.EmailTemplate{
-		MessageType: "weekly",
+		MessageType:     "weekly",
+		DefaultLanguage: "it",
 	}
 	templateWithParams := types.EmailTemplate{
 		MessageType:          "weekly",
+		DefaultLanguage:      "it",
+		Translations:         []types.LocalizedTemplate{{Lang: "it"}},
 		WhatsAppTemplateName: "influenzanet_weekly_v1",
 		WhatsAppParams:       map[string]string{"study_name": "studyKey"},
 	}
@@ -210,6 +215,37 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 		}
 	})
 
+	t.Run("language: user language kept when the template is maintained in it", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		user := verifiedPhoneUser([]string{"whatsapp"})
+		user.Account.PreferredLanguage = "en"
+		got := prepareOutgoingWhatsApp(user, templateWithWA, map[string]string{})
+		if got == nil || got.Lang != "en" {
+			t.Fatalf("expected a message in 'en', got %v", got)
+		}
+	})
+
+	t.Run("language: unmaintained user language falls back to the template default", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		user := verifiedPhoneUser([]string{"whatsapp"})
+		user.Account.PreferredLanguage = "de"
+		got := prepareOutgoingWhatsApp(user, templateWithWA, map[string]string{})
+		if got == nil || got.Lang != "it" {
+			t.Fatalf("expected a message in the default 'it', got %v", got)
+		}
+	})
+
+	t.Run("language: template without any language yields no message", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		bare := types.EmailTemplate{MessageType: "weekly", WhatsAppTemplateName: "influenzanet_weekly_v1"}
+		if got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), bare, map[string]string{}); got != nil {
+			t.Errorf("expected nil so that the e-mail is sent instead, got a message in %q", got.Lang)
+		}
+	})
+
 	t.Run("user with channels=whatsapp only - generates message", func(t *testing.T) {
 		whatsAppEnabled = true
 		defer func() { whatsAppEnabled = false }()
@@ -246,7 +282,7 @@ func TestSaveOutgoingWhatsAppWhenQueueingFails(t *testing.T) {
 		},
 		ContactPreferences: &umAPI.ContactPreferences{PreferredChannels: []string{"whatsapp"}},
 	}
-	template := types.EmailTemplate{MessageType: "weekly", WhatsAppTemplateName: "influenzanet_weekly_v1"}
+	template := types.EmailTemplate{MessageType: "weekly", DefaultLanguage: "it", WhatsAppTemplateName: "influenzanet_weekly_v1"}
 
 	if prepared := prepareOutgoingWhatsApp(user, template, map[string]string{}); prepared == nil {
 		t.Fatal("precondition: the message must be preparable, so that only the queue write can fail")
@@ -290,7 +326,7 @@ func TestSaveOutgoingWhatsAppQueuesTheMessage(t *testing.T) {
 		},
 		ContactPreferences: &umAPI.ContactPreferences{PreferredChannels: []string{"whatsapp"}},
 	}
-	template := types.EmailTemplate{MessageType: "weekly", WhatsAppTemplateName: "influenzanet_weekly_v1"}
+	template := types.EmailTemplate{MessageType: "weekly", DefaultLanguage: "it", WhatsAppTemplateName: "influenzanet_weekly_v1"}
 
 	got := saveOutgoingWhatsApp(dbService, instanceID, user, template, map[string]string{})
 	if got == nil {
@@ -302,5 +338,35 @@ func TestSaveOutgoingWhatsAppQueuesTheMessage(t *testing.T) {
 	}
 	if len(queued) != 1 || queued[0].ToPhoneNumber != "+391234567890" {
 		t.Errorf("expected exactly one queued message to +391234567890, got %v", queued)
+	}
+}
+
+func TestResolveWhatsAppLang(t *testing.T) {
+	template := types.EmailTemplate{
+		MessageType:     "weekly",
+		DefaultLanguage: "it",
+		Translations:    []types.LocalizedTemplate{{Lang: "it"}, {Lang: "en"}},
+	}
+	userWith := func(lang string) *umAPI.User {
+		return &umAPI.User{Account: &umAPI.User_Account{PreferredLanguage: lang}}
+	}
+	cases := []struct {
+		name     string
+		user     *umAPI.User
+		template types.EmailTemplate
+		want     string
+	}{
+		{"maintained language is kept", userWith("en"), template, "en"},
+		{"unmaintained language falls back to the default", userWith("de"), template, "it"},
+		{"empty language falls back to the default", userWith(""), template, "it"},
+		{"no account falls back to the default", &umAPI.User{}, template, "it"},
+		{"no translations and no default gives nothing", userWith("it"), types.EmailTemplate{MessageType: "weekly"}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := resolveWhatsAppLang(c.user, c.template); got != c.want {
+				t.Errorf("expected %q, got %q", c.want, got)
+			}
+		})
 	}
 }

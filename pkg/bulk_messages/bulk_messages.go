@@ -593,14 +593,36 @@ func prepareOutgoingWhatsApp(
 		namedParams[paramName] = value
 	}
 
+	lang := resolveWhatsAppLang(user, template)
+	if lang == "" {
+		logger.Warning.Printf("prepareOutgoingWhatsApp: template %s has no language to send in, user=%s", template.MessageType, user.Id)
+		return nil
+	}
+
 	return &types.OutgoingWhatsApp{
 		MessageType:   template.MessageType,
 		ToPhoneNumber: phone,
 		TemplateName:  template.WhatsAppTemplateName,
-		Lang:          user.GetAccount().GetPreferredLanguage(),
+		Lang:          lang,
 		ContentParams: namedParams,
 		UserID:        user.Id,
 	}
+}
+
+// resolveWhatsAppLang picks the language of a WhatsApp send the way the e-mail path picks its
+// translation: the participant's language when the message is maintained in it, otherwise the
+// template's default language. Meta rejects a send in a language the template is not approved
+// for, so a language the platform does not maintain must not reach the client.
+func resolveWhatsAppLang(user *umAPI.User, template types.EmailTemplate) string {
+	preferred := user.GetAccount().GetPreferredLanguage()
+	if preferred != "" {
+		for _, translation := range template.Translations {
+			if translation.Lang == preferred {
+				return preferred
+			}
+		}
+	}
+	return template.DefaultLanguage
 }
 
 func prepareOutgoingEmail(
