@@ -1,8 +1,11 @@
 test.sh
 .DS_Store
 
-# Compiled binaries
-messaging-service
-email-client-service
-message-scheduler
+# Compiled binaries (anchored: a bare name would also ignore the cmd/<name>/ directories)
+/messaging-service
+/email-client-service
+/message-scheduler
+cmd/messaging-service/messaging-service
+cmd/email-client-service/email-client-service
+cmd/message-scheduler/message-scheduler
 __debug_bin*
