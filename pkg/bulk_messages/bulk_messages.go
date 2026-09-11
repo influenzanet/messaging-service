@@ -44,7 +44,9 @@ func buildLoginURL(webURL, token, studyKey string) string {
 }
 
 // saveOutgoingWhatsApp prepares and saves a WhatsApp message to the outgoing queue.
-// Returns the prepared message (nil if WhatsApp is not applicable for this user/template).
+// Returns the queued message, or nil when WhatsApp is not applicable for this user/template
+// or the queue write failed: the callers send the e-mail instead in both cases, so a
+// message that was never queued is not reported as delivered.
 func saveOutgoingWhatsApp(
 	messageDBService *messagedb.MessageDBService,
 	instanceID string,
@@ -55,7 +57,8 @@ func saveOutgoingWhatsApp(
 	waOutgoing := prepareOutgoingWhatsApp(user, template, contentInfos)
 	if waOutgoing != nil {
 		if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
-			logger.Error.Printf("error saving outgoing whatsapp: %v", err)
+			logger.Error.Printf("failed to queue outgoing whatsapp for user %s, falling back to e-mail: %v", user.Id, err)
+			return nil
 		}
 	}
 	return waOutgoing

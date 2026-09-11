@@ -1,10 +1,17 @@
 package bulk_messages
 
 import (
+	"context"
+	"os"
+	"strconv"
 	"testing"
+	"time"
 
+	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
 	"github.com/influenzanet/messaging-service/pkg/types"
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func TestBuildLoginURL(t *testing.T) {
@@ -214,4 +221,86 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 			t.Errorf("expected phone from ContactInfos, got %q", got.ToPhoneNumber)
 		}
 	})
+}
+
+// A message service whose client was never connected: every write fails at once, which is
+// the shape of any outage of the queue database.
+func disconnectedMessageDBService(t *testing.T) *messagedb.MessageDBService {
+	t.Helper()
+	client, err := mongo.NewClient(options.Client().ApplyURI("mongodb://localhost:1"))
+	if err != nil {
+		t.Fatalf("unexpected error creating the client: %v", err)
+	}
+	return &messagedb.MessageDBService{DBClient: client, DBNamePrefix: "TEST_"}
+}
+
+func TestSaveOutgoingWhatsAppWhenQueueingFails(t *testing.T) {
+	whatsAppEnabled = true
+	defer func() { whatsAppEnabled = false }()
+
+	user := &umAPI.User{
+		Id:      "user1",
+		Account: &umAPI.User_Account{PreferredLanguage: "it"},
+		ContactInfos: []*umAPI.ContactInfo{
+			{Type: "phone", Address: &umAPI.ContactInfo_Phone{Phone: "+391234567890"}, ConfirmedAt: 200},
+		},
+		ContactPreferences: &umAPI.ContactPreferences{PreferredChannels: []string{"whatsapp"}},
+	}
+	template := types.EmailTemplate{MessageType: "weekly", WhatsAppTemplateName: "influenzanet_weekly_v1"}
+
+	if prepared := prepareOutgoingWhatsApp(user, template, map[string]string{}); prepared == nil {
+		t.Fatal("precondition: the message must be preparable, so that only the queue write can fail")
+	}
+
+	// The generators fall back to e-mail exactly when this returns nil; a message that
+	// was never written to the queue must therefore not be reported as queued.
+	got := saveOutgoingWhatsApp(disconnectedMessageDBService(t), "italy", user, template, map[string]string{})
+	if got != nil {
+		t.Errorf("expected nil when the WhatsApp queue write fails, got a message to %q", got.ToPhoneNumber)
+	}
+}
+
+func TestSaveOutgoingWhatsAppQueuesTheMessage(t *testing.T) {
+	connStr := os.Getenv("MESSAGE_DB_CONNECTION_STR")
+	if connStr == "" {
+		t.Skip("MESSAGE_DB_CONNECTION_STR not set: this case needs a reachable MongoDB")
+	}
+	whatsAppEnabled = true
+	defer func() { whatsAppEnabled = false }()
+
+	dbService := messagedb.NewMessageDBService(types.DBConfig{
+		URI:             "mongodb://" + os.Getenv("MESSAGE_DB_USERNAME") + ":" + os.Getenv("MESSAGE_DB_PASSWORD") + "@" + connStr,
+		DBNamePrefix:    "TEST_BULK_",
+		Timeout:         5,
+		MaxPoolSize:     2,
+		IdleConnTimeout: 5,
+	})
+	instanceID := "bulk-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+	defer func() {
+		if err := dbService.DBClient.Database("TEST_BULK_" + instanceID + "_messageDB").Drop(context.Background()); err != nil {
+			t.Errorf("unexpected error during cleanup: %v", err)
+		}
+	}()
+
+	user := &umAPI.User{
+		Id:      "user1",
+		Account: &umAPI.User_Account{PreferredLanguage: "it"},
+		ContactInfos: []*umAPI.ContactInfo{
+			{Type: "phone", Address: &umAPI.ContactInfo_Phone{Phone: "+391234567890"}, ConfirmedAt: 200},
+		},
+		ContactPreferences: &umAPI.ContactPreferences{PreferredChannels: []string{"whatsapp"}},
+	}
+	template := types.EmailTemplate{MessageType: "weekly", WhatsAppTemplateName: "influenzanet_weekly_v1"}
+
+	got := saveOutgoingWhatsApp(dbService, instanceID, user, template, map[string]string{})
+	if got == nil {
+		t.Fatal("expected the queued message when the write succeeds")
+	}
+	queued, err := dbService.FetchOutgoingWhatsApp(instanceID, 10, 0)
+	if err != nil {
+		t.Fatalf("unexpected error reading the queue: %v", err)
+	}
+	if len(queued) != 1 || queued[0].ToPhoneNumber != "+391234567890" {
+		t.Errorf("expected exactly one queued message to +391234567890, got %v", queued)
+	}
 }
