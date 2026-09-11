@@ -574,10 +574,9 @@ func prepareOutgoingWhatsApp(
 		return nil
 	}
 
-	// Fallback for pre-existing users: if NotificationChannels is empty but the
-	// user has a verified phone, treat them as WhatsApp-enabled.
-	channels := user.GetContactPreferences().GetPreferredChannels()
-	if len(channels) > 0 && !userPrefersChannel(user, channelWhatsApp) {
+	// No preferred channel means no WhatsApp: the participant never opted in, or a
+	// preference was lost, and a paid message must not be sent on either account.
+	if !userPrefersChannel(user, channelWhatsApp) {
 		return nil
 	}
 

@@ -191,12 +191,24 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 		}
 	})
 
-	t.Run("fallback: empty channels + verified phone - generates message", func(t *testing.T) {
+	t.Run("user with no preferred channel - returns nil even with a verified phone", func(t *testing.T) {
+		// An empty list means the participant never opted in to WhatsApp, or a
+		// preference was lost: neither is a reason to send a paid message.
 		whatsAppEnabled = true
 		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser(nil), templateWithWA, map[string]string{})
+		for name, channels := range map[string][]string{"nil": nil, "empty": {}} {
+			if got := prepareOutgoingWhatsApp(verifiedPhoneUser(channels), templateWithWA, map[string]string{}); got != nil {
+				t.Errorf("%s channels: expected nil, got a message to %q", name, got.ToPhoneNumber)
+			}
+		}
+	})
+
+	t.Run("user with channels=whatsapp only - generates message", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), templateWithWA, map[string]string{})
 		if got == nil {
-			t.Fatal("expected non-nil for fallback (empty channels + verified phone)")
+			t.Fatal("expected a message when whatsapp is the only preferred channel")
 		}
 		if got.ToPhoneNumber != "+391234567890" {
 			t.Errorf("expected phone from ContactInfos, got %q", got.ToPhoneNumber)
