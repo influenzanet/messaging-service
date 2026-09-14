@@ -88,13 +88,16 @@ func (e *WhatsAppSendError) Class() WhatsAppErrorClass {
 		// Permissions, token, account restrictions, payment, unregistered, deleted or
 		// misregistered sender.
 		return WhatsAppErrorAuth
-	case 4, 17, 341, 613, 80007, 130429, 131048:
+	case 4, 17, 341, 613, 80007, 130429, 131048, 131064:
+		// 131064: messaging limit exceeded for template classification violations (account level).
 		return WhatsAppErrorThrottled
 	case 1, 2, 131000, 131016, 131057:
 		return WhatsAppErrorTransient
-	case 132015, 132016:
-		// Template paused for quality, or disabled. 132001 (unknown template) is left to the
-		// bounded retry: it is per language, and a mixed-language queue must keep moving.
+	case 132015, 132016, 131063:
+		// Template paused for quality, or disabled; 131063: the account has disabled marketing
+		// messages on Cloud API, so every marketing template is rejected until an operator acts.
+		// 132001 (unknown template) and 132018 (invalid parameters, v23+) are left to the bounded
+		// retry: they are per message or per language, and the queue must keep moving.
 		return WhatsAppErrorTemplate
 	}
 	if e.Code >= 200 && e.Code <= 299 {

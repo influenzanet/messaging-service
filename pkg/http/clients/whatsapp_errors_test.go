@@ -15,11 +15,11 @@ import (
 func TestWhatsAppSendErrorClass(t *testing.T) {
 	for class, codes := range map[WhatsAppErrorClass][]int{
 		WhatsAppErrorAuth:               {3, 10, 33, 190, 200, 250, 299, 368, 131005, 131031, 131042, 131045, 133010},
-		WhatsAppErrorThrottled:          {4, 17, 341, 613, 80007, 130429, 131048},
+		WhatsAppErrorThrottled:          {4, 17, 341, 613, 80007, 130429, 131048, 131064},
 		WhatsAppErrorTransient:          {1, 2, 131000, 131016, 131057},
 		WhatsAppErrorRecipientThrottled: {131056},
-		WhatsAppErrorTemplate:           {132015, 132016},
-		WhatsAppErrorUnknown:            {0, 199, 300, 999999, 100, 131009, 131026, 131030, 131049, 132000, 132001, 132012},
+		WhatsAppErrorTemplate:           {132015, 132016, 131063},
+		WhatsAppErrorUnknown:            {0, 199, 300, 999999, 100, 131009, 131026, 131030, 131049, 132000, 132001, 132012, 132018},
 	} {
 		for _, code := range codes {
 			t.Run(fmt.Sprint(code), func(t *testing.T) {

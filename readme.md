@@ -19,12 +19,15 @@ The two files follow the same structure and allow the same configuration options
 Failures that a single message cannot cause stop the current instance's tick at once,
 without consuming any message's five-attempt retry budget: HTTP 401/403, Meta
 authentication, account and sender-number codes (`33`, `131045`, and the Graph shape
-`100` with subcode `33`), HTTP 429 and Meta rate-limit codes other than `131056`, and a
-template Meta has paused or disabled (`132015`, `132016`). An HTTP 408 or 5xx status, or a
+`100` with subcode `33`), HTTP 429 and Meta rate-limit codes other than `131056`
+(including `131064`, the classification-violation limit), a template Meta has paused or
+disabled (`132015`, `132016`) and a marketing template rejected because the account has
+disabled marketing messages on Cloud API (`131063`). An HTTP 408 or 5xx status, or a
 transport error, is read as transient before any Meta code is considered. Every claimed
 message keeps its `lastSendAttempt` lock until its normal expiry. A paused or disabled
-template therefore also holds back the other campaigns of that instance until an operator
-acts on it: the stop is logged with the failure class and the message type.
+template, or an account setting that rejects every marketing template, therefore also
+holds back the other campaigns of that instance, utility campaigns included, until an
+operator acts on it: the stop is logged with the failure class and the message type.
 
 Transient failures (HTTP 408 and 5xx, Meta `is_transient` other than on `131056`, codes
 `1`, `2`, `131000`, `131016`, `131057`, transport errors) can belong to one message or to
@@ -44,10 +47,11 @@ is per tick/instance, not a persistent or cross-instance breaker. Meta pair-rate
 `131056` preserves the retry budget but only defers that recipient, and does not decide a
 held failure.
 
-Message-specific failures (invalid template parameters, unknown template `132001`,
-per-user marketing limit `131049`, and any code the classifier does not know, including
-`100` unless an HTTP status, the transient flag or subcode `33` classifies the response
-first) retain the existing five-attempt limit and archive behavior. The error classifier is in
+Message-specific failures (invalid template parameters, `132018` from Graph API v23.0 on,
+unknown template `132001`, per-user marketing limit `131049`, and any code the classifier
+does not know, including `100` unless an HTTP status, the transient flag or subcode `33`
+classifies the response first) retain the existing five-attempt limit and archive behavior.
+The error classifier is in
 `pkg/http/clients/whatsapp_errors.go`; logs expose numeric HTTP/Meta codes, Meta's
 `fbtrace_id` and the transport cause, never Meta's free-form response body. No schema,
 environment variables or queue expiry policy are added.
