@@ -88,7 +88,7 @@ func TestSendTemplateMessageErrorResponse(t *testing.T) {
 				fmt.Fprint(w, tt.body)
 			}))
 			defer server.Close()
-			client := NewWhatsAppClient("test-token", "test-phone-id")
+			client := NewWhatsAppClient("test-token", "test-phone-id", "")
 			client.apiBaseURL = server.URL
 			err := client.SendTemplateMessage(context.Background(), phone, "template", "it", nil)
 			var sendErr *WhatsAppSendError
@@ -116,7 +116,7 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 			fmt.Fprint(w, `{"error":`)
 		}))
 		defer server.Close()
-		client := NewWhatsAppClient("test-token", "test-phone-id")
+		client := NewWhatsAppClient("test-token", "test-phone-id", "")
 		client.apiBaseURL = server.URL
 		err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
 		var sendErr *WhatsAppSendError
@@ -133,7 +133,7 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 		}))
 		defer server.Close()
 		defer close(release)
-		client := NewWhatsAppClient("test-token", "test-phone-id")
+		client := NewWhatsAppClient("test-token", "test-phone-id", "")
 		client.apiBaseURL = server.URL
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
@@ -146,7 +146,7 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 	t.Run("connection refused", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 		server.Close()
-		client := NewWhatsAppClient("test-token", "test-phone-id")
+		client := NewWhatsAppClient("test-token", "test-phone-id", "")
 		client.apiBaseURL = server.URL
 		err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
 		var sendErr *WhatsAppSendError
@@ -161,7 +161,7 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 		}))
 		defer server.Close()
 		defer close(release)
-		client := NewWhatsAppClient("test-token", "test-phone-id")
+		client := NewWhatsAppClient("test-token", "test-phone-id", "")
 		client.apiBaseURL = server.URL
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
@@ -193,7 +193,7 @@ func TestSendTemplateMessageDecodesTheMetaTraceID(t *testing.T) {
 		fmt.Fprint(w, `{"error":{"code":132001,"message":"template not found","fbtrace_id":"A1b2C3d4"}}`)
 	}))
 	defer server.Close()
-	client := NewWhatsAppClient("test-token", "test-phone-id")
+	client := NewWhatsAppClient("test-token", "test-phone-id", "")
 	client.apiBaseURL = server.URL
 	err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
 	var sendErr *WhatsAppSendError

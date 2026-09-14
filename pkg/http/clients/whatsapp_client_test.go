@@ -32,21 +32,21 @@ func TestMaskPhone(t *testing.T) {
 
 func TestNewWhatsAppClient(t *testing.T) {
 	t.Run("returns nil when token empty", func(t *testing.T) {
-		c := NewWhatsAppClient("", "phone-id")
+		c := NewWhatsAppClient("", "phone-id", "")
 		if c != nil {
 			t.Error("expected nil client when token is empty")
 		}
 	})
 
 	t.Run("returns nil when phoneID empty", func(t *testing.T) {
-		c := NewWhatsAppClient("token", "")
+		c := NewWhatsAppClient("token", "", "")
 		if c != nil {
 			t.Error("expected nil client when phoneID is empty")
 		}
 	})
 
 	t.Run("returns client with timeout when configured", func(t *testing.T) {
-		c := NewWhatsAppClient("token", "phone-id")
+		c := NewWhatsAppClient("token", "phone-id", "")
 		if c == nil {
 			t.Fatal("expected non-nil client")
 		}
@@ -88,7 +88,7 @@ func newCaptureClient(t *testing.T) (*WhatsAppClient, *capturedPayload) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	t.Cleanup(server.Close)
-	c := NewWhatsAppClient("test-token", "test-phone-id")
+	c := NewWhatsAppClient("test-token", "test-phone-id", "")
 	c.apiBaseURL = server.URL
 	return c, captured
 }
@@ -266,7 +266,7 @@ func TestSendTemplateMessageTimeout(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // immediately cancelled
 
-	c := NewWhatsAppClient("fake-token", "fake-phone-id")
+	c := NewWhatsAppClient("fake-token", "fake-phone-id", "")
 	err := c.SendTemplateMessage(ctx, "+391234567890", "test_template", "it", nil)
 	if err == nil {
 		t.Error("expected error with cancelled context")

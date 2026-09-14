@@ -133,6 +133,7 @@ func main() {
 	whatsAppClient := waClient.NewWhatsAppClient(
 		os.Getenv("WHATSAPP_TOKEN"),
 		os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
+		os.Getenv("WHATSAPP_API_VERSION"),
 	)
 	if whatsAppClient != nil {
 		logger.Info.Println("WhatsApp direct delivery enabled for message-scheduler")

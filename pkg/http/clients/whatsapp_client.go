@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,8 +18,30 @@ import (
 
 const (
 	whatsAppHTTPTimeout = 30 * time.Second
-	whatsAppAPIBaseURL  = "https://graph.facebook.com/v19.0"
+	whatsAppGraphHost   = "https://graph.facebook.com"
+	// Graph API version used when WHATSAPP_API_VERSION is not set or not well formed.
+	// Meta retires each version about two years after release and silently serves a
+	// retired version with the oldest one still available, so keep this current:
+	// https://developers.facebook.com/docs/graph-api/changelog (v26.0: released 2026-07-29).
+	whatsAppDefaultAPIVersion = "v26.0"
 )
+
+var whatsAppAPIVersionPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+$`)
+
+// ResolveAPIVersion returns the Graph API version to call: the configured value when it looks
+// like "v26.0", otherwise the default. A malformed value is logged and ignored rather than
+// refused, so a typo in the environment cannot stop the service.
+func ResolveAPIVersion(configured string) string {
+	if configured == "" {
+		logger.Info.Printf("WHATSAPP_API_VERSION not set, using %s", whatsAppDefaultAPIVersion)
+		return whatsAppDefaultAPIVersion
+	}
+	if !whatsAppAPIVersionPattern.MatchString(configured) {
+		logger.Error.Printf("invalid WHATSAPP_API_VERSION %q, using %s", configured, whatsAppDefaultAPIVersion)
+		return whatsAppDefaultAPIVersion
+	}
+	return configured
+}
 
 // WhatsAppClient handles direct communication with the WhatsApp Business API
 // for bulk message delivery from the message-scheduler.
@@ -30,15 +53,18 @@ type WhatsAppClient struct {
 }
 
 // NewWhatsAppClient creates a new client instance. Returns nil if token or phoneID are empty.
-func NewWhatsAppClient(token, phoneID string) *WhatsAppClient {
+// apiVersion is the value of WHATSAPP_API_VERSION; see ResolveAPIVersion for how it is read.
+func NewWhatsAppClient(token, phoneID, apiVersion string) *WhatsAppClient {
 	if token == "" || phoneID == "" {
 		return nil
 	}
+	version := ResolveAPIVersion(apiVersion)
+	logger.Info.Printf("WhatsApp Graph API version: %s", version)
 	return &WhatsAppClient{
 		httpClient:    &http.Client{Timeout: whatsAppHTTPTimeout},
 		apiToken:      token,
 		phoneNumberID: phoneID,
-		apiBaseURL:    whatsAppAPIBaseURL,
+		apiBaseURL:    whatsAppGraphHost + "/" + version,
 	}
 }
 
