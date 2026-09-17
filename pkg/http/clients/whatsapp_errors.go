@@ -18,6 +18,10 @@ const (
 	WhatsAppErrorTemplate
 )
 
+// String names the class for a log line, and these exact names are also persisted by the
+// message-scheduler in the `errorClass` field of every failed row in sent-whatsapp. Renaming
+// one would split the archive into rows that no single query can select: add a class rather
+// than rename a name.
 func (c WhatsAppErrorClass) String() string {
 	switch c {
 	case WhatsAppErrorAuth:

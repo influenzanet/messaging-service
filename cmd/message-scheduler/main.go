@@ -461,18 +461,51 @@ type whatsAppSender interface {
 	SendTemplateMessage(context.Context, string, string, string, map[string]string) error
 }
 
-// recordFailedWhatsAppAttempt charges one failed attempt to the message: it is archived once
-// the attempts are exhausted, otherwise the counter moves and the lock provides the backoff.
-func recordFailedWhatsAppAttempt(mdb *messagedb.MessageDBService, instanceID string, msg types.OutgoingWhatsApp) {
+// deliveredWhatsApp is the outcome of a message Meta accepted.
+func deliveredWhatsApp() types.WhatsAppSendOutcome {
+	return types.WhatsAppSendOutcome{Status: types.WhatsAppStatusDelivered}
+}
+
+// failedWhatsApp is the outcome of a message the scheduler gives up on: Meta's numeric code and
+// the class the retry policy read from the last failure. A failure that never reached Meta, or
+// that the client could not attribute, keeps code 0 and the unknown class. Meta's free-form
+// message is never stored.
+func failedWhatsApp(err error) types.WhatsAppSendOutcome {
+	outcome := types.WhatsAppSendOutcome{
+		Status:     types.WhatsAppStatusFailed,
+		ErrorClass: waClient.WhatsAppErrorUnknown.String(),
+	}
+	var sendErr *waClient.WhatsAppSendError
+	if errors.As(err, &sendErr) {
+		outcome.ErrorCode = sendErr.Code
+		outcome.ErrorClass = sendErr.Class().String()
+	}
+	return outcome
+}
+
+// archiveWhatsApp records the outcome of a message in sent-whatsapp and removes it from the
+// queue. The archive row is written first and the queue row deleted only once it is stored: a
+// message still in the queue can be finished by a later tick, a lost archive row cannot be
+// recovered. It returns the error of the archive write, already logged.
+func archiveWhatsApp(mdb *messagedb.MessageDBService, instanceID string, msg types.OutgoingWhatsApp, outcome types.WhatsAppSendOutcome) error {
+	if _, err := mdb.AddToSentWhatsApp(instanceID, msg, outcome); err != nil {
+		logger.Error.Printf("Error archiving whatsapp ('%s') in instance %s as %s: %v", msg.MessageType, instanceID, outcome.Status, err)
+		return err
+	}
+	if err := mdb.DeleteOutgoingWhatsApp(instanceID, msg.ID.Hex()); err != nil {
+		logger.Error.Printf("Error deleting outgoing whatsapp ('%s') in instance %s: %v", msg.MessageType, instanceID, err)
+	}
+	return nil
+}
+
+// recordFailedWhatsAppAttempt charges one failed attempt to the message: it is archived with
+// the failure that exhausted it once the attempts are spent, otherwise the counter moves and
+// the lock provides the backoff.
+func recordFailedWhatsAppAttempt(mdb *messagedb.MessageDBService, instanceID string, msg types.OutgoingWhatsApp, cause error) {
 	if msg.SendAttempt+1 >= maxWhatsAppSendAttempts {
 		// Permanently failed — archive and remove from queue.
 		logger.Warning.Printf("WhatsApp message '%s' in instance %s exceeded max attempts (%d), archiving", msg.MessageType, instanceID, maxWhatsAppSendAttempts)
-		if _, archErr := mdb.AddToSentWhatsApp(instanceID, msg); archErr != nil {
-			logger.Error.Printf("Error archiving failed whatsapp: %v", archErr)
-		}
-		if delErr := mdb.DeleteOutgoingWhatsApp(instanceID, msg.ID.Hex()); delErr != nil {
-			logger.Error.Printf("Error deleting failed whatsapp: %v", delErr)
-		}
+		_ = archiveWhatsApp(mdb, instanceID, msg, failedWhatsApp(cause))
 		return
 	}
 	// Increment counter; lastSendAttempt stays at lock value, providing natural backoff.
@@ -492,6 +525,7 @@ func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instance
 	// at fault and it is charged like any other failure. A failure left undecided at the end
 	// of the tick, or whose claim has meanwhile expired, is not charged.
 	var undecided *types.OutgoingWhatsApp
+	var undecidedErr error
 	var undecidedClaimedAt int64
 	chargeUndecided := func() {
 		if undecided == nil {
@@ -502,9 +536,10 @@ func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instance
 			// charging this copy could archive it while the other is being sent.
 			logger.Warning.Printf("[%s] WhatsApp message '%s' held too long to be decided, leaving it uncharged", instanceID, undecided.MessageType)
 		} else {
-			recordFailedWhatsAppAttempt(mdb, instanceID, *undecided)
+			recordFailedWhatsAppAttempt(mdb, instanceID, *undecided, undecidedErr)
 		}
 		undecided = nil
+		undecidedErr = nil
 	}
 processQueue:
 	for {
@@ -557,6 +592,7 @@ processQueue:
 						}
 						held := msg
 						undecided = &held
+						undecidedErr = err
 						undecidedClaimedAt = claimStart
 						continue
 					case waClient.WhatsAppErrorRecipientThrottled:
@@ -566,19 +602,13 @@ processQueue:
 				}
 
 				chargeUndecided()
-				recordFailedWhatsAppAttempt(mdb, instanceID, msg)
+				recordFailedWhatsAppAttempt(mdb, instanceID, msg, err)
 				continue
 			}
 
 			chargeUndecided()
-			_, err = mdb.AddToSentWhatsApp(instanceID, msg)
-			if err != nil {
-				logger.Error.Printf("Error saving to sent whatsapp: %v", err)
+			if err := archiveWhatsApp(mdb, instanceID, msg, deliveredWhatsApp()); err != nil {
 				continue
-			}
-			err = mdb.DeleteOutgoingWhatsApp(instanceID, msg.ID.Hex())
-			if err != nil {
-				logger.Error.Printf("Error deleting outgoing whatsapp '%s': %v", msg.MessageType, err)
 			}
 			counters.IncreaseCounter(true)
 		}

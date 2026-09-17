@@ -26,19 +26,30 @@ func (dbService *MessageDBService) AddToOutgoingWhatsApp(instanceID string, msg 
 	return msg, nil
 }
 
-func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg types.OutgoingWhatsApp) (types.OutgoingWhatsApp, error) {
+// AddToSentWhatsApp archives a message that left the outgoing queue, together with the outcome
+// that took it out: a delivered message and one the scheduler gave up on are otherwise stored
+// identically. The content parameters are dropped, as they may carry personal data.
+func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg types.OutgoingWhatsApp, outcome types.WhatsAppSendOutcome) (types.SentWhatsApp, error) {
 	ctx, cancel := dbService.getContext()
 	defer cancel()
-	msg.AddedAt = time.Now().Unix()
+	archivedAt := time.Now().Unix()
+	msg.AddedAt = archivedAt
 	msg.ContentParams = nil
-
 	msg.ID = primitive.NilObjectID
-	res, err := dbService.collectionRefSentWhatsApp(instanceID).InsertOne(ctx, msg)
-	if err != nil {
-		return msg, err
+
+	sent := types.SentWhatsApp{
+		OutgoingWhatsApp: msg,
+		Status:           outcome.Status,
+		ErrorCode:        outcome.ErrorCode,
+		ErrorClass:       outcome.ErrorClass,
+		SentAt:           archivedAt,
 	}
-	msg.ID = res.InsertedID.(primitive.ObjectID)
-	return msg, nil
+	res, err := dbService.collectionRefSentWhatsApp(instanceID).InsertOne(ctx, sent)
+	if err != nil {
+		return sent, err
+	}
+	sent.ID = res.InsertedID.(primitive.ObjectID)
+	return sent, nil
 }
 
 func (dbService *MessageDBService) FetchOutgoingWhatsApp(instanceID string, amount int, olderThan int64) (messages []types.OutgoingWhatsApp, err error) {

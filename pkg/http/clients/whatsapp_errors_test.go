@@ -207,3 +207,27 @@ func TestSendTemplateMessageDecodesTheMetaTraceID(t *testing.T) {
 		t.Fatalf("Meta's free-form message must not be reported, got %q", err.Error())
 	}
 }
+
+// The name of every class is persisted by the message-scheduler in the errorClass field of
+// each failed row in sent-whatsapp, so these strings are stored data and not just log text.
+// Renaming one would split the archive into rows that no single query can select: this test
+// holds all six against their literals, so a rename fails here instead of in the archive.
+func TestWhatsAppErrorClassNamesArePersistedAndFixed(t *testing.T) {
+	for _, tt := range []struct {
+		class WhatsAppErrorClass
+		want  string
+	}{
+		{class: WhatsAppErrorAuth, want: "authentication"},
+		{class: WhatsAppErrorThrottled, want: "rate limit"},
+		{class: WhatsAppErrorTransient, want: "transient"},
+		{class: WhatsAppErrorRecipientThrottled, want: "recipient limit"},
+		{class: WhatsAppErrorTemplate, want: "template unusable"},
+		{class: WhatsAppErrorUnknown, want: "unknown"},
+	} {
+		t.Run(tt.want, func(t *testing.T) {
+			if got := tt.class.String(); got != tt.want {
+				t.Fatalf("class name = %q, want %q: it is stored in sent-whatsapp.errorClass", got, tt.want)
+			}
+		})
+	}
+}

@@ -114,8 +114,12 @@ func newSchedulerTestDB(t *testing.T) *schedulerTestDB {
 
 	prefix := "f04_scheduler_" + uuid.NewString() + "_"
 	service := messagedb.NewMessageDBService(types.DBConfig{
-		URI:             uri,
-		Timeout:         5,
+		URI: uri,
+		// The same value CI passes as DB_TIMEOUT. NewMessageDBService calls logger.Error.Fatal
+		// when its ping does not answer inside this deadline, which kills the test binary
+		// without naming a test, so a busy MongoDB must not be able to trip it. No test here
+		// depends on the deadline: the database errors are injected as undecodable documents.
+		Timeout:         30,
 		IdleConnTimeout: 30,
 		MaxPoolSize:     10,
 		DBNamePrefix:    prefix,

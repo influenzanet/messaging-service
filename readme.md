@@ -53,8 +53,17 @@ does not know, including `100` unless an HTTP status, the transient flag or subc
 classifies the response first) retain the existing five-attempt limit and archive behavior.
 The error classifier is in
 `pkg/http/clients/whatsapp_errors.go`; logs expose numeric HTTP/Meta codes, Meta's
-`fbtrace_id` and the transport cause, never Meta's free-form response body. No schema,
-environment variables or queue expiry policy are added.
+`fbtrace_id` and the transport cause, never Meta's free-form response body. No environment
+variables or queue expiry policy are added.
+
+Every message archived in `sent-whatsapp` records how it left the queue: `status` is
+`delivered` when Meta accepted it and `failed` when the scheduler gave up on it at the
+five-attempt cap, `sentAt` is the moment it was archived, and a failed row keeps `errorCode`
+(Meta's numeric code, `0` when the failure never reached Meta) and `errorClass` (the class the
+retry policy read from that failure). Meta's free-form message is not stored, and the content
+parameters keep being dropped on archiving. Rows written before this change carry none of
+these fields and read as an unknown outcome. Meta's message id is not stored: the client does
+not return it today.
 
 The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `true`, when
 `MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
