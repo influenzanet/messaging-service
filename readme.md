@@ -56,6 +56,12 @@ The error classifier is in
 `fbtrace_id` and the transport cause, never Meta's free-form response body. No schema,
 environment variables or queue expiry policy are added.
 
+The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `true`, when
+`MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
+client could be built; the reason it did not start is logged once as a warning at startup.
+Messages already in `outgoing-whatsapp` stay queued and are not delivered until the runner
+is enabled again.
+
 Scheduler regression tests use an isolated MongoDB database for each test. Set
 `F04_TEST_MONGODB_URI` to a **test-only** MongoDB URI to run them (otherwise they skip).
 For example, run `go test -race ./cmd/message-scheduler ./pkg/http/clients` with that

@@ -141,11 +141,15 @@ func main() {
 		logger.Warning.Println("WhatsApp direct delivery disabled: missing WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID")
 	}
 
+	// WHATSAPP_ENABLED is read once by pkg/bulk_messages: take the value the generators use,
+	// so that delivery cannot keep running on a channel that no longer generates messages.
+	whatsAppEnabled := bulk_messages.WhatsAppGenerationEnabled()
+
 	go runnerForLowPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.LowPrio)
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)
 	go runnerForParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ParticipantMessages)
 	go runnerForResearcherNotifications(messageDBService, globalDBService, clients, conf.Frequencies.ResearcherNotifications)
-	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, whatsAppClient, conf.Frequencies.WhatsApp)
+	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, whatsAppClient, conf.Frequencies.WhatsApp, whatsAppEnabled)
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
@@ -410,13 +414,9 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending researcher notifications", threadID)
 }
 
-func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, freq int) {
-	if freq <= 0 {
-		logger.Debug.Println("no period defined for outgoing whatsapp, loop is skipped.")
-		return
-	}
-	if wac == nil {
-		logger.Warning.Println("outgoing whatsapp runner disabled: no WhatsApp client configured")
+func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, freq int, enabled bool) {
+	if run, reason := shouldRunOutgoingWhatsApp(enabled, freq, wac != nil); !run {
+		logger.Warning.Printf("outgoing whatsapp runner not started: %s. Messages already in outgoing-whatsapp stay queued and are not delivered.", reason)
 		return
 	}
 	period := time.Duration(freq) * time.Second
