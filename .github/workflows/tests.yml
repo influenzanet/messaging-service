@@ -1,0 +1,61 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - dev-orbyta
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: root
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      # Reported for information only: a few inherited files are not
+      # gofmt-clean, so formatting is not enforced yet and nothing is
+      # reformatted here.
+      - name: Gofmt (report only)
+        continue-on-error: true
+        run: gofmt -l .
+
+      - name: Test
+        env:
+          GLOBAL_DB_CONNECTION_STR: localhost:27017
+          GLOBAL_DB_USERNAME: admin
+          GLOBAL_DB_PASSWORD: root
+          GLOBAL_DB_CONNECTION_PREFIX: ""
+          MESSAGE_DB_CONNECTION_STR: localhost:27017
+          MESSAGE_DB_USERNAME: admin
+          MESSAGE_DB_PASSWORD: root
+          MESSAGE_DB_CONNECTION_PREFIX: ""
+          DB_TIMEOUT: 30
+          DB_IDLE_CONN_TIMEOUT: 45
+          DB_MAX_POOL_SIZE: 8
+          DB_DB_NAME_PREFIX: CI_
+          MESSAGING_CONFIG_FOLDER: ${{ github.workspace }}/test/configs
+          # Used by the message-scheduler tests that need a real database;
+          # without it they skip themselves.
+          F04_TEST_MONGODB_URI: mongodb://admin:root@localhost:27017/?authSource=admin
+          WHATSAPP_ENABLED: "true"
+        run: go test -race ./...
