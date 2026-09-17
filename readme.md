@@ -121,6 +121,22 @@ Scheduler regression tests use an isolated MongoDB database for each test. Set
 For example, run `go test -race ./cmd/message-scheduler ./pkg/http/clients` with that
 variable set. No real Meta messages are sent by these tests.
 
+## Generated API
+The Go code under `pkg/api` is generated from the proto contracts of the `api` repository. Each
+contract has its own target, while `make api` still regenerates both at once:
+```
+make api-messaging
+make api-email
+```
+The targets expect that repository at `../api`; pass `API_PATH` to point them elsewhere.
+
+Regenerate only the contract you changed. The files under `pkg/api/messaging_service` carry
+protoc v4.25.3, protoc-gen-go v1.34.1 and protoc-gen-go-grpc v1.3.0 in their headers, and
+`make api-messaging` with those versions reproduces them byte for byte. The files under
+`pkg/api/email_client_service` still come from an older toolchain (protoc v3.21.7, protoc-gen-go
+v1.28.1, protoc-gen-go-grpc v1.2.0), so `make api-email` rewrites their headers and their
+generated method-name constants even when the contract itself has not changed.
+
 ## Test
 Before running the test first you have to generate the client mock services:
 ```
