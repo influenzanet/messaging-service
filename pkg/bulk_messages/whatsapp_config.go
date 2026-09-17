@@ -6,3 +6,10 @@ package bulk_messages
 func WhatsAppGenerationEnabled() bool {
 	return whatsAppEnabled
 }
+
+// SetWhatsAppGenerationEnabled overrides that decision for the running process. It exists for
+// the message-scheduler, which stops generating WhatsApp messages it would not be able to
+// deliver. Call it at start-up, before any generator runs: the flag is not synchronised.
+func SetWhatsAppGenerationEnabled(enabled bool) {
+	whatsAppEnabled = enabled
+}

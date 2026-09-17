@@ -139,3 +139,89 @@ func TestOutgoingWhatsAppRunnerIsNotStartedWhenWhatsAppIsDisabled(t *testing.T) 
 		t.Fatal("outgoing WhatsApp runner started although WhatsApp is disabled")
 	}
 }
+
+func TestCheckWhatsAppConfig(t *testing.T) {
+	tests := []struct {
+		name              string
+		generationEnabled bool
+		clientConfigured  bool
+		interval          int
+		wantGenerate      bool
+		wantProblems      []string
+	}{
+		{
+			name:              "generation off, nothing configured",
+			generationEnabled: false,
+			clientConfigured:  false,
+			interval:          0,
+			wantGenerate:      false,
+		},
+		{
+			name:              "generation off, delivery configured",
+			generationEnabled: false,
+			clientConfigured:  true,
+			interval:          60,
+			wantGenerate:      false,
+		},
+		{
+			name:              "generation on, delivery configured",
+			generationEnabled: true,
+			clientConfigured:  true,
+			interval:          60,
+			wantGenerate:      true,
+		},
+		{
+			name:              "generation on, no credentials",
+			generationEnabled: true,
+			clientConfigured:  false,
+			interval:          60,
+			wantGenerate:      false,
+			wantProblems:      []string{"WHATSAPP_TOKEN"},
+		},
+		{
+			name:              "generation on, no send interval",
+			generationEnabled: true,
+			clientConfigured:  true,
+			interval:          0,
+			wantGenerate:      false,
+			wantProblems:      []string{"MESSAGE_SCHEDULER_INTERVAL_WHATSAPP"},
+		},
+		{
+			name:              "generation on, nothing configured for delivery",
+			generationEnabled: true,
+			clientConfigured:  false,
+			interval:          -1,
+			wantGenerate:      false,
+			wantProblems:      []string{"WHATSAPP_TOKEN", "MESSAGE_SCHEDULER_INTERVAL_WHATSAPP"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			generate, problems := checkWhatsAppConfig(tt.generationEnabled, tt.clientConfigured, tt.interval)
+			if generate != tt.wantGenerate {
+				t.Fatalf("checkWhatsAppConfig(%v, %v, %d) generate = %v, want %v", tt.generationEnabled, tt.clientConfigured, tt.interval, generate, tt.wantGenerate)
+			}
+			if len(problems) != len(tt.wantProblems) {
+				t.Fatalf("got %d problems %q, want %d", len(problems), problems, len(tt.wantProblems))
+			}
+			for i, want := range tt.wantProblems {
+				if !strings.Contains(problems[i], want) {
+					t.Fatalf("problem %d %q does not name %q", i, problems[i], want)
+				}
+			}
+		})
+	}
+}
+
+func TestCheckWhatsAppConfigNamesBothCredentialVariables(t *testing.T) {
+	_, problems := checkWhatsAppConfig(true, false, 60)
+	if len(problems) != 1 {
+		t.Fatalf("expected one problem, got %q", problems)
+	}
+	for _, name := range []string{"WHATSAPP_TOKEN", "WHATSAPP_PHONE_NUMBER_ID"} {
+		if !strings.Contains(problems[0], name) {
+			t.Fatalf("problem %q does not name %q", problems[0], name)
+		}
+	}
+}

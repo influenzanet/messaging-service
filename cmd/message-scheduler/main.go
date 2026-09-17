@@ -138,12 +138,23 @@ func main() {
 	if whatsAppClient != nil {
 		logger.Info.Println("WhatsApp direct delivery enabled for message-scheduler")
 	} else {
-		logger.Warning.Println("WhatsApp direct delivery disabled: missing WHATSAPP_API_TOKEN or WHATSAPP_PHONE_NUMBER_ID")
+		logger.Warning.Println("WhatsApp direct delivery disabled: missing WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID")
 	}
 
 	// WHATSAPP_ENABLED is read once by pkg/bulk_messages: take the value the generators use,
 	// so that delivery cannot keep running on a channel that no longer generates messages.
 	whatsAppEnabled := bulk_messages.WhatsAppGenerationEnabled()
+
+	// Generating WhatsApp messages this process cannot deliver only fills the queue: refuse
+	// generation instead, and name what is missing. Never fatal, the e-mail channel goes on.
+	generateWhatsApp, whatsAppProblems := checkWhatsAppConfig(whatsAppEnabled, whatsAppClient != nil, conf.Frequencies.WhatsApp)
+	for _, problem := range whatsAppProblems {
+		logger.Error.Println(problem)
+	}
+	if !generateWhatsApp && whatsAppEnabled {
+		logger.Error.Println("WhatsApp message generation is disabled in the message-scheduler until the WhatsApp delivery configuration is complete")
+		bulk_messages.SetWhatsAppGenerationEnabled(false)
+	}
 
 	go runnerForLowPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.LowPrio)
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)

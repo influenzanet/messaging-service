@@ -60,7 +60,11 @@ The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `
 `MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
 client could be built; the reason it did not start is logged once as a warning at startup.
 Messages already in `outgoing-whatsapp` stay queued and are not delivered until the runner
-is enabled again.
+is enabled again. When `WHATSAPP_ENABLED` is `true` but this delivery configuration is
+incomplete, the message-scheduler logs an error naming each missing variable and stops
+generating WhatsApp messages for that process, instead of queueing messages nobody will
+send; participants who prefer WhatsApp receive the e-mail instead, and the e-mail channel is
+never affected.
 
 Scheduler regression tests use an isolated MongoDB database for each test. Set
 `F04_TEST_MONGODB_URI` to a **test-only** MongoDB URI to run them (otherwise they skip).
