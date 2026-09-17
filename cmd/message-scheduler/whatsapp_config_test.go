@@ -138,6 +138,19 @@ func TestOutgoingWhatsAppRunnerIsNotStartedWhenWhatsAppIsDisabled(t *testing.T) 
 	case <-time.After(2 * time.Second):
 		t.Fatal("outgoing WhatsApp runner started although WhatsApp is disabled")
 	}
+
+	// Positive control: with everything configured the runner enters its loop and stays there,
+	// so a runner that returned early for every input could not pass this test.
+	started := make(chan struct{})
+	go func() {
+		defer close(started)
+		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, true)
+	}()
+	select {
+	case <-started:
+		t.Fatal("outgoing WhatsApp runner returned although WhatsApp delivery is fully configured")
+	case <-time.After(2 * time.Second):
+	}
 }
 
 func TestCheckWhatsAppConfig(t *testing.T) {
@@ -223,5 +236,36 @@ func TestCheckWhatsAppConfigNamesBothCredentialVariables(t *testing.T) {
 		if !strings.Contains(problems[0], name) {
 			t.Fatalf("problem %q does not name %q", problems[0], name)
 		}
+	}
+}
+
+// The runner returns before touching the databases whenever it must not start, so this guard
+// runs without MongoDB too (the positive control lives in the test above, which has one).
+func TestOutgoingWhatsAppRunnerReturnsWheneverItMustNotStart(t *testing.T) {
+	client := waClient.NewWhatsAppClient("token", "phone-id", "")
+	for _, tc := range []struct {
+		name    string
+		enabled bool
+		freq    int
+		client  *waClient.WhatsAppClient
+	}{
+		{"disabled with period and client", false, 3600, client},
+		{"disabled without period", false, 0, client},
+		{"disabled without client", false, 3600, nil},
+		{"enabled without period", true, 0, client},
+		{"enabled without client", true, 3600, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				runnerForOutgoingWhatsApp(nil, nil, tc.client, tc.freq, tc.enabled)
+			}()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("runner did not return although it must not start")
+			}
+		})
 	}
 }
