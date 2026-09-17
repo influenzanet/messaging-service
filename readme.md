@@ -76,6 +76,36 @@ never delivered carries no such field at all: query `{delivered: true}`, never
 between Meta's answer and the mark sends that message once more when the claim expires, and a
 database that refuses both the mark and the archive write leaves the old behaviour in place.
 
+A batch is claimed at one instant: every message of a fetch receives the same
+`lastSendAttempt`, so a claim loop that lasts longer than the lock can no longer hand out a
+message it has already claimed in that same call. A send starts only while the claim is younger
+than the send window, which is the stricter of nine tenths of the lock and the lock minus the
+send timeout, both measured from before the claim loop. The send timeout is the WhatsApp
+client's own HTTP timeout, 30 s, read from it rather than repeated, so the lock has to exceed
+that timeout by as much of a batch as the tick is meant to send. At the staging interval of 30
+s the lock lasts 75 s and the window is 45 s, so a send cannot outlive the claim it works
+under; the messages skipped this way are charged nothing and keep their claim until it expires.
+When claiming the batch alone takes longer than the window, the tick stops there and says so at
+ERROR: every message of that batch would be skipped, nothing would change, and the next fetch
+would claim the same rows again. A tick stops for the same reason, and says so at ERROR, when a
+fetch hands back a message this tick has already acted on: a pass over the queue that outlives
+the claims it wrote reads the same rows again, and a message that kept its claim and its
+attempt count would be sent once per pass. Meta's per-recipient limit is the common case, since
+it charges nothing and leaves the row queued; an archive write that keeps failing and a held
+transient failure have the same shape. Such a row is retried on the next tick, and on every
+tick after that, until it is accepted. A row the send window made the tick skip is not one of
+these: nothing was done to it, so it comes back without stopping anything, and a fast fetch
+with slow sends keeps draining batch after batch. The window requires
+`MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` to be at least 13 s, since the lock is 2.5 times the
+interval: below that no window exists, the batch limit alone applies, and the runner says so
+once at startup. The window grows with the interval and is what a tick has to work in, so 13 s
+is the point where it starts to exist, not a value to configure: an interval of 13 s leaves a
+window of about 2 s and a tick then sends roughly one message per fetch, where the staging
+interval of 30 s leaves 45 s. At a high send latency a tick therefore delivers fewer messages
+than it did before the window existed: the window is measured from before the claim, so the
+tail of a batch is left to the next tick. That is the cost of never sending on a claim that may
+already have expired, not a delivery fault.
+
 The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `true`, when
 `MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
 client could be built; the reason it did not start is logged once as a warning at startup.

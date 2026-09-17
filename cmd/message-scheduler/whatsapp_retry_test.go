@@ -103,6 +103,9 @@ type schedulerTestDB struct {
 	database *mongo.Database
 	outgoing *mongo.Collection
 	sent     *mongo.Collection
+	// prefix names the isolated databases of this test, so that a second service can be
+	// opened on the same data.
+	prefix string
 }
 
 func newSchedulerTestDB(t *testing.T) *schedulerTestDB {
@@ -142,6 +145,7 @@ func newSchedulerTestDB(t *testing.T) *schedulerTestDB {
 		database: database,
 		outgoing: database.Collection("outgoing-whatsapp"),
 		sent:     database.Collection("sent-whatsapp"),
+		prefix:   prefix,
 	}
 }
 
@@ -725,9 +729,10 @@ func (s *perPhoneWhatsAppSender) SendTemplateMessage(_ context.Context, to strin
 	return nil
 }
 
-// A held failure whose claim has expired is not charged. The message may already have been
-// claimed again and sent by the same tick; charging the stale copy would archive it as failed
-// while the live copy is archived as delivered.
+// A held failure whose claim has expired is not charged, and the message it belongs to is not
+// archived as failed: charging the stale copy would bury a message that is still deliverable.
+// The tick that lost the claim stops as soon as the fetch hands that message back, so the
+// delivery happens on the tick after it, which is where the archive row comes from.
 func TestWhatsAppHeldFailureIsNotChargedAfterItsClaimExpired(t *testing.T) {
 	const other = "+391111111101"
 	db := newSchedulerTestDB(t)
@@ -737,18 +742,33 @@ func TestWhatsAppHeldFailureIsNotChargedAfterItsClaimExpired(t *testing.T) {
 		script: map[string][]error{
 			// first call fails transiently, the re-claimed second call succeeds
 			poisonPhone: {&waClient.WhatsAppSendError{StatusCode: http.StatusServiceUnavailable}, nil},
-			// slow enough to outlive the 2 s lock; a recipient limit decides nothing, and the
-			// third claim succeeds so that the tick ends
-			other: {&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056}, &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056}, nil},
+			// slow enough to outlive the 2 s lock; a recipient limit decides nothing and
+			// charges nothing, so each tick ends on the fetch that hands these rows back
+			other: {&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056}, &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056}},
 		},
 		slowPhone: other,
 		delay:     3200 * time.Millisecond, // locks are compared in whole seconds
 	}
 
+	// The first tick loses the claims while the slow message is in flight and stops when the
+	// fetch hands the same messages back: nothing of the held failure may be charged.
 	runWhatsAppHandler(db.service, sender, 2)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if stale, err := db.sent.CountDocuments(ctx, bson.M{"toPhoneNumber": poisonPhone}); err != nil {
+		t.Fatalf("inspect the archive: %v", err)
+	} else if stale != 0 {
+		t.Fatalf("the held failure was charged and archived by the tick that lost its claim")
+	}
+	if attempts := db.attemptsOf(t, poisonPhone); attempts != maxWhatsAppSendAttempts-1 {
+		t.Fatalf("the held failure was charged an attempt: %d, want %d", attempts, maxWhatsAppSendAttempts-1)
+	}
+
+	// The tick after it delivers the message the first one held.
+	db.expireLocks(t)
+	runWhatsAppHandler(db.service, sender, 2)
+
 	archived, err := db.sent.CountDocuments(ctx, bson.M{"toPhoneNumber": poisonPhone})
 	if err != nil {
 		t.Fatalf("inspect the archive: %v", err)

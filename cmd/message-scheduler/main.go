@@ -24,6 +24,10 @@ import (
 const (
 	outgoingBatchSize       = 20
 	maxWhatsAppSendAttempts = 5
+	// whatsAppSendTimeout is how long a send can keep running past the moment its claim was
+	// checked. It is the client's own HTTP timeout, so the claim window cannot be computed
+	// from a figure the client no longer uses.
+	whatsAppSendTimeout = waClient.WhatsAppHTTPTimeout
 )
 
 // Config is the structure that holds all global configuration data
@@ -433,6 +437,10 @@ func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 	period := time.Duration(freq) * time.Second
 	logInitialLoopStartedMsg("outgoing whatsapp", period)
 
+	if problem := whatsAppLockProblem(freq, whatsAppSendTimeout); problem != "" {
+		logger.Warning.Printf("outgoing whatsapp: %s", problem)
+	}
+
 	olderThan := getThreadLockInterval(freq)
 	for {
 		go handleOutgoingWhatsApp(mdb, gdb, wac, olderThan)
@@ -514,9 +522,41 @@ func recordFailedWhatsAppAttempt(mdb *messagedb.MessageDBService, instanceID str
 	}
 }
 
+// markHandledWhatsApp records the messages of a fetch and reports the first one this tick has
+// already taken out of an earlier fetch. A message handed out twice means the pass over the
+// queue outlived the claims written at its start: the rows come back unchanged, so nothing the
+// tick can do this time round will move them, whatever kept them in the queue. It holds one
+// entry per message the tick has processed, and lives no longer than the tick.
+func markHandledWhatsApp(messages []types.OutgoingWhatsApp, handled map[string]bool) (types.OutgoingWhatsApp, bool) {
+	for _, msg := range messages {
+		id := msg.ID.Hex()
+		if handled[id] {
+			return msg, true
+		}
+		handled[id] = true
+	}
+	return types.OutgoingWhatsApp{}, false
+}
+
+// warnAboutHeldWhatsApp reports that a stop leaves a held transient failure undecided. Such a
+// message is not charged, which is the intent, but it has to be visible: it was sent to Meta
+// and failed, and nothing else in the log says what became of it.
+func warnAboutHeldWhatsApp(instanceID string, undecided *types.OutgoingWhatsApp) {
+	if undecided == nil {
+		return
+	}
+	logger.Warning.Printf("[%s] WhatsApp message '%s' was held as a transient failure and is left undecided by the stop", instanceID, undecided.MessageType)
+}
+
 func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, lastAttemptOlderThan int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	counters := types.InitMessageCounter()
+
+	// How long after this batch was claimed a send may still start.
+	sendWindow := whatsAppSendWindow(lastAttemptOlderThan, whatsAppSendTimeout)
+
+	// Every message this tick has already had out of a fetch.
+	handled := map[string]bool{}
 
 	// A transient failure on one message is not proof of an outage: a timeout or a "retry
 	// later" from Meta can belong to that message alone. Such a failure is held until the next
@@ -554,14 +594,37 @@ processQueue:
 		if len(messages) < 1 {
 			break
 		}
-		lastFetch := time.Now().Unix()
-
-		for _, msg := range messages {
-			batchDuration := time.Now().Unix() - lastFetch
-			if batchDuration > int64(float64(lastAttemptOlderThan)*0.9) {
+		if repeated, again := markHandledWhatsApp(messages, handled); again {
+			// The queue is handing back what this tick has already worked on: messages that
+			// keep their claim and their attempt count, such as a recipient Meta is limiting,
+			// an archive write that keeps failing or a held transient failure, would be sent
+			// again and again inside this one tick. They are left for the next one.
+			logger.Error.Printf("[%s] stopping the WhatsApp tick: WhatsApp message '%s' was fetched again after this tick had already processed it, so the pass over the queue outlived its claims and nothing is moving", instanceID, repeated.MessageType)
+			warnAboutHeldWhatsApp(instanceID, undecided)
+			break processQueue
+		}
+		for position, msg := range messages {
+			// Measured from before the claim loop: that is the earliest moment a claim of
+			// this batch can have been written, so no message is sent on a claim that is
+			// older than the guard believes.
+			claimAge := time.Now().Unix() - claimStart
+			if claimAge > sendWindow {
 				// Lock expires naturally after olderThan — no reset needed.
-				logger.Warning.Printf("Skip sending whatsapp ('%s') in instance %s because batch duration was too long", msg.MessageType, instanceID)
 				counters.IncreaseCounter(false)
+				if position == 0 {
+					// Claiming the batch alone spent the window: every message of this batch
+					// would be skipped, nothing would change, and the next fetch would claim
+					// the same rows again, so the tick would never end. Stop and leave the
+					// queue to the next tick, which starts from a fresh claim.
+					logger.Error.Printf("[%s] stopping the WhatsApp tick: claiming the batch took %d s, longer than the %d s send window left by a lock of %d s and a send timeout of %s", instanceID, claimAge, sendWindow, lastAttemptOlderThan, whatsAppSendTimeout)
+					warnAboutHeldWhatsApp(instanceID, undecided)
+					break processQueue
+				}
+				logger.Warning.Printf("Skip sending whatsapp ('%s') in instance %s: its claim is %d s old and the send window is %d s", msg.MessageType, instanceID, claimAge, sendWindow)
+				// Nothing was done to this message, so the fetch that hands it back once its
+				// claim expires is a legitimate one and must not stop the tick: only messages
+				// this tick acted on count as handled.
+				delete(handled, msg.ID.Hex())
 				continue
 			}
 
@@ -576,7 +639,7 @@ processQueue:
 			}
 
 			// Direct HTTP call to Meta API (C-5 fix: eliminates gRPC hop, adds timeout via context)
-			sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			sendCtx, cancel := context.WithTimeout(context.Background(), whatsAppSendTimeout)
 			err := wac.SendTemplateMessage(sendCtx, msg.ToPhoneNumber, msg.TemplateName, msg.Lang, msg.ContentParams)
 			cancel()
 			if err != nil {
@@ -591,9 +654,7 @@ processQueue:
 						// template must not exhaust the whole queue's retries. Keep all claimed
 						// locks until expiry; stop this instance's tick.
 						logger.Error.Printf("[%s] stopping the WhatsApp tick on a sender-side failure (%s) at '%s'; nothing charged, locks left to expire", instanceID, class, msg.MessageType)
-						if undecided != nil {
-							logger.Warning.Printf("[%s] WhatsApp message '%s' was held as a transient failure and is left undecided by the stop", instanceID, undecided.MessageType)
-						}
+						warnAboutHeldWhatsApp(instanceID, undecided)
 						break processQueue
 					case waClient.WhatsAppErrorTransient:
 						if undecided != nil {

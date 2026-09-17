@@ -17,7 +17,9 @@ import (
 )
 
 const (
-	whatsAppHTTPTimeout = 30 * time.Second
+	// WhatsAppHTTPTimeout bounds one call to Meta. The message-scheduler reads it to know how
+	// long a send can run, so that its claim window and this timeout cannot drift apart.
+	WhatsAppHTTPTimeout = 30 * time.Second
 	whatsAppGraphHost   = "https://graph.facebook.com"
 	// Graph API version used when WHATSAPP_API_VERSION is not set or not well formed.
 	// Meta retires each version about two years after release and silently serves a
@@ -61,7 +63,7 @@ func NewWhatsAppClient(token, phoneID, apiVersion string) *WhatsAppClient {
 	version := ResolveAPIVersion(apiVersion)
 	logger.Info.Printf("WhatsApp Graph API version: %s", version)
 	return &WhatsAppClient{
-		httpClient:    &http.Client{Timeout: whatsAppHTTPTimeout},
+		httpClient:    &http.Client{Timeout: WhatsAppHTTPTimeout},
 		apiToken:      token,
 		phoneNumberID: phoneID,
 		apiBaseURL:    whatsAppGraphHost + "/" + version,

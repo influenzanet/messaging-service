@@ -1,5 +1,10 @@
 package main
 
+import (
+	"fmt"
+	"time"
+)
+
 // shouldRunOutgoingWhatsApp decides whether the outgoing WhatsApp runner is started, and
 // returns the reason when it is not, so that the caller can log a single explicit line.
 // The disabled flag wins: WHATSAPP_ENABLED is the switch operators expect to stop WhatsApp
@@ -38,4 +43,42 @@ func checkWhatsAppConfig(generationEnabled bool, clientConfigured bool, interval
 		return false, problems
 	}
 	return true, nil
+}
+
+// whatsAppSendWindow is how long after a batch was claimed a send may still start. A send
+// waits up to sendTimeout, so a send started later than lockSeconds-sendTimeout can outlive
+// the claim it works under and let another tick hand the same message to Meta. The batch
+// limit of nine tenths of the lock still applies, and is the only limit left when the lock is
+// no longer than the send timeout: no window exists there, and refusing every send would stop
+// delivery altogether rather than make it safe.
+func whatsAppSendWindow(lockSeconds int64, sendTimeout time.Duration) int64 {
+	batchLimit := int64(float64(lockSeconds) * 0.9)
+	timeoutSeconds := int64(sendTimeout / time.Second)
+	if lockSeconds <= timeoutSeconds {
+		return batchLimit
+	}
+	if window := lockSeconds - timeoutSeconds; window < batchLimit {
+		return window
+	}
+	return batchLimit
+}
+
+// whatsAppLockProblem names the configuration in which the claim lock a send interval gives is
+// not longer than the send timeout: every send can then outlive its claim, so a message can
+// reach Meta twice and the send window is left to the batch limit alone. It returns an empty
+// string when the lock is long enough, and otherwise the shortest interval that would do.
+func whatsAppLockProblem(freq int, sendTimeout time.Duration) string {
+	timeoutSeconds := int64(sendTimeout / time.Second)
+	lockSeconds := getThreadLockInterval(freq)
+	if lockSeconds > timeoutSeconds {
+		return ""
+	}
+	minimumFreq := freq
+	for getThreadLockInterval(minimumFreq) <= timeoutSeconds {
+		minimumFreq++
+	}
+	return fmt.Sprintf(
+		"the claim lock lasts %d s, no longer than the %d s send timeout: a send can outlive its claim and the same message can reach Meta twice. Raise MESSAGE_SCHEDULER_INTERVAL_WHATSAPP to at least %d s",
+		lockSeconds, timeoutSeconds, minimumFreq,
+	)
 }

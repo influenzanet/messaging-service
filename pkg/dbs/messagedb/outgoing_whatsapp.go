@@ -58,11 +58,14 @@ func (dbService *MessageDBService) FetchOutgoingWhatsApp(instanceID string, amou
 	ctx, cancel := dbService.getContext()
 	defer cancel()
 
+	// One instant for the whole batch: a clock read per claim would let a loop that lasts
+	// longer than olderThan hand out a message it has already claimed in this same call.
+	now := time.Now().Unix()
 	counter := 0
 	for counter < amount {
 		var newMsg types.OutgoingWhatsApp
-		update := bson.M{"$set": bson.M{"lastSendAttempt": time.Now().Unix()}}
-		filter := bson.M{"lastSendAttempt": bson.M{"$lt": time.Now().Unix() - olderThan}}
+		update := bson.M{"$set": bson.M{"lastSendAttempt": now}}
+		filter := bson.M{"lastSendAttempt": bson.M{"$lt": now - olderThan}}
 		err = dbService.collectionRefOutgoingWhatsApp(instanceID).FindOneAndUpdate(ctx, filter, update).Decode(&newMsg)
 		if err != nil {
 			break
