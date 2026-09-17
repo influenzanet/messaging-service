@@ -36,6 +36,8 @@ func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg type
 	msg.AddedAt = archivedAt
 	msg.ContentParams = nil
 	msg.ID = primitive.NilObjectID
+	// Queue bookkeeping: the archive states the outcome in its own status field.
+	msg.Delivered = false
 
 	sent := types.SentWhatsApp{
 		OutgoingWhatsApp: msg,
@@ -88,7 +90,32 @@ func (dbService *MessageDBService) ResetLastSendAttemptForOutgoingWhatsApp(insta
 		return err
 	}
 	if res.ModifiedCount < 1 {
-		return errors.New("no outgoing whatsapp message found with the given id")
+		return ErrOutgoingWhatsAppNotFound
+	}
+	return nil
+}
+
+// ErrOutgoingWhatsAppNotFound reports that the queued message is no longer there: its claim
+// expired and another tick has already taken it out of the queue.
+var ErrOutgoingWhatsAppNotFound = errors.New("no outgoing whatsapp message found with the given id")
+
+// MarkOutgoingWhatsAppDelivered records on the queued message that Meta accepted it. It is
+// written before the message is archived, so that a failure of the archive write leaves a row
+// the next tick can finish instead of a row it would send to Meta a second time.
+func (dbService *MessageDBService) MarkOutgoingWhatsAppDelivered(instanceID string, id string) error {
+	ctx, cancel := dbService.getContext()
+	defer cancel()
+
+	_id, _ := primitive.ObjectIDFromHex(id)
+	filter := bson.M{"_id": _id}
+	update := bson.M{"$set": bson.M{"delivered": true}}
+
+	res, err := dbService.collectionRefOutgoingWhatsApp(instanceID).UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+	if res.MatchedCount < 1 {
+		return ErrOutgoingWhatsAppNotFound
 	}
 	return nil
 }
@@ -119,7 +146,7 @@ func (dbService *MessageDBService) DeleteOutgoingWhatsApp(instanceID string, id 
 		return err
 	}
 	if res.DeletedCount < 1 {
-		return errors.New("no outgoing whatsapp message found with the given id")
+		return ErrOutgoingWhatsAppNotFound
 	}
 	return nil
 }

@@ -65,6 +65,17 @@ parameters keep being dropped on archiving. Rows written before this change carr
 these fields and read as an unknown outcome. Meta's message id is not stored: the client does
 not return it today.
 
+A message Meta has accepted is marked `delivered` on its queued row before that row is
+archived, and the row is removed only once the archive write has succeeded. An operator who
+finds a queued message carrying `delivered` is looking at one whose archive write, or whose
+queue delete, failed: check `sent-whatsapp` first, the message may already be archived there.
+The next tick that claims it archives it instead of sending it, so it is never posted to Meta
+twice, and it is charged no attempt. The marker is written with `omitempty`, so a row that was
+never delivered carries no such field at all: query `{delivered: true}`, never
+`{delivered: false}`. Two cases remain open by design: a process that dies
+between Meta's answer and the mark sends that message once more when the claim expires, and a
+database that refuses both the mark and the archive write leaves the old behaviour in place.
+
 The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `true`, when
 `MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
 client could be built; the reason it did not start is logged once as a warning at startup.

@@ -565,6 +565,16 @@ processQueue:
 				continue
 			}
 
+			if msg.Delivered {
+				// Meta accepted this message on an earlier tick and only the archive write
+				// failed. Sending it again would post it twice: finish the archive instead.
+				logger.Warning.Printf("[%s] WhatsApp message '%s' was already delivered, archiving it instead of sending it again", instanceID, msg.MessageType)
+				if err := archiveWhatsApp(mdb, instanceID, msg, deliveredWhatsApp()); err == nil {
+					counters.IncreaseCounter(true)
+				}
+				continue
+			}
+
 			// Direct HTTP call to Meta API (C-5 fix: eliminates gRPC hop, adds timeout via context)
 			sendCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			err := wac.SendTemplateMessage(sendCtx, msg.ToPhoneNumber, msg.TemplateName, msg.Lang, msg.ContentParams)
@@ -607,6 +617,19 @@ processQueue:
 			}
 
 			chargeUndecided()
+			// Meta has accepted the message: record that on the queued row before archiving
+			// it, so that a failed archive write leaves a row the next tick finishes rather
+			// than one it sends again.
+			if markErr := mdb.MarkOutgoingWhatsAppDelivered(instanceID, msg.ID.Hex()); markErr != nil {
+				if errors.Is(markErr, messagedb.ErrOutgoingWhatsAppNotFound) {
+					// The claim expired and another tick has already archived this message.
+					logger.Warning.Printf("[%s] WhatsApp message '%s' left the queue while it was being sent, leaving the archive to the tick that owns it", instanceID, msg.MessageType)
+					continue
+				}
+				// The mark is insurance against a failing archive write. Archive anyway: a
+				// delivered message left in the queue is worse than an unmarked one.
+				logger.Error.Printf("[%s] Error marking whatsapp ('%s') as delivered: %v", instanceID, msg.MessageType, markErr)
+			}
 			if err := archiveWhatsApp(mdb, instanceID, msg, deliveredWhatsApp()); err != nil {
 				continue
 			}
