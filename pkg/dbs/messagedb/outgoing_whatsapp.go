@@ -153,3 +153,62 @@ func (dbService *MessageDBService) DeleteOutgoingWhatsApp(instanceID string, id 
 	}
 	return nil
 }
+
+// outgoingWhatsAppOfTemplateFilter selects the queued messages of one template in one language
+// that a tick may act on: the ones it claimed itself (ownIDs) and the ones no tick holds, whose
+// claim is older than unclaimedBefore. A message another tick holds is left to that tick, so
+// that two ticks never charge it twice. A delivered message waits for its archive, not a send.
+func outgoingWhatsAppOfTemplateFilter(templateName, lang string, ownIDs []string, unclaimedBefore int64) bson.M {
+	own := make([]primitive.ObjectID, 0, len(ownIDs))
+	for _, id := range ownIDs {
+		if _id, err := primitive.ObjectIDFromHex(id); err == nil {
+			own = append(own, _id)
+		}
+	}
+	return bson.M{
+		"templateName": templateName,
+		"lang":         lang,
+		"delivered":    bson.M{"$ne": true},
+		"$or": bson.A{
+			bson.M{"_id": bson.M{"$in": own}},
+			bson.M{"lastSendAttempt": bson.M{"$lt": unclaimedBefore}},
+		},
+	}
+}
+
+// FindOutgoingWhatsAppOfTemplate returns the messages of a template in one language, among
+// those the tick may act on, that have already used at least minAttempts attempts.
+func (dbService *MessageDBService) FindOutgoingWhatsAppOfTemplate(instanceID, templateName, lang string, ownIDs []string, unclaimedBefore int64, minAttempts int) ([]types.OutgoingWhatsApp, error) {
+	ctx, cancel := dbService.getContext()
+	defer cancel()
+
+	filter := outgoingWhatsAppOfTemplateFilter(templateName, lang, ownIDs, unclaimedBefore)
+	filter["sendAttempt"] = bson.M{"$gte": minAttempts}
+	cur, err := dbService.collectionRefOutgoingWhatsApp(instanceID).Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	var messages []types.OutgoingWhatsApp
+	if err := cur.All(ctx, &messages); err != nil {
+		return nil, err
+	}
+	return messages, nil
+}
+
+// DeferOutgoingWhatsAppOfTemplate charges one attempt to the messages of a template in one
+// language, among those the tick may act on, that have used fewer than belowAttempts attempts,
+// and sets their claim to claimedAt, so that the queue hands them out again only once that
+// claim has expired. It returns how many messages it deferred.
+func (dbService *MessageDBService) DeferOutgoingWhatsAppOfTemplate(instanceID, templateName, lang string, ownIDs []string, unclaimedBefore int64, belowAttempts int, claimedAt int64) (int64, error) {
+	ctx, cancel := dbService.getContext()
+	defer cancel()
+
+	filter := outgoingWhatsAppOfTemplateFilter(templateName, lang, ownIDs, unclaimedBefore)
+	filter["sendAttempt"] = bson.M{"$lt": belowAttempts}
+	update := bson.M{"$inc": bson.M{"sendAttempt": 1}, "$set": bson.M{"lastSendAttempt": claimedAt}}
+	res, err := dbService.collectionRefOutgoingWhatsApp(instanceID).UpdateMany(ctx, filter, update)
+	if err != nil {
+		return 0, err
+	}
+	return res.ModifiedCount, nil
+}

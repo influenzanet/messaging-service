@@ -2,8 +2,31 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 )
+
+// defaultWhatsAppTemplateRetryDelay is the wait, in seconds, before the messages of a template
+// Meta refuses are tried again when MESSAGE_SCHEDULER_WHATSAPP_TEMPLATE_RETRY_DELAY is not set.
+// With the five-attempt cap it keeps such messages for about four hours, which outlasts
+// Meta's first pause of a template for quality.
+const defaultWhatsAppTemplateRetryDelay int64 = 3600
+
+// parseWhatsAppTemplateRetryDelay reads MESSAGE_SCHEDULER_WHATSAPP_TEMPLATE_RETRY_DELAY: empty
+// means the default, anything else must be a positive number of seconds.
+func parseWhatsAppTemplateRetryDelay(value string) (int64, error) {
+	if value == "" {
+		return defaultWhatsAppTemplateRetryDelay, nil
+	}
+	delay, err := strconv.ParseInt(value, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	if delay <= 0 {
+		return 0, fmt.Errorf("%d is not a positive number of seconds", delay)
+	}
+	return delay, nil
+}
 
 // shouldRunOutgoingWhatsApp decides whether the outgoing WhatsApp runner is started, and
 // returns the reason when it is not, so that the caller can log a single explicit line.

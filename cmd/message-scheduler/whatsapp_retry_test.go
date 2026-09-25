@@ -208,7 +208,7 @@ func (db *schedulerTestDB) oneOutgoing(t *testing.T) types.OutgoingWhatsApp {
 func runWhatsAppHandler(mdb *messagedb.MessageDBService, sender whatsAppSender, lockSeconds int64) {
 	var wg sync.WaitGroup
 	wg.Add(1)
-	handleOutgoingWhatsAppForInstance(mdb, schedulerTestInstanceID, sender, lockSeconds, &wg)
+	handleOutgoingWhatsAppForInstance(mdb, schedulerTestInstanceID, sender, lockSeconds, defaultWhatsAppTemplateRetryDelay, &wg)
 	wg.Wait()
 }
 
@@ -241,7 +241,8 @@ func TestWhatsAppGlobalOutageDoesNotConsumeAttemptsAndRecovers(t *testing.T) {
 }
 
 func TestWhatsAppGlobalFailureStopsTheWholeTick(t *testing.T) {
-	// Authentication, rate-limit and template conditions stop the tick at the first call;
+	// Authentication and rate-limit conditions stop the tick at the first call (a refused
+	// template does not: see whatsapp_template_test.go);
 	// a transient failure is held once, so the tick stops at the second.
 	for _, tt := range []struct {
 		name  string
@@ -614,34 +615,6 @@ func TestWhatsAppRecipientThrottleDoesNotDecideAnEarlierFailure(t *testing.T) {
 	}
 	if got := db.attemptsOf(t, poisonPhone); got != 1 {
 		t.Fatalf("the failure before the throttle must be charged once the third message succeeds, got %d attempts", got)
-	}
-}
-
-// A template Meta has paused or disabled is a campaign-wide condition that only an operator
-// can lift: the tick stops at once and no message pays for it.
-func TestWhatsAppTemplateConditionStopsTheTick(t *testing.T) {
-	for _, code := range []int{132015, 132016} {
-		t.Run(fmt.Sprint(code), func(t *testing.T) {
-			db := newSchedulerTestDB(t)
-			db.add(t, 3, 0)
-			sender := &fakeWhatsAppSender{err: &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: code}}
-
-			runWhatsAppHandler(db.service, sender, 60)
-
-			if sender.callCount() != 1 {
-				t.Fatalf("template condition must stop the tick at the first call, got %d", sender.callCount())
-			}
-			if outgoing, sent := db.counts(t); outgoing != 3 || sent != 0 {
-				t.Fatalf("template condition changed the queue: outgoing=%d sent=%d", outgoing, sent)
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if changed, err := db.outgoing.CountDocuments(ctx, bson.M{"sendAttempt": bson.M{"$ne": 0}}); err != nil {
-				t.Fatalf("inspect retry counters: %v", err)
-			} else if changed != 0 {
-				t.Fatalf("template condition consumed %d attempts", changed)
-			}
-		})
 	}
 }
 
