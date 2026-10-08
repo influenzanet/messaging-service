@@ -102,20 +102,6 @@ func NewWhatsAppClient(token, phoneID, apiVersion string) *WhatsAppClient {
 	}
 }
 
-// mapLanguageCode converts system language codes to Meta WhatsApp API codes.
-// Currently identity (en→en, it→it) because both systems use ISO 639-1.
-// Extend this map if a language requires a different code on Meta's side (e.g. "pt"→"pt_BR").
-func mapLanguageCode(lang string) string {
-	langMap := map[string]string{
-		"en": "en",
-		"it": "it",
-	}
-	if mapped, ok := langMap[lang]; ok {
-		return mapped
-	}
-	return lang
-}
-
 func maskPhone(phone string) string {
 	if len(phone) <= 6 {
 		return "***"
@@ -142,12 +128,10 @@ var headerMediaTypes = map[string]bool{"image": true, "video": true, "document":
 func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber, templateName, lang string, params map[string]string) error {
 	apiURL := fmt.Sprintf("%s/%s/messages", c.apiBaseURL, c.phoneNumberID)
 
-	whatsappLangCode := mapLanguageCode(lang)
-
 	template := map[string]interface{}{
 		"name": templateName,
 		"language": map[string]string{
-			"code": whatsappLangCode,
+			"code": lang,
 		},
 	}
 

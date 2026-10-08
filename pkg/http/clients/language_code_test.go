@@ -2,8 +2,7 @@ package clients
 
 // Language matrix, last hop: what the message-scheduler actually puts in the Meta payload.
 // The scheduler hands OutgoingWhatsApp.Lang to SendTemplateMessage unchanged
-// (cmd/message-scheduler/main.go:524), which runs it through mapLanguageCode
-// (whatsapp_client.go:74) and writes it as template.language.code.
+// (cmd/message-scheduler/main.go:524), which writes it as template.language.code.
 // These tests document today's behaviour and change no production code.
 
 import (
@@ -14,16 +13,6 @@ import (
 
 // langsToMeta are the languages the generators can put on a queued message.
 var langsToMeta = []string{"it", "en", "fr", "de", "rm", ""}
-
-func TestMapLanguageCodeIsIdentity(t *testing.T) {
-	for _, lang := range langsToMeta {
-		got := mapLanguageCode(lang)
-		if got != lang {
-			t.Errorf("mapLanguageCode(%q) = %q, expected the identity mapping", lang, got)
-		}
-	}
-	t.Logf("mapLanguageCode is the identity for every language the generators produce: %v", langsToMeta)
-}
 
 // TestLanguageCodeSentToMeta captures the outgoing request for each language and reports the
 // language.code Meta would receive.
