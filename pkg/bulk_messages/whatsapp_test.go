@@ -181,7 +181,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 		}
 	})
 
-	t.Run("missing WhatsApp param key in contentInfos - returns nil (G-6)", func(t *testing.T) {
+	t.Run("missing WhatsApp param key in contentInfos - returns nil", func(t *testing.T) {
 		whatsAppEnabled = true
 		defer func() { whatsAppEnabled = false }()
 		// Template expects "studyKey" in contentInfos, but it's missing

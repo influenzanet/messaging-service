@@ -571,7 +571,7 @@ func prepareOutgoingWhatsApp(
 	}
 
 	// Read phone from the authoritative source (ContactInfos) instead of the
-	// redundant WhatsappNumber field which is never populated (C-1 fix).
+	// redundant WhatsappNumber field which is never populated.
 	phone := getVerifiedPhone(user)
 	if phone == "" {
 		return nil

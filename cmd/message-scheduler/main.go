@@ -141,7 +141,7 @@ func main() {
 	messageDBService := messagedb.NewMessageDBService(conf.MessageDBConfig)
 	globalDBService := globaldb.NewGlobalDBService(conf.GlobalDBConfig)
 
-	// WhatsApp client for direct HTTP delivery (optional, like C-3 pattern)
+	// WhatsApp client for direct HTTP delivery (optional)
 	whatsAppClient := waClient.NewWhatsAppClient(
 		os.Getenv("WHATSAPP_TOKEN"),
 		os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
@@ -702,7 +702,7 @@ processQueue:
 				continue
 			}
 
-			// Direct HTTP call to Meta API (C-5 fix: eliminates gRPC hop, adds timeout via context)
+			// Direct HTTP call to Meta API, bounded by the context timeout
 			sendCtx, cancel := context.WithTimeout(context.Background(), whatsAppSendTimeout)
 			err := wac.SendTemplateMessage(sendCtx, msg.ToPhoneNumber, msg.TemplateName, msg.Lang, msg.ContentParams)
 			cancel()
