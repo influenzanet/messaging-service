@@ -414,7 +414,7 @@ func TestWhatsAppHeldFailureIsLeftUnchargedWhenTheAnswerComesBackTooLate(t *test
 			poisonPhone: {&waClient.WhatsAppSendError{StatusCode: http.StatusServiceUnavailable}},
 			// a failure of its own, but answered so late that the held claim is past nine
 			// tenths of the lock by the time it decides anything
-			late: {&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 132012}},
+			late: {&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131049}},
 		},
 		slowPhone: late,
 		delay:     2500 * time.Millisecond,

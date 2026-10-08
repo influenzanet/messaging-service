@@ -94,7 +94,7 @@ func TestWhatsAppRetryCapArchivesOnTheFifthFailure(t *testing.T) {
 	// would be held as undecided and, with nothing behind it in the queue, never charged.
 	sender := &fakeWhatsAppSender{err: &waClient.WhatsAppSendError{
 		StatusCode: http.StatusBadRequest,
-		Code:       132012,
+		Code:       131049,
 	}}
 
 	for attempt := 1; attempt < maxWhatsAppSendAttempts; attempt++ {

@@ -687,6 +687,18 @@ processQueue:
 						deferWhatsAppTemplate(mdb, instanceID, msg, err, handled, lastAttemptOlderThan, templateRetryDelay)
 						refusedTemplates[whatsAppTemplateKey(msg)] = true
 						continue
+					case waClient.WhatsAppErrorPermanent:
+						// Meta answered and will refuse the same request again: a held failure is
+						// decided like after any answer, and this message is archived at once.
+						chargeUndecided()
+						logger.Error.Printf("[%s] WhatsApp message '%s' archived at the first attempt: Meta refused it permanently (code %d, %s); retrying cannot fix it", instanceID, msg.MessageType, sendErr.Code, class)
+						if archiveWhatsApp(mdb, instanceID, msg, failedWhatsApp(err)) != nil {
+							// The message stays queued: charging it keeps the attempt cap in force,
+							// so a database that keeps refusing the archive cannot have it sent to
+							// Meta on every tick.
+							recordFailedWhatsAppAttempt(mdb, instanceID, msg, err)
+						}
+						continue
 					case waClient.WhatsAppErrorTransient:
 						if undecided != nil {
 							logger.Error.Printf("[%s] stopping the WhatsApp tick: two consecutive transient failures ('%s', '%s'); nothing charged, locks left to expire", instanceID, undecided.MessageType, msg.MessageType)

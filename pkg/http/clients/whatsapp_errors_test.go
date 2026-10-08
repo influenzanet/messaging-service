@@ -19,7 +19,8 @@ func TestWhatsAppSendErrorClass(t *testing.T) {
 		WhatsAppErrorTransient:          {1, 2, 131000, 131016, 131057},
 		WhatsAppErrorRecipientThrottled: {131056},
 		WhatsAppErrorTemplate:           {132015, 132016, 131063},
-		WhatsAppErrorUnknown:            {0, 199, 300, 999999, 100, 131009, 131026, 131030, 131049, 132000, 132001, 132012, 132018},
+		WhatsAppErrorPermanent:          {100, 131008, 131009, 131026, 131051, 132000, 132001, 132005, 132007, 132012, 132018},
+		WhatsAppErrorUnknown:            {0, 199, 300, 999999, 131030, 131049},
 	} {
 		for _, code := range codes {
 			t.Run(fmt.Sprint(code), func(t *testing.T) {
@@ -47,7 +48,13 @@ func TestWhatsAppSendErrorClass(t *testing.T) {
 		{"transient flag beats message error", WhatsAppSendError{StatusCode: 400, Code: 100, IsTransient: true}, WhatsAppErrorTransient},
 		{"transport", WhatsAppSendError{cause: context.DeadlineExceeded}, WhatsAppErrorTransient},
 		{"deleted sender as Graph subcode", WhatsAppSendError{StatusCode: 400, Code: 100, Subcode: 33}, WhatsAppErrorAuth},
-		{"code 100 with another subcode", WhatsAppSendError{StatusCode: 400, Code: 100, Subcode: 2494010}, WhatsAppErrorUnknown},
+		{"code 100 with another subcode", WhatsAppSendError{StatusCode: 400, Code: 100, Subcode: 2494010}, WhatsAppErrorPermanent},
+		{"permanent code with the unauthorized status", WhatsAppSendError{StatusCode: 401, Code: 132001}, WhatsAppErrorAuth},
+		{"permanent code with HTTP429", WhatsAppSendError{StatusCode: 429, Code: 132001}, WhatsAppErrorThrottled},
+		{"permanent code with HTTP500", WhatsAppSendError{StatusCode: 500, Code: 132018}, WhatsAppErrorTransient},
+		{"permanent code with HTTP408", WhatsAppSendError{StatusCode: 408, Code: 132000}, WhatsAppErrorTransient},
+		{"permanent code with the transient flag", WhatsAppSendError{StatusCode: 400, Code: 131026, IsTransient: true}, WhatsAppErrorTransient},
+		{"permanent code with a transport cause", WhatsAppSendError{Code: 132012, cause: context.DeadlineExceeded}, WhatsAppErrorTransient},
 		{"unknown bad request", WhatsAppSendError{StatusCode: 400}, WhatsAppErrorUnknown},
 		{"not found", WhatsAppSendError{StatusCode: 404}, WhatsAppErrorUnknown},
 		{"redirect", WhatsAppSendError{StatusCode: 302}, WhatsAppErrorUnknown},
@@ -72,7 +79,7 @@ func TestSendTemplateMessageErrorResponse(t *testing.T) {
 		{"token", 401, `{"error":{"code":190,"error_subcode":463}}`, 190, WhatsAppErrorAuth},
 		{"token with HTTP400", 400, `{"error":{"code":190}}`, 190, WhatsAppErrorAuth},
 		{"forbidden HTML", 403, `<html>unavailable</html>`, 0, WhatsAppErrorAuth},
-		{"template parameters", 400, `{"error":{"code":132012,"message":"bad phone +391234567890","error_data":{"details":"+391234567890"}}}`, 132012, WhatsAppErrorUnknown},
+		{"template parameters", 400, `{"error":{"code":132012,"message":"bad phone +391234567890","error_data":{"details":"+391234567890"}}}`, 132012, WhatsAppErrorPermanent},
 		{"rate limit", 429, `{"error":{"code":130429}}`, 130429, WhatsAppErrorThrottled},
 		{"empty rate limit", 429, ``, 0, WhatsAppErrorThrottled},
 		{"overloaded", 500, `{"error":{"code":131000}}`, 131000, WhatsAppErrorTransient},
@@ -222,11 +229,25 @@ func TestWhatsAppErrorClassNamesArePersistedAndFixed(t *testing.T) {
 		{class: WhatsAppErrorTransient, want: "transient"},
 		{class: WhatsAppErrorRecipientThrottled, want: "recipient limit"},
 		{class: WhatsAppErrorTemplate, want: "template unusable"},
+		{class: WhatsAppErrorPermanent, want: "permanent"},
 		{class: WhatsAppErrorUnknown, want: "unknown"},
 	} {
 		t.Run(tt.want, func(t *testing.T) {
 			if got := tt.class.String(); got != tt.want {
 				t.Fatalf("class name = %q, want %q: it is stored in sent-whatsapp.errorClass", got, tt.want)
+			}
+		})
+	}
+}
+
+// A permanent Meta code is only trusted on Meta's own refusal of the request (HTTP 400): the same
+// code in another answer keeps the bounded retry instead of archiving the message at once.
+func TestWhatsAppPermanentCodeRequiresBadRequest(t *testing.T) {
+	for _, status := range []int{0, 200, 302, 404, 409} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			err := &WhatsAppSendError{StatusCode: status, Code: 132001}
+			if got := err.Class(); got != WhatsAppErrorUnknown {
+				t.Fatalf("Class() = %v, want %v", got, WhatsAppErrorUnknown)
 			}
 		})
 	}

@@ -57,10 +57,16 @@ is per tick/instance, not a persistent or cross-instance breaker. Meta pair-rate
 `131056` preserves the retry budget but only defers that recipient, and does not decide a
 held failure.
 
-Message-specific failures (invalid template parameters, `132018` from Graph API v23.0 on,
-unknown template `132001`, per-user marketing limit `131049`, and any code the classifier
-does not know, including `100` unless an HTTP status, the transient flag or subcode `33`
-classifies the response first) retain the existing five-attempt limit and archive behavior.
+Failures Meta will refuse again whatever the number of attempts (invalid or missing template
+parameters `132000`, `132012`, `132018`, `131008`, `131009`, text too long or against the format
+policy `132005`, `132007`, template missing in the requested language `132001`, message
+undeliverable `131026`, unsupported message type `131051`, and `100` unless an HTTP status,
+the transient flag or subcode `33` classifies the response first) are archived as failed at the
+first attempt, with class `permanent` and Meta's code, after a single call to Meta and without
+moving the attempt counter; the log says why, without the recipient's number. Like any answer
+from Meta, such a failure also decides a held transient failure. Other message-specific
+failures (for instance the per-user marketing limit `131049`, and any code the classifier does
+not know) retain the existing five-attempt limit and archive behavior.
 The error classifier is in
 `pkg/http/clients/whatsapp_errors.go`; logs expose numeric HTTP/Meta codes, Meta's
 `fbtrace_id` and the transport cause, never Meta's free-form response body. No environment

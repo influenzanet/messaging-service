@@ -16,6 +16,9 @@ const (
 	// WhatsAppErrorTemplate: the template itself cannot be used (paused or disabled), so every
 	// message of the campaign fails the same way until an operator acts on it.
 	WhatsAppErrorTemplate
+	// WhatsAppErrorPermanent: Meta refused this message for a reason that sending the same
+	// request again cannot change (wrong parameters, template missing in the language).
+	WhatsAppErrorPermanent
 )
 
 // String names the class for a log line, and these exact names are also persisted by the
@@ -34,6 +37,8 @@ func (c WhatsAppErrorClass) String() string {
 		return "recipient limit"
 	case WhatsAppErrorTemplate:
 		return "template unusable"
+	case WhatsAppErrorPermanent:
+		return "permanent"
 	}
 	return "unknown"
 }
@@ -100,9 +105,24 @@ func (e *WhatsAppSendError) Class() WhatsAppErrorClass {
 	case 132015, 132016, 131063:
 		// Template paused for quality, or disabled; 131063: the account has disabled marketing
 		// messages on Cloud API, so every marketing template is rejected until an operator acts.
-		// 132001 (unknown template) and 132018 (invalid parameters, v23+) are left to the bounded
-		// retry: they are per message or per language, and the queue must keep moving.
 		return WhatsAppErrorTemplate
+	case 100, 131008, 131009, 131026, 131051, 132000, 132001, 132005, 132007, 132012, 132018:
+		// Refused for this message alone, and the same request is refused again: retrying only
+		// spends five Meta calls per recipient. The message is archived at its first failure, so
+		// the queue keeps moving. Code 100 reaches this case only without subcode 33, which is handled above.
+		// 100: invalid parameter in the request.
+		// 131008, 131009: required parameter missing, parameter value invalid.
+		// 131026: message undeliverable to this recipient.
+		// 131051: unsupported message type.
+		// 132000, 132012, 132018: template parameter count, format or value mismatch.
+		// 132001: template does not exist in the requested language.
+		// 132005, 132007: translated text too long, format character policy violated.
+		// Only Meta's own refusal of the request (HTTP 400) is trusted to be final: the same code
+		// in any other answer, such as a proxy page, keeps the bounded retry.
+		if e.StatusCode != http.StatusBadRequest {
+			return WhatsAppErrorUnknown
+		}
+		return WhatsAppErrorPermanent
 	}
 	if e.Code >= 200 && e.Code <= 299 {
 		return WhatsAppErrorAuth

@@ -319,7 +319,7 @@ func TestWhatsAppPayloadFailureKeepsExistingFiveAttemptPolicy(t *testing.T) {
 	db.add(t, 1, 0)
 	sender := &fakeWhatsAppSender{err: &waClient.WhatsAppSendError{
 		StatusCode: http.StatusBadRequest,
-		Code:       132012,
+		Code:       131049,
 	}}
 
 	runWhatsAppHandler(db.service, sender, 60)
@@ -618,8 +618,8 @@ func TestWhatsAppRecipientThrottleDoesNotDecideAnEarlierFailure(t *testing.T) {
 	}
 }
 
-// An unknown template is a per-language condition: the messages in that language pay for
-// it one attempt at a time, and the messages in the other language keep flowing.
+// An unknown template is a per-language condition: the messages in that language are archived
+// at the first failure, one Meta call each, and the messages in the other language keep flowing.
 func TestWhatsAppUnknownTemplateLanguageDoesNotStallTheOtherLanguage(t *testing.T) {
 	db := newSchedulerTestDB(t)
 	for i := 0; i < 6; i++ {
@@ -634,24 +634,27 @@ func TestWhatsAppUnknownTemplateLanguageDoesNotStallTheOtherLanguage(t *testing.
 
 	runWhatsAppHandler(db.service, sender, 60)
 
-	if outgoing, sent := db.counts(t); outgoing != 3 || sent != 3 {
-		t.Fatalf("expected the Italian half delivered, got outgoing=%d sent=%d", outgoing, sent)
+	if outgoing, sent := db.counts(t); outgoing != 0 || sent != 6 {
+		t.Fatalf("expected every message archived, got outgoing=%d sent=%d", outgoing, sent)
+	}
+	if sender.calls != 6 {
+		t.Fatalf("expected one Meta call per message, got %d", sender.calls)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if stuck, err := db.outgoing.CountDocuments(ctx, bson.M{"lang": "en", "sendAttempt": 1}); err != nil {
-		t.Fatalf("inspect retry counters: %v", err)
-	} else if stuck != 3 {
-		t.Fatalf("expected the three English messages charged one attempt each, got %d", stuck)
+	if failed, err := db.sent.CountDocuments(ctx, bson.M{"lang": "en", "status": types.WhatsAppStatusFailed, "errorClass": "permanent", "errorCode": 132001}); err != nil {
+		t.Fatalf("inspect the archive: %v", err)
+	} else if failed != 3 {
+		t.Fatalf("expected the three English messages archived as permanent failures, got %d", failed)
 	}
-	if delivered, err := db.sent.CountDocuments(ctx, bson.M{"lang": "it"}); err != nil {
+	if delivered, err := db.sent.CountDocuments(ctx, bson.M{"lang": "it", "status": types.WhatsAppStatusDelivered}); err != nil {
 		t.Fatalf("inspect the archive: %v", err)
 	} else if delivered != 3 {
 		t.Fatalf("expected the three Italian messages archived as delivered, got %d", delivered)
 	}
 }
 
-// A failure of the message's own (invalid parameters) decides an earlier held failure just
+// A failure of the message's own (a per-user limit here) decides an earlier held failure just
 // as a success does: the held message was at fault.
 func TestWhatsAppMessageSpecificFailureDecidesAnEarlierFailure(t *testing.T) {
 	db := newSchedulerTestDB(t)
@@ -659,7 +662,7 @@ func TestWhatsAppMessageSpecificFailureDecidesAnEarlierFailure(t *testing.T) {
 	db.addTo(t, "+391111111101", 0)
 	sender := &scriptedWhatsAppSender{errors: []error{
 		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131000},
-		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 132012},
+		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131049},
 	}}
 
 	runWhatsAppHandler(db.service, sender, 60)
