@@ -25,6 +25,20 @@ transport error, is read as transient before any Meta code is considered. Every 
 message keeps its `lastSendAttempt` lock until its normal expiry; the stop is logged with
 the failure class and the message type.
 
+A rate-limit stop also pauses the instance's WhatsApp sending, in every scheduler replica: the
+time before which nobody sends is stored in the instance's message database (collection
+`whatsapp-throttle`, one document), and a tick that starts earlier logs "WhatsApp sending
+paused until ..." and returns before claiming or sending anything. The wait starts at 60 s,
+doubles with every throttle in a row up to one hour, gets up to 25 % of jitter, and is
+extended to the `Retry-After` of Meta's answer when that is longer (seconds or HTTP date, cut
+to one hour). It is never shorter than the claim lock, so the messages the stopped tick had
+claimed are free again when sending resumes. The stored time only moves forward, so replicas
+throttled together never shorten each other's wait, and throttles that arrive while a pause is
+active count as the same event (the series grows once); a tick that is mid-queue re-reads the
+pause before each batch and stops when one has been stored. The first message Meta accepts
+after the pause resets the series, so the next throttle starts again from 60 s. A throttle
+never charges an attempt.
+
 A template Meta refuses — paused or disabled (`132015`, `132016`), or a marketing template
 rejected because the account has disabled marketing messages on Cloud API (`131063`) — holds
 back that template in that language only. The other templates keep going in the same tick,

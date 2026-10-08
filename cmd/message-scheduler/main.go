@@ -556,8 +556,43 @@ func warnAboutHeldWhatsApp(instanceID string, undecided *types.OutgoingWhatsApp)
 	logger.Warning.Printf("[%s] WhatsApp message '%s' was held as a transient failure and is left undecided by the stop", instanceID, undecided.MessageType)
 }
 
+// pauseWhatsAppAfterThrottle stores in the database that Meta limited the sender, so that every
+// scheduler of the instance, this process or another, stays away until the wait is over. The
+// wait grows with the throttles in a row, honours the Retry-After of the answer, and is never
+// shorter than the claim lock of the messages left unsent by the stop.
+func pauseWhatsAppAfterThrottle(mdb *messagedb.MessageDBService, instanceID string, sendErr *waClient.WhatsAppSendError, lastAttemptOlderThan int64, knownLevel int) {
+	level := knownLevel
+	if state, err := mdb.GetWhatsAppThrottle(instanceID); err != nil {
+		logger.Error.Printf("[%s] cannot read the WhatsApp throttle state, backing off from level %d: %v", instanceID, level, err)
+	} else {
+		level = state.Level
+	}
+	delay := whatsAppThrottleDelay(level, sendErr.RetryAfter, time.Duration(lastAttemptOlderThan)*time.Second, randomJitter())
+	now := time.Now()
+	notBefore := whatsAppThrottleNotBefore(now, delay)
+	state, err := mdb.RecordWhatsAppThrottle(instanceID, notBefore, now.Unix())
+	if err != nil {
+		logger.Error.Printf("[%s] cannot store the WhatsApp pause, the next tick will try again at its normal pace: %v", instanceID, err)
+		return
+	}
+	logger.Warning.Printf("[%s] Meta is limiting WhatsApp sending (%s, Meta code %d, retry-after %d s): pausing for %d s, until %s, throttle number %d in a row", instanceID, sendErr.Class(), sendErr.Code, int64(sendErr.RetryAfter/time.Second), int64(delay/time.Second), time.Unix(state.NotBefore, 0).UTC().Format(time.RFC3339), state.Level)
+}
+
 func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, lastAttemptOlderThan int64, templateRetryDelay int64, wg *sync.WaitGroup) {
 	defer wg.Done()
+
+	// While Meta limits the sender nothing is claimed or sent: the wait is stored in the
+	// database, so it binds every scheduler of the instance and survives a restart.
+	throttle, throttleErr := mdb.GetWhatsAppThrottle(instanceID)
+	if throttleErr != nil {
+		logger.Error.Printf("[%s] cannot read the WhatsApp throttle state, sending as usual: %v", instanceID, throttleErr)
+	} else if time.Now().Unix() < throttle.NotBefore {
+		logger.Warning.Printf("[%s] WhatsApp sending paused until %s after Meta throttling", instanceID, time.Unix(throttle.NotBefore, 0).UTC().Format(time.RFC3339))
+		return
+	}
+	// Set while the stored level is above zero: the first accepted message resets it.
+	throttleToReset := throttle.Level > 0
+
 	counters := types.InitMessageCounter()
 
 	// How long after this batch was claimed a send may still start.
@@ -594,7 +629,18 @@ func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instance
 		undecidedErr = nil
 	}
 processQueue:
-	for {
+	for batch := 0; ; batch++ {
+		// A tick that is already past the first check stops as soon as any replica has stored a
+		// pause; the first batch uses the state read at the start. A read error fails open.
+		if batch > 0 {
+			if current, readErr := mdb.GetWhatsAppThrottle(instanceID); readErr != nil {
+				logger.Error.Printf("[%s] cannot read the WhatsApp throttle state, sending as usual: %v", instanceID, readErr)
+			} else if time.Now().Unix() < current.NotBefore {
+				logger.Warning.Printf("[%s] WhatsApp sending paused until %s after Meta throttling, stopping the tick", instanceID, time.Unix(current.NotBefore, 0).UTC().Format(time.RFC3339))
+				warnAboutHeldWhatsApp(instanceID, undecided)
+				break processQueue
+			}
+		}
 		// Taken before the claims are written: the guard on a held failure must measure from
 		// the earliest moment one of this batch's claims can have been stored.
 		claimStart := time.Now().Unix()
@@ -671,6 +717,11 @@ processQueue:
 						// Nothing a single message can cause: a sender/API outage must not
 						// exhaust the whole queue's retries. Keep all claimed locks until
 						// expiry; stop this instance's tick.
+						if class == waClient.WhatsAppErrorThrottled {
+							// The pause is at least as long as the locks, so they have expired
+							// when sending resumes.
+							pauseWhatsAppAfterThrottle(mdb, instanceID, sendErr, lastAttemptOlderThan, throttle.Level)
+						}
 						logger.Error.Printf("[%s] stopping the WhatsApp tick on a sender-side failure (%s) at '%s'; nothing charged, locks left to expire", instanceID, class, msg.MessageType)
 						warnAboutHeldWhatsApp(instanceID, undecided)
 						break processQueue
@@ -721,6 +772,14 @@ processQueue:
 			}
 
 			chargeUndecided()
+			if throttleToReset {
+				// Meta accepted a message, so the next throttle starts from the shortest wait.
+				if resetErr := mdb.ResetWhatsAppThrottleLevel(instanceID, time.Now().Unix()); resetErr != nil {
+					logger.Error.Printf("[%s] cannot reset the WhatsApp throttle level: %v", instanceID, resetErr)
+				} else {
+					throttleToReset = false
+				}
+			}
 			// Meta has accepted the message: record that on the queued row before archiving
 			// it, so that a failed archive write leaves a row the next tick finishes rather
 			// than one it sends again.

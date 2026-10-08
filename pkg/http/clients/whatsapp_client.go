@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -26,6 +27,9 @@ const (
 	// retired version with the oldest one still available, so keep this current:
 	// https://developers.facebook.com/docs/graph-api/changelog (v26.0: released 2026-07-29).
 	whatsAppDefaultAPIVersion = "v26.0"
+	// maxRetryAfter bounds the Retry-After a response can ask for, so that a bogus header
+	// cannot park the sender for days.
+	maxRetryAfter = time.Hour
 )
 
 var whatsAppAPIVersionPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+$`)
@@ -43,6 +47,34 @@ func ResolveAPIVersion(configured string) string {
 		return whatsAppDefaultAPIVersion
 	}
 	return configured
+}
+
+// parseRetryAfter reads a Retry-After header, either as a number of seconds or as an HTTP
+// date measured from now. A missing, malformed or past value is 0, and a value above
+// maxRetryAfter is cut to it.
+func parseRetryAfter(value string, now time.Time) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	var wait time.Duration
+	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
+		if seconds > int64(maxRetryAfter/time.Second) {
+			return maxRetryAfter
+		}
+		wait = time.Duration(seconds) * time.Second
+	} else if errors.Is(err, strconv.ErrRange) && value[0] != '-' {
+		return maxRetryAfter
+	} else if date, dateErr := http.ParseTime(value); dateErr == nil {
+		wait = date.Sub(now)
+	}
+	if wait <= 0 {
+		return 0
+	}
+	if wait > maxRetryAfter {
+		return maxRetryAfter
+	}
+	return wait
 }
 
 // WhatsAppClient handles direct communication with the WhatsApp Business API
@@ -236,7 +268,8 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 		sendErr := &WhatsAppSendError{
 			StatusCode: resp.StatusCode, Code: respObj.Error.Code,
 			Subcode: respObj.Error.Subcode, IsTransient: respObj.Error.IsTransient,
-			FbtraceID: respObj.Error.FbtraceID,
+			FbtraceID:  respObj.Error.FbtraceID,
+			RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After"), time.Now()),
 		}
 		var networkErr net.Error
 		if errors.As(decodeErr, &networkErr) || errors.Is(decodeErr, context.Canceled) || errors.Is(decodeErr, io.ErrUnexpectedEOF) {

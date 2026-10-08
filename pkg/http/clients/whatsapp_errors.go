@@ -3,6 +3,7 @@ package clients
 import (
 	"fmt"
 	"net/http"
+	"time"
 )
 
 type WhatsAppErrorClass int
@@ -52,13 +53,18 @@ type WhatsAppSendError struct {
 	IsTransient bool
 	// FbtraceID is the request identifier Meta support asks for; it carries no PII.
 	FbtraceID string
-	cause     error
+	// RetryAfter is the wait Meta asked for in the Retry-After header, 0 when it sent none.
+	RetryAfter time.Duration
+	cause      error
 }
 
 func (e *WhatsAppSendError) Error() string {
 	msg := fmt.Sprintf("failed to send template message, status code: %d, Meta code: %d, subcode: %d", e.StatusCode, e.Code, e.Subcode)
 	if e.FbtraceID != "" {
 		msg += ", fbtrace_id: " + e.FbtraceID
+	}
+	if e.RetryAfter > 0 {
+		msg += fmt.Sprintf(", retry-after: %d s", int64(e.RetryAfter/time.Second))
 	}
 	if e.cause != nil {
 		// A transport error names the host and the failure, never the recipient or the token.
