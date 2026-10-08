@@ -120,6 +120,7 @@ var headerMediaTypes = map[string]bool{"image": true, "video": true, "document":
 //     Meta requires every parameter of a template to be named or positional consistently, and
 //     BODY parameters are always sent named, so a text header on such a template needs its name
 //   - "header_image", "header_video", "header_document" -> media HEADER component (value is the asset link)
+//   - "header_document_filename" -> optional file name shown for a "header_document" asset
 //   - "button_<index>"    -> URL button parameter at the given index
 //   - anything else       -> named BODY parameter
 //
@@ -138,6 +139,7 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 	if len(params) > 0 {
 		var headerComponent map[string]interface{}
 		headerKey := ""
+		documentFilename, hasDocumentFilename := params["header_document_filename"]
 		var bodyParams []map[string]interface{}
 		var buttonComponents []map[string]interface{}
 
@@ -160,6 +162,8 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 					"parameters": []map[string]interface{}{param},
 				}
 				headerKey = key
+			case key == "header_document_filename":
+				// Applied to the document header once the loop knows which header the message has.
 			case strings.HasPrefix(key, "header_"):
 				if headerComponent != nil {
 					return fmt.Errorf("template %s: both %q and %q set the header, a template has only one", templateName, headerKey, key)
@@ -168,10 +172,15 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 				if !headerMediaTypes[mediaType] {
 					return fmt.Errorf("template %s: parameter key %q asks for header media type %q, which Meta does not accept", templateName, key, mediaType)
 				}
+				media := map[string]interface{}{"link": value}
+				// An empty name is left out: Meta would refuse the message for it.
+				if mediaType == "document" && hasDocumentFilename && documentFilename != "" {
+					media["filename"] = documentFilename
+				}
 				headerComponent = map[string]interface{}{
 					"type": "header",
 					"parameters": []map[string]interface{}{
-						{"type": mediaType, mediaType: map[string]interface{}{"link": value}},
+						{"type": mediaType, mediaType: media},
 					},
 				}
 				headerKey = key
@@ -192,6 +201,10 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 					"parameter_name": key,
 				})
 			}
+		}
+
+		if hasDocumentFilename && headerKey != "header_document" {
+			return fmt.Errorf("template %s: \"header_document_filename\" needs a \"header_document\" key", templateName)
 		}
 
 		var components []map[string]interface{}

@@ -146,6 +146,8 @@ generating WhatsApp messages for that process, instead of queueing messages nobo
 send; participants who prefer WhatsApp receive the e-mail instead, and the e-mail channel is
 never affected.
 
+Templates with a header, footer or buttons: see [docs/whatsapp-template-header-example.md](docs/whatsapp-template-header-example.md).
+
 Scheduler regression tests use an isolated MongoDB database for each test. Set
 `F04_TEST_MONGODB_URI` to a **test-only** MongoDB URI to run them (otherwise they skip).
 For example, run `go test -race ./cmd/message-scheduler ./pkg/http/clients` with that
