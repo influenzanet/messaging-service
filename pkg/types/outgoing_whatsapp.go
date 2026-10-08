@@ -11,7 +11,6 @@ type OutgoingWhatsApp struct {
 	ContentParams   map[string]string  `bson:"contentParams,omitempty"`
 	UserID          string             `bson:"userId,omitempty"`
 	AddedAt         int64              `bson:"addedAt"`
-	HighPrio        bool               `bson:"highPrio"`
 	LastSendAttempt int64              `bson:"lastSendAttempt"`
 	SendAttempt     int                `bson:"sendAttempt"`
 	// Delivered records that Meta accepted the message, before it is archived. A row that

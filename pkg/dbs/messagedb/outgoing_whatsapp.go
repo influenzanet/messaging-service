@@ -80,24 +80,6 @@ func (dbService *MessageDBService) FetchOutgoingWhatsApp(instanceID string, amou
 	return messages, err
 }
 
-func (dbService *MessageDBService) ResetLastSendAttemptForOutgoingWhatsApp(instanceID string, id string) error {
-	ctx, cancel := dbService.getContext()
-	defer cancel()
-
-	_id, _ := primitive.ObjectIDFromHex(id)
-	filter := bson.M{"_id": _id}
-	update := bson.M{"$set": bson.M{"lastSendAttempt": 0}}
-
-	res, err := dbService.collectionRefOutgoingWhatsApp(instanceID).UpdateOne(ctx, filter, update)
-	if err != nil {
-		return err
-	}
-	if res.ModifiedCount < 1 {
-		return ErrOutgoingWhatsAppNotFound
-	}
-	return nil
-}
-
 // ErrOutgoingWhatsAppNotFound reports that the queued message is no longer there: its claim
 // expired and another tick has already taken it out of the queue.
 var ErrOutgoingWhatsAppNotFound = errors.New("no outgoing whatsapp message found with the given id")
