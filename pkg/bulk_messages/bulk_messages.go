@@ -359,47 +359,47 @@ func GenerateParticipantMessages(
 						messageTemplateCache[m.Type] = template
 					}
 
-				contentInfos := map[string]string{}
-				for k, v := range globalTemplateInfos {
-					contentInfos[k] = v
-				}
-				contentInfos["profileAlias"] = profile.Alias
-				contentInfos["profileId"] = profile.Id
-				for k, v := range m.Payload {
-					contentInfos[k] = v
-				}
-				outgoing, err := prepareOutgoingEmail(
-					user,
-					apiClients,
-					messageDBService,
-					instanceID,
-					template,
-					contentInfos,
-					true,
-				)
-				if err != nil {
-					counters.IncreaseCounter(false)
-					logger.Error.Printf("unexpected error: %v", err)
-					continue
-				}
-
-				if token, ok := contentInfos["loginToken"]; ok {
-					if webURL, ok := contentInfos["webAppUrl"]; ok {
-						contentInfos["loginUrl"] = buildLoginURL(webURL, token, contentInfos["studyKey"])
+					contentInfos := map[string]string{}
+					for k, v := range globalTemplateInfos {
+						contentInfos[k] = v
 					}
-				}
-				contentInfos["subject"] = outgoing.Subject
-
-				waOutgoing := saveOutgoingWhatsApp(messageDBService, instanceID, user, template, contentInfos)
-				if userPrefersChannel(user, channelEmail) || waOutgoing == nil {
-					_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
+					contentInfos["profileAlias"] = profile.Alias
+					contentInfos["profileId"] = profile.Id
+					for k, v := range m.Payload {
+						contentInfos[k] = v
+					}
+					outgoing, err := prepareOutgoingEmail(
+						user,
+						apiClients,
+						messageDBService,
+						instanceID,
+						template,
+						contentInfos,
+						true,
+					)
 					if err != nil {
 						counters.IncreaseCounter(false)
 						logger.Error.Printf("unexpected error: %v", err)
 						continue
 					}
-				}
-				counters.IncreaseCounter(true)
+
+					if token, ok := contentInfos["loginToken"]; ok {
+						if webURL, ok := contentInfos["webAppUrl"]; ok {
+							contentInfos["loginUrl"] = buildLoginURL(webURL, token, contentInfos["studyKey"])
+						}
+					}
+					contentInfos["subject"] = outgoing.Subject
+
+					waOutgoing := saveOutgoingWhatsApp(messageDBService, instanceID, user, template, contentInfos)
+					if userPrefersChannel(user, channelEmail) || waOutgoing == nil {
+						_, err = messageDBService.AddToOutgoingEmails(instanceID, *outgoing)
+						if err != nil {
+							counters.IncreaseCounter(false)
+							logger.Error.Printf("unexpected error: %v", err)
+							continue
+						}
+					}
+					counters.IncreaseCounter(true)
 
 					_, ok = sentMessageCountByType[m.Type]
 					if !ok {
@@ -854,4 +854,3 @@ func getUnsubscribeToken(
 	}
 	return resp.Token, nil
 }
-
