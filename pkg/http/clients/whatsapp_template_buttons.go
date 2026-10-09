@@ -2,7 +2,9 @@ package clients
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // buttonKeyPattern matches what follows "button_": a single digit 0-9 (a template has at most
@@ -57,6 +59,20 @@ func (tp *templateParams) addButton(key, value string) error {
 		tp.buttons = append(tp.buttons, buttonParam{
 			index: index, subType: "quick_reply", indexValue: index,
 			parameters: []map[string]interface{}{{"type": "payload", "payload": value}},
+		})
+	case "copy_code":
+		if name != "" {
+			return newTemplateParamsError(tp.templateName, key, "subtype %q does not take a parameter name", subType)
+		}
+		if n := utf8.RuneCountInString(value); n < 1 || n > 20 {
+			return newTemplateParamsError(tp.templateName, key, "copy_code value must be 1-20 characters")
+		}
+		// Per Meta's docs, copy_code sends its index as a JSON integer, unlike
+		// url/quick_reply's JSON string; the regex guarantees index is a single digit.
+		idx, _ := strconv.Atoi(index)
+		tp.buttons = append(tp.buttons, buttonParam{
+			index: index, subType: "copy_code", indexValue: idx,
+			parameters: []map[string]interface{}{{"type": "coupon_code", "coupon_code": value}},
 		})
 	default:
 		return newTemplateParamsError(tp.templateName, key, "has an unknown button subtype %q", subType)
