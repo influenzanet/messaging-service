@@ -203,6 +203,87 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 		}
 	})
 
+	// A whatsappParams value that starts with "=" is a literal, not a variable name, and
+	// everything after the first "=" is the literal (so "=" alone is an empty literal and
+	// "==x" is the literal "=x"). No existing contentKey starts with "=".
+	t.Run("literal value is sent as-is, without looking it up in contentInfos", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		template := types.EmailTemplate{
+			MessageType:          "weekly",
+			DefaultLanguage:      "it",
+			Translations:         []types.LocalizedTemplate{{Lang: "it"}},
+			WhatsAppTemplateName: "influenzanet_weekly_v1",
+			WhatsAppParams:       map[string]string{"season": "=Stagione 2026/27"},
+		}
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
+		if got == nil {
+			t.Fatal("expected a message: a literal must not need a contentInfos entry")
+		}
+		if got.ContentParams["season"] != "Stagione 2026/27" {
+			t.Errorf("expected literal %q, got %q", "Stagione 2026/27", got.ContentParams["season"])
+		}
+	})
+
+	t.Run("bare = is an empty literal", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		template := types.EmailTemplate{
+			MessageType:          "weekly",
+			DefaultLanguage:      "it",
+			Translations:         []types.LocalizedTemplate{{Lang: "it"}},
+			WhatsAppTemplateName: "influenzanet_weekly_v1",
+			WhatsAppParams:       map[string]string{"note": "="},
+		}
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
+		if got == nil {
+			t.Fatal("expected a message")
+		}
+		if v, ok := got.ContentParams["note"]; !ok || v != "" {
+			t.Errorf("expected empty literal, got %q (present=%v)", v, ok)
+		}
+	})
+
+	t.Run("== escapes to a literal =", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		template := types.EmailTemplate{
+			MessageType:          "weekly",
+			DefaultLanguage:      "it",
+			Translations:         []types.LocalizedTemplate{{Lang: "it"}},
+			WhatsAppTemplateName: "influenzanet_weekly_v1",
+			WhatsAppParams:       map[string]string{"code": "==x"},
+		}
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
+		if got == nil {
+			t.Fatal("expected a message")
+		}
+		if got.ContentParams["code"] != "=x" {
+			t.Errorf("expected literal %q, got %q", "=x", got.ContentParams["code"])
+		}
+	})
+
+	t.Run("variable value is still resolved from contentInfos, unchanged", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{"studyKey": "flu-2025"})
+		if got == nil {
+			t.Fatal("expected non-nil when all params are present")
+		}
+		if got.ContentParams["study_name"] != "flu-2025" {
+			t.Errorf("expected param study_name=flu-2025, got %q", got.ContentParams["study_name"])
+		}
+	})
+
+	t.Run("missing variable still drops the message", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{})
+		if got != nil {
+			t.Error("expected nil when a required WhatsApp variable is missing from contentInfos")
+		}
+	})
+
 	t.Run("user with no preferred channel - returns nil even with a verified phone", func(t *testing.T) {
 		// An empty list means the participant never opted in to WhatsApp, or a
 		// preference was lost: neither is a reason to send a paid message.

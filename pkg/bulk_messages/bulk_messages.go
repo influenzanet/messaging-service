@@ -556,6 +556,19 @@ func getVerifiedPhone(user *umAPI.User) string {
 	return ""
 }
 
+// resolveWhatsAppValue resolves one whatsappParams value: a value starting with "=" is a
+// literal, not a variable name, and everything after the first "=" is that literal ("=" alone
+// is an empty literal, "==x" is the literal "=x"). Anything else is a contentInfos key, looked
+// up as before; a missing key returns ok=false so the caller can drop the message, exactly as
+// a missing variable did before literals existed. No existing contentKey starts with "=".
+func resolveWhatsAppValue(contentKey string, contentInfos map[string]string) (string, bool) {
+	if strings.HasPrefix(contentKey, "=") {
+		return strings.TrimPrefix(contentKey, "="), true
+	}
+	value, ok := contentInfos[contentKey]
+	return value, ok
+}
+
 // prepareOutgoingWhatsApp builds an OutgoingWhatsApp struct ready to be saved to the
 // outgoing-whatsapp collection. Returns nil if WhatsApp is not applicable for this user/template.
 func prepareOutgoingWhatsApp(
@@ -585,7 +598,7 @@ func prepareOutgoingWhatsApp(
 
 	namedParams := map[string]string{}
 	for paramName, contentKey := range template.WhatsAppParams {
-		value, ok := contentInfos[contentKey]
+		value, ok := resolveWhatsAppValue(contentKey, contentInfos)
 		if !ok {
 			logger.Warning.Printf("prepareOutgoingWhatsApp: param '%s' (contentKey '%s') missing, user=%s type=%s", paramName, contentKey, user.Id, template.MessageType)
 			return nil
