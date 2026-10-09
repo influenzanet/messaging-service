@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -123,6 +124,101 @@ func decodeJSONInteger(raw json.RawMessage) (int64, error) {
 		return 0, errors.New("must be a JSON integer")
 	}
 	return n, nil
+}
+
+// parseLocationValue decodes a strict "header_location" JSON object: required latitude
+// ([-90, 90]) and longitude ([-180, 180]), each a JSON number or a numeric string and always
+// sent as a string; optional name and address strings; no other field.
+func parseLocationValue(raw string) (map[string]interface{}, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return nil, errors.New("is not a JSON object")
+	}
+	for name := range fields {
+		switch name {
+		case "latitude", "longitude", "name", "address":
+		default:
+			return nil, fmt.Errorf("has an unknown field %q", name)
+		}
+	}
+	lat, err := decodeCoordinate(fields["latitude"], -90, 90)
+	if err != nil {
+		return nil, fmt.Errorf("latitude %v", err)
+	}
+	lon, err := decodeCoordinate(fields["longitude"], -180, 180)
+	if err != nil {
+		return nil, fmt.Errorf("longitude %v", err)
+	}
+	result := map[string]interface{}{"latitude": lat, "longitude": lon}
+	name, present, err := decodeOptionalJSONString(fields["name"])
+	if err != nil {
+		return nil, fmt.Errorf("name %v", err)
+	} else if present {
+		result["name"] = name
+	}
+	address, present, err := decodeOptionalJSONString(fields["address"])
+	if err != nil {
+		return nil, fmt.Errorf("address %v", err)
+	} else if present {
+		result["address"] = address
+	}
+	return result, nil
+}
+
+// decodeCoordinate reads a JSON number or a numeric string within [min, max] and returns it as
+// a string, the form Meta's LOCATION header expects.
+func decodeCoordinate(raw json.RawMessage, min, max float64) (string, error) {
+	if raw == nil {
+		return "", errors.New("is required")
+	}
+	trimmed := strings.TrimSpace(string(raw))
+	if strings.HasPrefix(trimmed, `"`) {
+		var s string
+		if err := json.Unmarshal(raw, &s); err != nil {
+			return "", errors.New("must be a number or a numeric string")
+		}
+		f, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return "", errors.New("must be a number or a numeric string")
+		}
+		if f < min || f > max {
+			return "", fmt.Errorf("must be between %v and %v", min, max)
+		}
+		return s, nil
+	}
+	var num json.Number
+	if err := json.Unmarshal(raw, &num); err != nil {
+		return "", errors.New("must be a number or a numeric string")
+	}
+	f, err := num.Float64()
+	if err != nil {
+		return "", errors.New("must be a number or a numeric string")
+	}
+	if f < min || f > max {
+		return "", fmt.Errorf("must be between %v and %v", min, max)
+	}
+	return num.String(), nil
+}
+
+// isJSONNull reports whether a field holds the JSON literal null, which json.Unmarshal turns
+// into the zero value of a string or a map without any error.
+func isJSONNull(raw json.RawMessage) bool {
+	return strings.TrimSpace(string(raw)) == "null"
+}
+
+// decodeOptionalJSONString reads an optional JSON string field: present=false when the field
+// is absent, an error when it is present but not a string (null included).
+func decodeOptionalJSONString(raw json.RawMessage) (value string, present bool, err error) {
+	if raw == nil {
+		return "", false, nil
+	}
+	if isJSONNull(raw) {
+		return "", true, errors.New("must be a string")
+	}
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return "", true, errors.New("must be a string")
+	}
+	return value, true, nil
 }
 
 func isJSONIntegerLiteral(s string) bool {
