@@ -221,6 +221,46 @@ func decodeOptionalJSONString(raw json.RawMessage) (value string, present bool, 
 	return value, true, nil
 }
 
+// parseFlowValue decodes a "button_<i>:flow" value (per Meta's flow-sending docs): plain text (not
+// starting with "{") is the flow_token outright; a JSON object may carry flow_token (a string)
+// and/or flow_action_data (an object), both optional. An empty value yields neither field,
+// relying on Meta's own default ("unused").
+func parseFlowValue(raw string) (map[string]interface{}, error) {
+	action := map[string]interface{}{}
+	if !strings.HasPrefix(strings.TrimSpace(raw), "{") {
+		if raw != "" {
+			action["flow_token"] = raw
+		}
+		return action, nil
+	}
+
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return nil, errors.New("is not a valid JSON object")
+	}
+	for name := range fields {
+		if name != "flow_token" && name != "flow_action_data" {
+			return nil, fmt.Errorf("has an unknown field %q", name)
+		}
+	}
+	if raw, ok := fields["flow_token"]; ok {
+		var token string
+		if isJSONNull(raw) || json.Unmarshal(raw, &token) != nil {
+			return nil, errors.New("flow_token must be a string")
+		}
+		action["flow_token"] = token
+	}
+	if raw, ok := fields["flow_action_data"]; ok {
+		var data map[string]json.RawMessage
+		if isJSONNull(raw) || json.Unmarshal(raw, &data) != nil {
+			return nil, errors.New("flow_action_data must be a JSON object")
+		}
+		// Sent as written: decoding into interface{} would turn large integers into floats.
+		action["flow_action_data"] = raw
+	}
+	return action, nil
+}
+
 func isJSONIntegerLiteral(s string) bool {
 	if s == "" {
 		return false

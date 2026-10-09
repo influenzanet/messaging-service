@@ -74,6 +74,18 @@ func (tp *templateParams) addButton(key, value string) error {
 			index: index, subType: "copy_code", indexValue: idx,
 			parameters: []map[string]interface{}{{"type": "coupon_code", "coupon_code": value}},
 		})
+	case "flow":
+		if name != "" {
+			return newTemplateParamsError(tp.templateName, key, "subtype %q does not take a parameter name", subType)
+		}
+		action, err := parseFlowValue(value)
+		if err != nil {
+			return newTemplateParamsError(tp.templateName, key, "flow value: %v", err)
+		}
+		tp.buttons = append(tp.buttons, buttonParam{
+			index: index, subType: "flow", indexValue: index,
+			parameters: []map[string]interface{}{{"type": "action", "action": action}},
+		})
 	default:
 		return newTemplateParamsError(tp.templateName, key, "has an unknown button subtype %q", subType)
 	}
