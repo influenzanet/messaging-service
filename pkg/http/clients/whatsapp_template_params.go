@@ -61,6 +61,7 @@ type templateParams struct {
 	textHeader         *textHeaderParam
 	mediaHeader        *mediaHeaderParam
 	locationHeader     map[string]interface{}
+	productHeader      map[string]interface{}
 	bodyParams         []bodyParam
 	limitedTimeOfferMS *int64
 	buttons            []buttonParam
@@ -108,6 +109,13 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 				return nil, newTemplateParamsError(templateName, key, "does not accept a value type suffix")
 			}
 			if err := tp.setLocationHeader(key, value); err != nil {
+				return nil, err
+			}
+		case base == "header_product":
+			if suffix != "" {
+				return nil, newTemplateParamsError(templateName, key, "does not accept a value type suffix")
+			}
+			if err := tp.setProductHeader(key, value); err != nil {
 				return nil, err
 			}
 		case strings.HasPrefix(base, "header_"):
@@ -241,6 +249,21 @@ func (tp *templateParams) setLimitedTimeOffer(key, value string) error {
 	return nil
 }
 
+// setProductHeader parses "header_product": its JSON value becomes the PRODUCT
+// header's single "product" parameter.
+func (tp *templateParams) setProductHeader(key, value string) error {
+	if tp.headerKey != "" {
+		return newHeaderClashError(tp.templateName, tp.headerKey, key)
+	}
+	product, err := parseProductValue(value)
+	if err != nil {
+		return newTemplateParamsError(tp.templateName, key, "product value: %v", err)
+	}
+	tp.productHeader = product
+	tp.headerKey = key
+	return nil
+}
+
 // parseMediaHeaderKey splits a "header_<type>" or "header_<type>_id" key into its media type
 // and whether it is the by-id form; ok is false when the type is not one Meta accepts.
 func parseMediaHeaderKey(key string) (mediaType string, byID bool, ok bool) {
@@ -323,6 +346,13 @@ func (tp *templateParams) buildHeaderComponent() map[string]interface{} {
 			"type": "header",
 			"parameters": []map[string]interface{}{
 				{"type": "location", "location": tp.locationHeader},
+			},
+		}
+	case tp.productHeader != nil:
+		return map[string]interface{}{
+			"type": "header",
+			"parameters": []map[string]interface{}{
+				{"type": "product", "product": tp.productHeader},
 			},
 		}
 	default:

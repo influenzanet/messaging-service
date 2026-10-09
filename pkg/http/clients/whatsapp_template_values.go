@@ -261,6 +261,29 @@ func parseFlowValue(raw string) (map[string]interface{}, error) {
 	return action, nil
 }
 
+// parseProductValue decodes a "header_product" JSON object (per Meta's SPM template docs): exactly
+// product_retailer_id and catalog_id, both non-empty strings.
+func parseProductValue(raw string) (map[string]interface{}, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return nil, errors.New("is not a JSON object")
+	}
+	for name := range fields {
+		if name != "product_retailer_id" && name != "catalog_id" {
+			return nil, fmt.Errorf("has an unknown field %q", name)
+		}
+	}
+	productID, err := decodeNonEmptyJSONString(fields["product_retailer_id"])
+	if err != nil {
+		return nil, fmt.Errorf("product_retailer_id %v", err)
+	}
+	catalogID, err := decodeNonEmptyJSONString(fields["catalog_id"])
+	if err != nil {
+		return nil, fmt.Errorf("catalog_id %v", err)
+	}
+	return map[string]interface{}{"product_retailer_id": productID, "catalog_id": catalogID}, nil
+}
+
 // decodeJSONArray requires a present field holding a JSON array.
 func decodeJSONArray(raw json.RawMessage, fieldName string) ([]json.RawMessage, error) {
 	if raw == nil {
