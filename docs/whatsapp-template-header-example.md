@@ -145,3 +145,11 @@ For an image or a video use `header_image` or `header_video`; the parameter beco
 `{ "type": "image", "image": { "link": "..." } }` (respectively `video`). The link must be
 publicly reachable by Meta. `header_document_filename` is optional and only valid with
 `header_document`.
+
+## Everything else
+
+For every other template option — value type suffixes (`@currency`, `@date_time`), media headers
+by uploaded id, location and product headers, every button subtype (quick reply, copy code, flow,
+catalog, MPM), limited-time offers, voice-call buttons, carousels, and OTP/authentication
+templates — see
+[`whatsapp-template-options.md`](whatsapp-template-options.md).
