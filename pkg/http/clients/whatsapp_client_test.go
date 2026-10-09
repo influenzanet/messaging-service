@@ -94,11 +94,14 @@ func newCaptureClient(t *testing.T) (*WhatsAppClient, *capturedPayload) {
 }
 
 func TestSendTemplateMessageHeaderComponents(t *testing.T) {
+	// Meta requires a template's parameters to be all named or all positional; the body
+	// here is named, so the header must use "header:<name>" rather than the bare positional
+	// "header".
 	t.Run("text header param produces header component before body", func(t *testing.T) {
 		c, captured := newCaptureClient(t)
 		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
-			"header": "Weekly survey",
-			"name":   "Mario",
+			"header:campaign": "Weekly survey",
+			"name":            "Mario",
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -159,12 +162,14 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 		}
 	})
 
+	// Named body alongside the header: the header uses "header:<name>" since the
+	// body here is named.
 	t.Run("header body and button components are ordered deterministically", func(t *testing.T) {
 		c, captured := newCaptureClient(t)
 		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "en", map[string]string{
-			"button_0": "verify/abc",
-			"header":   "Hello",
-			"name":     "Mario",
+			"button_0":        "verify/abc",
+			"header:campaign": "Hello",
+			"name":            "Mario",
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)

@@ -34,9 +34,11 @@ type mediaHeaderParam struct {
 	filename  string
 }
 
-// bodyParam is a named BODY parameter.
+// bodyParam is a BODY parameter: either named (name set, n unused) or positional (n set,
+// name == "").
 type bodyParam struct {
 	name  string
+	n     int
 	value string
 }
 
@@ -58,6 +60,11 @@ type templateParams struct {
 	mediaHeader *mediaHeaderParam
 	bodyParams  []bodyParam
 	buttons     []buttonParam
+
+	// sawNamedFormat/sawPositionalFormat track whether any textual parameter seen so far
+	// (header text, body) is NAMED or POSITIONAL; a message setting both is rejected.
+	sawNamedFormat      bool
+	sawPositionalFormat bool
 }
 
 // newTemplateParamsError reports a configuration mistake by naming the key only: a value can
@@ -94,8 +101,19 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 			if err := tp.addButton(key, value); err != nil {
 				return nil, err
 			}
+		case strings.HasPrefix(key, "body:"):
+			name := strings.TrimPrefix(key, "body:")
+			if err := tp.addNamedBody(key, name, value); err != nil {
+				return nil, err
+			}
+		case positionalKeyPattern.MatchString(key):
+			if err := tp.addPositionalBody(key, value); err != nil {
+				return nil, err
+			}
 		default:
-			tp.bodyParams = append(tp.bodyParams, bodyParam{name: key, value: value})
+			if err := tp.addBareBody(key, value); err != nil {
+				return nil, err
+			}
 		}
 	}
 
@@ -110,8 +128,16 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 	}
 
 	// Map iteration order is random; a deterministic payload needs a stable order for the
-	// pieces that came from more than one key.
-	sort.Slice(tp.bodyParams, func(i, j int) bool { return tp.bodyParams[i].name < tp.bodyParams[j].name })
+	// pieces that came from more than one key. Positional body params sort numerically and
+	// drop parameter_name; named ones sort by name and keep it (buildBodyComponent).
+	if tp.sawPositionalFormat {
+		sort.Slice(tp.bodyParams, func(i, j int) bool { return tp.bodyParams[i].n < tp.bodyParams[j].n })
+		if err := checkPositionalBodyContiguity(templateName, tp.bodyParams); err != nil {
+			return nil, err
+		}
+	} else {
+		sort.Slice(tp.bodyParams, func(i, j int) bool { return tp.bodyParams[i].name < tp.bodyParams[j].name })
+	}
 	sort.Slice(tp.buttons, func(i, j int) bool { return tp.buttons[i].index < tp.buttons[j].index })
 
 	return tp, nil
@@ -124,9 +150,15 @@ func (tp *templateParams) setTextHeader(key, value string) error {
 	name := ""
 	if strings.HasPrefix(key, "header:") {
 		name = strings.TrimPrefix(key, "header:")
-		if name == "" {
-			return newTemplateParamsError(tp.templateName, key, "is missing the parameter name after the colon")
+		if !bodyNamePattern.MatchString(name) {
+			return newTemplateParamsError(tp.templateName, key,
+				"parameter name %q does not match the required pattern ^[a-z_][a-z0-9_]*$", name)
 		}
+		if err := tp.markFormat(key, true); err != nil {
+			return err
+		}
+	} else if err := tp.markFormat(key, false); err != nil {
+		return err
 	}
 	tp.textHeader = &textHeaderParam{name: name, text: value}
 	tp.headerKey = key
@@ -209,11 +241,11 @@ func (tp *templateParams) buildBodyComponent() map[string]interface{} {
 	}
 	params := make([]map[string]interface{}, 0, len(tp.bodyParams))
 	for _, bp := range tp.bodyParams {
-		params = append(params, map[string]interface{}{
-			"type":           "text",
-			"text":           bp.value,
-			"parameter_name": bp.name,
-		})
+		param := map[string]interface{}{"type": "text", "text": bp.value}
+		if bp.name != "" {
+			param["parameter_name"] = bp.name
+		}
+		params = append(params, param)
 	}
 	return map[string]interface{}{"type": "body", "parameters": params}
 }
