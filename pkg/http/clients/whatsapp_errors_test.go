@@ -79,6 +79,7 @@ func TestSendTemplateMessageErrorResponse(t *testing.T) {
 		{"token", 401, `{"error":{"code":190,"error_subcode":463}}`, 190, WhatsAppErrorAuth},
 		{"token with HTTP400", 400, `{"error":{"code":190}}`, 190, WhatsAppErrorAuth},
 		{"forbidden HTML", 403, `<html>unavailable</html>`, 0, WhatsAppErrorAuth},
+		{"template missing in the language, as Meta answers it", 404, `{"error":{"message":"(#132001) Template name does not exist in the translation","type":"OAuthException","code":132001,"error_data":{"messaging_product":"whatsapp","details":"template name (orbyta_does_not_exist_v1) does not exist in it"},"fbtrace_id":"ASdFuF7f9apZCI-o5qDUnBL"}}`, 132001, WhatsAppErrorPermanent},
 		{"template parameters", 400, `{"error":{"code":132012,"message":"bad phone +391234567890","error_data":{"details":"+391234567890"}}}`, 132012, WhatsAppErrorPermanent},
 		{"rate limit", 429, `{"error":{"code":130429}}`, 130429, WhatsAppErrorThrottled},
 		{"empty rate limit", 429, ``, 0, WhatsAppErrorThrottled},
@@ -240,10 +241,19 @@ func TestWhatsAppErrorClassNamesArePersistedAndFixed(t *testing.T) {
 	}
 }
 
-// A permanent Meta code is only trusted on Meta's own refusal of the request (HTTP 400): the same
-// code in another answer keeps the bounded retry instead of archiving the message at once.
+// A permanent Meta code is only trusted on Meta's own refusal of the request (HTTP 400, or HTTP 404
+// as Meta answers 132001): the same code in another answer keeps the bounded retry instead of
+// archiving the message at once.
 func TestWhatsAppPermanentCodeRequiresBadRequest(t *testing.T) {
-	for _, status := range []int{0, 200, 302, 404, 409} {
+	for _, status := range []int{400, 404} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			err := &WhatsAppSendError{StatusCode: status, Code: 132001}
+			if got := err.Class(); got != WhatsAppErrorPermanent {
+				t.Fatalf("Class() = %v, want %v", got, WhatsAppErrorPermanent)
+			}
+		})
+	}
+	for _, status := range []int{0, 200, 302, 409} {
 		t.Run(fmt.Sprint(status), func(t *testing.T) {
 			err := &WhatsAppSendError{StatusCode: status, Code: 132001}
 			if got := err.Class(); got != WhatsAppErrorUnknown {

@@ -123,9 +123,10 @@ func (e *WhatsAppSendError) Class() WhatsAppErrorClass {
 		// 132000, 132012, 132018: template parameter count, format or value mismatch.
 		// 132001: template does not exist in the requested language.
 		// 132005, 132007: translated text too long, format character policy violated.
-		// Only Meta's own refusal of the request (HTTP 400) is trusted to be final: the same code
-		// in any other answer, such as a proxy page, keeps the bounded retry.
-		if e.StatusCode != http.StatusBadRequest {
+		// Only Meta's own refusal of the request is trusted to be final: HTTP 400, or HTTP 404,
+		// which is how Meta answers 132001 for a template missing in the requested language. The
+		// same code in any other answer, such as a proxy page, keeps the bounded retry.
+		if e.StatusCode != http.StatusBadRequest && e.StatusCode != http.StatusNotFound {
 			return WhatsAppErrorUnknown
 		}
 		return WhatsAppErrorPermanent
