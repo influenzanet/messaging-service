@@ -27,14 +27,22 @@ func parseButtonKey(key string) (index, subType, name string, ok bool) {
 	return m[1], subType, m[3], true
 }
 
+// cardButtonSubtypes are the only button subtypes a carousel card may use: a card's
+// buttons are QUICK_REPLY or URL, never copy_code/flow/CATALOG/mpm.
+var cardButtonSubtypes = map[string]bool{"url": true, "quick_reply": true}
+
 // addButton parses one "button_<i>[:subtype[:name]]" key and appends it to tp.buttons.
 // Two keys on the same index (for example "button_0" and "button_0:quick_reply") are a
-// configuration error: Meta allows only one component per button index.
-func (tp *templateParams) addButton(key, value string) error {
+// configuration error: Meta allows only one component per button index. cardRestricted is true
+// when this button is inside a carousel card, which only accepts url and quick_reply.
+func (tp *templateParams) addButton(key, value string, cardRestricted bool) error {
 	index, subType, name, ok := parseButtonKey(key)
 	if !ok {
 		return newTemplateParamsError(tp.templateName, key,
 			`is not a valid button key, expected "button_<0-9>[:<subtype>[:<name>]]"`)
+	}
+	if cardRestricted && !cardButtonSubtypes[subType] {
+		return newTemplateParamsError(tp.templateName, key, "subtype %q is not allowed inside a carousel card", subType)
 	}
 	for _, b := range tp.buttons {
 		if b.index == index {
@@ -118,4 +126,25 @@ func (tp *templateParams) addButton(key, value string) error {
 		return newTemplateParamsError(tp.templateName, key, "has an unknown button subtype %q", subType)
 	}
 	return nil
+}
+
+// buildButtonComponents turns parsed buttons into their component maps, shared by the
+// top-level template and every carousel card.
+func buildButtonComponents(buttons []buttonParam) []map[string]interface{} {
+	components := make([]map[string]interface{}, 0, len(buttons))
+	for _, b := range buttons {
+		button := map[string]interface{}{
+			"type":     "button",
+			"sub_type": b.subType,
+			"index":    b.indexValue,
+		}
+		// A nil parameters list (an empty catalog thumbnail, per Meta's catalog template docs)
+		// means "send the
+		// component with no parameters at all", not an empty array.
+		if b.parameters != nil {
+			button["parameters"] = b.parameters
+		}
+		components = append(components, button)
+	}
+	return components
 }

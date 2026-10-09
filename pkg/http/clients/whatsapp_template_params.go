@@ -46,11 +46,18 @@ type templateParams struct {
 	limitedTimeOfferMS *int64
 	buttons            []buttonParam
 	voiceCallParams    []map[string]interface{}
+	// rawCarouselCards collects "card_<c>.<key>" values during parsing, keyed by card index
+	// and stripped of the "card_<c>." prefix; carousel (built after the main loop) turns it
+	// into the "cards" array buildComponents sends. See whatsapp_template_carousel.go.
+	rawCarouselCards map[int]map[string]string
+	carousel         []map[string]interface{}
 
 	// sawNamedFormat/sawPositionalFormat track whether any textual parameter seen so far
-	// (header text, body) is NAMED or POSITIONAL; a message setting both is rejected.
-	sawNamedFormat      bool
-	sawPositionalFormat bool
+	// (header text, body, and every carousel card's body) is NAMED or POSITIONAL; a message
+	// setting both is rejected. They are pointers so that each card, parsed into its own
+	// *templateParams, can share the top-level template's two flags.
+	sawNamedFormat      *bool
+	sawPositionalFormat *bool
 }
 
 // newTemplateParamsError reports a configuration mistake by naming the key only: a value can
@@ -62,7 +69,7 @@ func newTemplateParamsError(templateName, key, format string, args ...interface{
 // parseTemplateParams classifies every key of a flat whatsappParams map and validates it,
 // without yet shaping Meta's JSON (that is buildComponents' job).
 func parseTemplateParams(templateName string, params map[string]string) (*templateParams, error) {
-	tp := &templateParams{templateName: templateName}
+	tp := &templateParams{templateName: templateName, sawNamedFormat: new(bool), sawPositionalFormat: new(bool)}
 
 	documentFilename, hasDocumentFilename := params["header_document_filename"]
 
@@ -115,11 +122,23 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 			if err := tp.setVoiceCall(key, value); err != nil {
 				return nil, err
 			}
+		case cardKeyPattern.MatchString(key):
+			m := cardKeyPattern.FindStringSubmatch(key)
+			idx, _ := strconv.Atoi(m[1]) // the pattern guarantees a single digit
+			if tp.rawCarouselCards == nil {
+				tp.rawCarouselCards = map[int]map[string]string{}
+			}
+			if tp.rawCarouselCards[idx] == nil {
+				tp.rawCarouselCards[idx] = map[string]string{}
+			}
+			tp.rawCarouselCards[idx][m[2]] = value
+		case strings.HasPrefix(key, "card_"):
+			return nil, newTemplateParamsError(templateName, key, `is not a valid card key, expected "card_<0-9>.<key>"`)
 		case strings.HasPrefix(base, "button_"):
 			if suffix != "" {
 				return nil, newTemplateParamsError(templateName, key, "does not accept a value type suffix")
 			}
-			if err := tp.addButton(key, value); err != nil {
+			if err := tp.addButton(key, value, false); err != nil {
 				return nil, err
 			}
 		case strings.HasPrefix(base, "body:"):
@@ -151,7 +170,7 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 	// Map iteration order is random; a deterministic payload needs a stable order for the
 	// pieces that came from more than one key. Positional body params sort numerically and
 	// drop parameter_name; named ones sort by name and keep it (buildBodyComponent).
-	if tp.sawPositionalFormat {
+	if *tp.sawPositionalFormat {
 		sort.Slice(tp.bodyParams, func(i, j int) bool { return tp.bodyParams[i].n < tp.bodyParams[j].n })
 		if err := checkPositionalBodyContiguity(templateName, tp.bodyParams); err != nil {
 			return nil, err
@@ -160,6 +179,14 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 		sort.Slice(tp.bodyParams, func(i, j int) bool { return tp.bodyParams[i].name < tp.bodyParams[j].name })
 	}
 	sort.Slice(tp.buttons, func(i, j int) bool { return tp.buttons[i].index < tp.buttons[j].index })
+
+	if tp.rawCarouselCards != nil {
+		cards, err := buildCarouselCards(tp, tp.rawCarouselCards)
+		if err != nil {
+			return nil, err
+		}
+		tp.carousel = cards
+	}
 
 	return tp, nil
 }
@@ -207,19 +234,13 @@ func (tp *templateParams) buildComponents() []map[string]interface{} {
 			},
 		})
 	}
-	for _, b := range tp.buttons {
-		button := map[string]interface{}{
-			"type":     "button",
-			"sub_type": b.subType,
-			"index":    b.indexValue,
-		}
-		// A nil parameters list (an empty catalog thumbnail) means "send the
-		// component with no parameters at all", not an empty array.
-		if b.parameters != nil {
-			button["parameters"] = b.parameters
-		}
-		components = append(components, button)
+	if tp.carousel != nil {
+		components = append(components, map[string]interface{}{
+			"type":  "carousel",
+			"cards": tp.carousel,
+		})
 	}
+	components = append(components, buildButtonComponents(tp.buttons)...)
 	if tp.voiceCallParams != nil {
 		components = append(components, map[string]interface{}{
 			"type":       "button",

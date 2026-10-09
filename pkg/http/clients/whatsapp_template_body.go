@@ -36,17 +36,20 @@ func isReservedBodyKey(key string) bool {
 
 // markFormat records whether a textual parameter is NAMED or POSITIONAL and rejects a message
 // that mixes both: Meta's parameter_format is a single, per-template setting.
+// sawNamedFormat/sawPositionalFormat are pointers so that every carousel card can share the
+// same two flags as the top-level template: the coherence rule spans the whole message, not
+// just one component (this includes each carousel card's own body).
 func (tp *templateParams) markFormat(key string, named bool) error {
 	if named {
-		if tp.sawPositionalFormat {
+		if *tp.sawPositionalFormat {
 			return newFormatMixError(tp.templateName, key)
 		}
-		tp.sawNamedFormat = true
+		*tp.sawNamedFormat = true
 	} else {
-		if tp.sawNamedFormat {
+		if *tp.sawNamedFormat {
 			return newFormatMixError(tp.templateName, key)
 		}
-		tp.sawPositionalFormat = true
+		*tp.sawPositionalFormat = true
 	}
 	return nil
 }
