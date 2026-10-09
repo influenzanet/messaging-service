@@ -23,8 +23,8 @@ var buttonIndexPattern = regexp.MustCompile(`^[0-9]$`)
 
 // textHeaderParam is a parsed text HEADER parameter; name is empty for a positional header.
 type textHeaderParam struct {
-	name string
-	text string
+	name  string
+	value paramValue
 }
 
 // mediaHeaderParam is a parsed media HEADER parameter sent by public link.
@@ -39,7 +39,7 @@ type mediaHeaderParam struct {
 type bodyParam struct {
 	name  string
 	n     int
-	value string
+	value paramValue
 }
 
 // buttonParam is a URL button parameter at a given index.
@@ -86,32 +86,44 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 	documentFilename, hasDocumentFilename := params["header_document_filename"]
 
 	for key, value := range params {
+		// The optional "@<type>" suffix only makes sense on a key that produces a
+		// textual parameter; base is the key with it stripped, used for classification.
+		base, suffix := splitValueTypeSuffix(key)
 		switch {
-		case key == "header" || strings.HasPrefix(key, "header:"):
-			if err := tp.setTextHeader(key, value); err != nil {
+		case base == "header" || strings.HasPrefix(base, "header:"):
+			if err := tp.setTextHeader(key, base, suffix, value); err != nil {
 				return nil, err
 			}
-		case key == "header_document_filename":
+		case base == "header_document_filename":
+			if suffix != "" {
+				return nil, newTemplateParamsError(templateName, key, "does not accept a value type suffix")
+			}
 			// Applied below, once the header key is known.
-		case strings.HasPrefix(key, "header_"):
+		case strings.HasPrefix(base, "header_"):
+			if suffix != "" {
+				return nil, newTemplateParamsError(templateName, key, "does not accept a value type suffix")
+			}
 			if err := tp.setMediaHeader(key, value); err != nil {
 				return nil, err
 			}
-		case strings.HasPrefix(key, "button_"):
+		case strings.HasPrefix(base, "button_"):
+			if suffix != "" {
+				return nil, newTemplateParamsError(templateName, key, "does not accept a value type suffix")
+			}
 			if err := tp.addButton(key, value); err != nil {
 				return nil, err
 			}
-		case strings.HasPrefix(key, "body:"):
-			name := strings.TrimPrefix(key, "body:")
-			if err := tp.addNamedBody(key, name, value); err != nil {
+		case strings.HasPrefix(base, "body:"):
+			name := strings.TrimPrefix(base, "body:")
+			if err := tp.addNamedBody(key, name, suffix, value); err != nil {
 				return nil, err
 			}
-		case positionalKeyPattern.MatchString(key):
-			if err := tp.addPositionalBody(key, value); err != nil {
+		case positionalKeyPattern.MatchString(base):
+			if err := tp.addPositionalBody(key, base, suffix, value); err != nil {
 				return nil, err
 			}
 		default:
-			if err := tp.addBareBody(key, value); err != nil {
+			if err := tp.addBareBody(key, base, suffix, value); err != nil {
 				return nil, err
 			}
 		}
@@ -143,13 +155,13 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 	return tp, nil
 }
 
-func (tp *templateParams) setTextHeader(key, value string) error {
+func (tp *templateParams) setTextHeader(key, base, suffix, value string) error {
 	if tp.headerKey != "" {
 		return newHeaderClashError(tp.templateName, tp.headerKey, key)
 	}
 	name := ""
-	if strings.HasPrefix(key, "header:") {
-		name = strings.TrimPrefix(key, "header:")
+	if strings.HasPrefix(base, "header:") {
+		name = strings.TrimPrefix(base, "header:")
 		if !bodyNamePattern.MatchString(name) {
 			return newTemplateParamsError(tp.templateName, key,
 				"parameter name %q does not match the required pattern ^[a-z_][a-z0-9_]*$", name)
@@ -160,7 +172,11 @@ func (tp *templateParams) setTextHeader(key, value string) error {
 	} else if err := tp.markFormat(key, false); err != nil {
 		return err
 	}
-	tp.textHeader = &textHeaderParam{name: name, text: value}
+	pv, err := parseParamValue(tp.templateName, key, suffix, value)
+	if err != nil {
+		return err
+	}
+	tp.textHeader = &textHeaderParam{name: name, value: pv}
 	tp.headerKey = key
 	return nil
 }
@@ -214,7 +230,7 @@ func (tp *templateParams) buildComponents() []map[string]interface{} {
 func (tp *templateParams) buildHeaderComponent() map[string]interface{} {
 	switch {
 	case tp.textHeader != nil:
-		param := map[string]interface{}{"type": "text", "text": tp.textHeader.text}
+		param := tp.textHeader.value.build()
 		if tp.textHeader.name != "" {
 			param["parameter_name"] = tp.textHeader.name
 		}
@@ -241,7 +257,7 @@ func (tp *templateParams) buildBodyComponent() map[string]interface{} {
 	}
 	params := make([]map[string]interface{}, 0, len(tp.bodyParams))
 	for _, bp := range tp.bodyParams {
-		param := map[string]interface{}{"type": "text", "text": bp.value}
+		param := bp.value.build()
 		if bp.name != "" {
 			param["parameter_name"] = bp.name
 		}

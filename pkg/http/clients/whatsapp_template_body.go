@@ -56,24 +56,30 @@ func newFormatMixError(templateName, key string) error {
 		"mixes a positional parameter with a named one; a template is NAMED or POSITIONAL, never both")
 }
 
-// addPositionalBody adds a body parameter keyed by its 1-based position. Contiguity
+// addPositionalBody adds a body parameter keyed by its 1-based position. base is the
+// numeric key (suffix already stripped); key is the original, for error messages. Contiguity
 // (1..N, no gaps) is checked once all keys are known, in checkPositionalBodyContiguity.
-func (tp *templateParams) addPositionalBody(key string, value string) error {
+func (tp *templateParams) addPositionalBody(key, base, suffix, value string) error {
 	if err := tp.markFormat(key, false); err != nil {
 		return err
 	}
-	n, err := strconv.Atoi(key)
+	n, err := strconv.Atoi(base)
 	if err != nil {
 		// positionalKeyPattern already guarantees this parses; defensive only.
 		return newTemplateParamsError(tp.templateName, key, "is not a valid positional index")
 	}
-	tp.bodyParams = append(tp.bodyParams, bodyParam{n: n, value: value})
+	pv, err := parseParamValue(tp.templateName, key, suffix, value)
+	if err != nil {
+		return err
+	}
+	tp.bodyParams = append(tp.bodyParams, bodyParam{n: n, value: pv})
 	return nil
 }
 
 // addNamedBody adds a body parameter named explicitly: originalKey is the whatsappParams key
-// (for error messages), name is the parameter name Meta will see.
-func (tp *templateParams) addNamedBody(originalKey, name, value string) error {
+// (for error messages), name is the parameter name Meta will see, suffix its optional value
+// type.
+func (tp *templateParams) addNamedBody(originalKey, name, suffix, value string) error {
 	if !bodyNamePattern.MatchString(name) {
 		return newTemplateParamsError(tp.templateName, originalKey,
 			"parameter name %q does not match the required pattern ^[a-z_][a-z0-9_]*$", name)
@@ -81,17 +87,22 @@ func (tp *templateParams) addNamedBody(originalKey, name, value string) error {
 	if err := tp.markFormat(originalKey, true); err != nil {
 		return err
 	}
-	tp.bodyParams = append(tp.bodyParams, bodyParam{name: name, value: value})
+	pv, err := parseParamValue(tp.templateName, originalKey, suffix, value)
+	if err != nil {
+		return err
+	}
+	tp.bodyParams = append(tp.bodyParams, bodyParam{name: name, value: pv})
 	return nil
 }
 
 // addBareBody handles a key that matched none of the other prefixes: either a reserved name
-// that must be spelled "body:<name>", or a plain named body parameter.
-func (tp *templateParams) addBareBody(key, value string) error {
-	if isReservedBodyKey(key) {
-		return newTemplateParamsError(tp.templateName, key, `is reserved, write it as "body:%s"`, key)
+// that must be spelled "body:<name>", or a plain named body parameter. base/suffix are the key
+// with its optional "@<type>" value-type suffix already split off.
+func (tp *templateParams) addBareBody(key, base, suffix, value string) error {
+	if isReservedBodyKey(base) {
+		return newTemplateParamsError(tp.templateName, key, `is reserved, write it as "body:%s"`, base)
 	}
-	return tp.addNamedBody(key, key, value)
+	return tp.addNamedBody(key, base, suffix, value)
 }
 
 // checkPositionalBodyContiguity requires the positional body keys to be exactly 1..N, with no
