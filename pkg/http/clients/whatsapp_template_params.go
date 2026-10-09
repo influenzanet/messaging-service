@@ -27,10 +27,12 @@ type textHeaderParam struct {
 	value paramValue
 }
 
-// mediaHeaderParam is a parsed media HEADER parameter sent by public link.
+// mediaHeaderParam is a parsed media HEADER parameter, sent either by public link or by an
+// uploaded media id ("header_<type>_id").
 type mediaHeaderParam struct {
 	mediaType string
-	link      string
+	value     string // the link, or the id when byID is true
+	byID      bool
 	filename  string
 }
 
@@ -185,13 +187,32 @@ func (tp *templateParams) setMediaHeader(key, value string) error {
 	if tp.headerKey != "" {
 		return newHeaderClashError(tp.templateName, tp.headerKey, key)
 	}
-	mediaType := strings.TrimPrefix(key, "header_")
-	if !headerMediaTypes[mediaType] {
+	mediaType, byID, ok := parseMediaHeaderKey(key)
+	if !ok {
 		return newTemplateParamsError(tp.templateName, key, "asks for header media type %q, which Meta does not accept", mediaType)
 	}
-	tp.mediaHeader = &mediaHeaderParam{mediaType: mediaType, link: value}
+	if byID && value == "" {
+		return newTemplateParamsError(tp.templateName, key, "must not be empty")
+	}
+	tp.mediaHeader = &mediaHeaderParam{mediaType: mediaType, value: value, byID: byID}
 	tp.headerKey = key
 	return nil
+}
+
+// parseMediaHeaderKey splits a "header_<type>" or "header_<type>_id" key into its media type
+// and whether it is the by-id form; ok is false when the type is not one Meta accepts.
+func parseMediaHeaderKey(key string) (mediaType string, byID bool, ok bool) {
+	rest := strings.TrimPrefix(key, "header_")
+	if trimmed := strings.TrimSuffix(rest, "_id"); trimmed != rest {
+		if headerMediaTypes[trimmed] {
+			return trimmed, true, true
+		}
+		return rest, true, false
+	}
+	if headerMediaTypes[rest] {
+		return rest, false, true
+	}
+	return rest, false, false
 }
 
 func (tp *templateParams) addButton(key, value string) error {
@@ -236,7 +257,12 @@ func (tp *templateParams) buildHeaderComponent() map[string]interface{} {
 		}
 		return map[string]interface{}{"type": "header", "parameters": []map[string]interface{}{param}}
 	case tp.mediaHeader != nil:
-		media := map[string]interface{}{"link": tp.mediaHeader.link}
+		media := map[string]interface{}{}
+		if tp.mediaHeader.byID {
+			media["id"] = tp.mediaHeader.value
+		} else {
+			media["link"] = tp.mediaHeader.value
+		}
 		if tp.mediaHeader.filename != "" {
 			media["filename"] = tp.mediaHeader.filename
 		}
