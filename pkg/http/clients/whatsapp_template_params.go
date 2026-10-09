@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -56,12 +57,13 @@ type templateParams struct {
 	templateName string
 	// headerKey is the original key that set the header, kept only to name both keys in a
 	// "two headers" error.
-	headerKey      string
-	textHeader     *textHeaderParam
-	mediaHeader    *mediaHeaderParam
-	locationHeader map[string]interface{}
-	bodyParams     []bodyParam
-	buttons        []buttonParam
+	headerKey          string
+	textHeader         *textHeaderParam
+	mediaHeader        *mediaHeaderParam
+	locationHeader     map[string]interface{}
+	bodyParams         []bodyParam
+	limitedTimeOfferMS *int64
+	buttons            []buttonParam
 
 	// sawNamedFormat/sawPositionalFormat track whether any textual parameter seen so far
 	// (header text, body) is NAMED or POSITIONAL; a message setting both is rejected.
@@ -113,6 +115,13 @@ func parseTemplateParams(templateName string, params map[string]string) (*templa
 				return nil, newTemplateParamsError(templateName, key, "does not accept a value type suffix")
 			}
 			if err := tp.setMediaHeader(key, value); err != nil {
+				return nil, err
+			}
+		case base == "limited_time_offer":
+			if suffix != "" {
+				return nil, newTemplateParamsError(templateName, key, "does not accept a value type suffix")
+			}
+			if err := tp.setLimitedTimeOffer(key, value); err != nil {
 				return nil, err
 			}
 		case strings.HasPrefix(base, "button_"):
@@ -221,6 +230,17 @@ func (tp *templateParams) setLocationHeader(key, value string) error {
 	return nil
 }
 
+// setLimitedTimeOffer parses the "limited_time_offer" key: a positive integer, the expiration
+// as a UNIX timestamp in milliseconds.
+func (tp *templateParams) setLimitedTimeOffer(key, value string) error {
+	ms, err := strconv.ParseInt(value, 10, 64)
+	if err != nil || ms <= 0 {
+		return newTemplateParamsError(tp.templateName, key, "must be a positive integer (milliseconds)")
+	}
+	tp.limitedTimeOfferMS = &ms
+	return nil
+}
+
 // parseMediaHeaderKey splits a "header_<type>" or "header_<type>_id" key into its media type
 // and whether it is the by-id form; ok is false when the type is not one Meta accepts.
 func parseMediaHeaderKey(key string) (mediaType string, byID bool, ok bool) {
@@ -238,7 +258,7 @@ func parseMediaHeaderKey(key string) (mediaType string, byID bool, ok bool) {
 }
 
 // buildComponents turns the parsed, validated params into Meta's "components" array, in the
-// order header, body, buttons.
+// order header, body, limited_time_offer, carousel, buttons, voice_call.
 func (tp *templateParams) buildComponents() []map[string]interface{} {
 	var components []map[string]interface{}
 
@@ -247,6 +267,16 @@ func (tp *templateParams) buildComponents() []map[string]interface{} {
 	}
 	if body := tp.buildBodyComponent(); body != nil {
 		components = append(components, body)
+	}
+	if tp.limitedTimeOfferMS != nil {
+		components = append(components, map[string]interface{}{
+			"type": "limited_time_offer",
+			"parameters": []map[string]interface{}{
+				{"type": "limited_time_offer", "limited_time_offer": map[string]interface{}{
+					"expiration_time_ms": *tp.limitedTimeOfferMS,
+				}},
+			},
+		})
 	}
 	for _, b := range tp.buttons {
 		components = append(components, map[string]interface{}{
