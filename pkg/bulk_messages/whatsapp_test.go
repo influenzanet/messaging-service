@@ -275,6 +275,24 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 		}
 	})
 
+	t.Run("invalid template params drop the message, same as a missing variable", func(t *testing.T) {
+		whatsAppEnabled = true
+		defer func() { whatsAppEnabled = false }()
+		// "button_10" is not a valid button key: queue-time validation must catch this
+		// before the message is ever written to the outgoing queue.
+		template := types.EmailTemplate{
+			MessageType:          "weekly",
+			DefaultLanguage:      "it",
+			Translations:         []types.LocalizedTemplate{{Lang: "it"}},
+			WhatsAppTemplateName: "influenzanet_weekly_v1",
+			WhatsAppParams:       map[string]string{"button_10": "=x"},
+		}
+		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
+		if got != nil {
+			t.Errorf("expected nil for invalid template params, got a message to %q", got.ToPhoneNumber)
+		}
+	})
+
 	t.Run("missing variable still drops the message", func(t *testing.T) {
 		whatsAppEnabled = true
 		defer func() { whatsAppEnabled = false }()

@@ -16,6 +16,7 @@ import (
 	"github.com/influenzanet/go-utils/pkg/constants"
 	api "github.com/influenzanet/messaging-service/pkg/api/messaging_service"
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
+	"github.com/influenzanet/messaging-service/pkg/http/clients"
 	"github.com/influenzanet/messaging-service/pkg/templates"
 	"github.com/influenzanet/messaging-service/pkg/types"
 	studyAPI "github.com/influenzanet/study-service/pkg/api"
@@ -604,6 +605,16 @@ func prepareOutgoingWhatsApp(
 			return nil
 		}
 		namedParams[paramName] = value
+	}
+
+	// Queue-time validation: reject bad configuration on the resolved
+	// values before anything is written to the queue, with the same outcome as a missing
+	// variable - no WhatsApp message, e-mail fallback - since both are configuration
+	// problems the scheduler cannot fix by retrying. The error names keys only (clients
+	// package rule), so logging it in full is safe.
+	if err := clients.ValidateTemplateParams(template.WhatsAppTemplateName, namedParams); err != nil {
+		logger.Warning.Printf("prepareOutgoingWhatsApp: invalid template params, user=%s type=%s: %v", user.Id, template.MessageType, err)
+		return nil
 	}
 
 	lang := resolveWhatsAppLang(user, template)
