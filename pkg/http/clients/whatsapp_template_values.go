@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 // splitValueTypeSuffix splits a key on its last "@", the separator for the optional value type
@@ -282,6 +283,47 @@ func parseProductValue(raw string) (map[string]interface{}, error) {
 		return nil, fmt.Errorf("catalog_id %v", err)
 	}
 	return map[string]interface{}{"product_retailer_id": productID, "catalog_id": catalogID}, nil
+}
+
+// parseVoiceCallValue decodes the "voice_call" JSON object: optional ttl_minutes (an
+// integer, 1-43200) and optional payload (a string, <= 512 characters), at least one of the
+// two, in that order - the order Meta's VOICE_CALL button parameters are sent in.
+func parseVoiceCallValue(raw string) ([]map[string]interface{}, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+		return nil, errors.New("is not a JSON object")
+	}
+	for name := range fields {
+		if name != "ttl_minutes" && name != "payload" {
+			return nil, fmt.Errorf("has an unknown field %q", name)
+		}
+	}
+	if len(fields) == 0 {
+		return nil, errors.New("must set at least one of ttl_minutes or payload")
+	}
+
+	var params []map[string]interface{}
+	if raw, ok := fields["ttl_minutes"]; ok {
+		ttl, err := decodeJSONInteger(raw)
+		if err != nil {
+			return nil, fmt.Errorf("ttl_minutes %v", err)
+		}
+		if ttl < 1 || ttl > 43200 {
+			return nil, errors.New("ttl_minutes must be between 1 and 43200")
+		}
+		params = append(params, map[string]interface{}{"type": "ttl_minutes", "ttl_minutes": ttl})
+	}
+	if raw, ok := fields["payload"]; ok {
+		var payload string
+		if isJSONNull(raw) || json.Unmarshal(raw, &payload) != nil {
+			return nil, errors.New("payload must be a string")
+		}
+		if utf8.RuneCountInString(payload) > 512 {
+			return nil, errors.New("payload must be 512 characters or fewer")
+		}
+		params = append(params, map[string]interface{}{"type": "payload", "payload": payload})
+	}
+	return params, nil
 }
 
 // decodeJSONArray requires a present field holding a JSON array.
