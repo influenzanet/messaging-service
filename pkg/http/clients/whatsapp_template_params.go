@@ -3,7 +3,6 @@ package clients
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 )
@@ -16,10 +15,6 @@ var ErrInvalidTemplateParams = errors.New("invalid whatsapp template params")
 // public link. A "header_<type>" key with any other suffix is a configuration mistake, not a
 // new media type.
 var headerMediaTypes = map[string]bool{"image": true, "video": true, "document": true}
-
-// buttonIndexPattern matches the single digit, 0-9, that Meta allows after "button_": a
-// template has at most 10 buttons, numbered without leading zeros.
-var buttonIndexPattern = regexp.MustCompile(`^[0-9]$`)
 
 // textHeaderParam is a parsed text HEADER parameter; name is empty for a positional header.
 type textHeaderParam struct {
@@ -44,10 +39,14 @@ type bodyParam struct {
 	value paramValue
 }
 
-// buttonParam is a URL button parameter at a given index.
+// buttonParam is one "button_<i>[:subtype[:name]]" button, already shaped into its Meta
+// parameters array; see whatsapp_template_buttons.go.
 type buttonParam struct {
-	index string
-	value string
+	index      string      // the original digit, for sorting and duplicate-index detection
+	subType    string      // "url" (default), "quick_reply", ...
+	indexValue interface{} // what Meta expects in "index": a string for url/quick_reply; some
+	// other subtypes use a JSON integer instead.
+	parameters []map[string]interface{}
 }
 
 // templateParams is a flat whatsappParams map, parsed and validated into its typed pieces.
@@ -238,15 +237,6 @@ func parseMediaHeaderKey(key string) (mediaType string, byID bool, ok bool) {
 	return rest, false, false
 }
 
-func (tp *templateParams) addButton(key, value string) error {
-	index := strings.TrimPrefix(key, "button_")
-	if !buttonIndexPattern.MatchString(index) {
-		return newTemplateParamsError(tp.templateName, key, `is not a valid button key, expected "button_<0-9>"`)
-	}
-	tp.buttons = append(tp.buttons, buttonParam{index: index, value: value})
-	return nil
-}
-
 // buildComponents turns the parsed, validated params into Meta's "components" array, in the
 // order header, body, buttons.
 func (tp *templateParams) buildComponents() []map[string]interface{} {
@@ -260,12 +250,10 @@ func (tp *templateParams) buildComponents() []map[string]interface{} {
 	}
 	for _, b := range tp.buttons {
 		components = append(components, map[string]interface{}{
-			"type":     "button",
-			"sub_type": "url",
-			"index":    b.index,
-			"parameters": []map[string]interface{}{
-				{"type": "text", "text": b.value},
-			},
+			"type":       "button",
+			"sub_type":   b.subType,
+			"index":      b.indexValue,
+			"parameters": b.parameters,
 		})
 	}
 	return components
