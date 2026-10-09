@@ -261,6 +261,18 @@ func parseFlowValue(raw string) (map[string]interface{}, error) {
 	return action, nil
 }
 
+// decodeJSONArray requires a present field holding a JSON array.
+func decodeJSONArray(raw json.RawMessage, fieldName string) ([]json.RawMessage, error) {
+	if raw == nil {
+		return nil, fmt.Errorf("%s is required", fieldName)
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, fmt.Errorf("%s must be a JSON array", fieldName)
+	}
+	return items, nil
+}
+
 func isJSONIntegerLiteral(s string) bool {
 	if s == "" {
 		return false

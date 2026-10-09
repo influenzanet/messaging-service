@@ -86,6 +86,34 @@ func (tp *templateParams) addButton(key, value string) error {
 			index: index, subType: "flow", indexValue: index,
 			parameters: []map[string]interface{}{{"type": "action", "action": action}},
 		})
+	case "catalog":
+		if name != "" {
+			return newTemplateParamsError(tp.templateName, key, "subtype %q does not take a parameter name", subType)
+		}
+		idx, _ := strconv.Atoi(index)
+		button := buttonParam{index: index, subType: "CATALOG", indexValue: idx}
+		// Per Meta's catalog template docs, an empty thumbnail sends the component without
+		// "parameters" at all, so
+		// Meta falls back to the catalog's first product.
+		if value != "" {
+			button.parameters = []map[string]interface{}{{"type": "action", "action": map[string]interface{}{
+				"thumbnail_product_retailer_id": value,
+			}}}
+		}
+		tp.buttons = append(tp.buttons, button)
+	case "mpm":
+		if name != "" {
+			return newTemplateParamsError(tp.templateName, key, "subtype %q does not take a parameter name", subType)
+		}
+		action, err := parseMPMValue(value)
+		if err != nil {
+			return newTemplateParamsError(tp.templateName, key, "mpm value: %v", err)
+		}
+		idx, _ := strconv.Atoi(index)
+		tp.buttons = append(tp.buttons, buttonParam{
+			index: index, subType: "mpm", indexValue: idx,
+			parameters: []map[string]interface{}{{"type": "action", "action": action}},
+		})
 	default:
 		return newTemplateParamsError(tp.templateName, key, "has an unknown button subtype %q", subType)
 	}

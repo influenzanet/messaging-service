@@ -279,12 +279,17 @@ func (tp *templateParams) buildComponents() []map[string]interface{} {
 		})
 	}
 	for _, b := range tp.buttons {
-		components = append(components, map[string]interface{}{
-			"type":       "button",
-			"sub_type":   b.subType,
-			"index":      b.indexValue,
-			"parameters": b.parameters,
-		})
+		button := map[string]interface{}{
+			"type":     "button",
+			"sub_type": b.subType,
+			"index":    b.indexValue,
+		}
+		// A nil parameters list (an empty catalog thumbnail) means "send the
+		// component with no parameters at all", not an empty array.
+		if b.parameters != nil {
+			button["parameters"] = b.parameters
+		}
+		components = append(components, button)
 	}
 	return components
 }
