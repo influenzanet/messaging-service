@@ -62,6 +62,17 @@ func parseParamValue(templateName, key, suffix, value string) (paramValue, error
 	}
 }
 
+// checkNamedValueType refuses value types Meta does not accept on a named parameter: a real send
+// of a date_time parameter with a parameter_name is refused with error 100 ("Parameter name is
+// missing or empty"), while the same date_time in a positional template is delivered.
+func checkNamedValueType(templateName, key, suffix string) error {
+	if suffix == "date_time" {
+		return newTemplateParamsError(templateName, key,
+			"uses @date_time, which Meta accepts only in templates with positional parameters")
+	}
+	return nil
+}
+
 var currencyCodePattern = regexp.MustCompile(`^[A-Z]{3}$`)
 
 // parseCurrencyValue decodes a strict "@currency" JSON object: exactly fallback_value (a

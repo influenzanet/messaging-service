@@ -90,6 +90,9 @@ func (tp *templateParams) addNamedBody(originalKey, name, suffix, value string) 
 	if err := tp.markFormat(originalKey, true); err != nil {
 		return err
 	}
+	if err := checkNamedValueType(tp.templateName, originalKey, suffix); err != nil {
+		return err
+	}
 	pv, err := parseParamValue(tp.templateName, originalKey, suffix, value)
 	if err != nil {
 		return err

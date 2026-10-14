@@ -44,6 +44,9 @@ func (tp *templateParams) setTextHeader(key, base, suffix, value string) error {
 		if err := tp.markFormat(key, true); err != nil {
 			return err
 		}
+		if err := checkNamedValueType(tp.templateName, key, suffix); err != nil {
+			return err
+		}
 	} else if err := tp.markFormat(key, false); err != nil {
 		return err
 	}

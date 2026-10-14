@@ -282,11 +282,12 @@ BODY):
 ```
 
 **Payload fragment** (`whatsapp_template_value_types_test.go`
-`TestValueTypeSuffixPayload`, "currency and date_time body params, from Meta's example"):
+`TestValueTypeSuffixPayload`, "currency on a named body param"; delivered by a real send on the
+test number):
 
 ```json
 [{ "type": "body", "parameters": [
-  { "type": "date_time", "date_time": { "fallback_value": "31 ottobre" }, "parameter_name": "due" },
+  { "type": "text", "text": "31 ottobre", "parameter_name": "due" },
   { "type": "currency", "currency": { "fallback_value": "€10,50", "code": "EUR", "amount_1000": 10500 }, "parameter_name": "total" }
 ]}]
 ```
@@ -295,24 +296,30 @@ BODY):
 
 **Validation.** The value is plain text and must not be empty; it becomes the `fallback_value` of
 a `date_time` object. The Cloud API always uses the fallback value — there is no structured date
-component sent.
+component sent. `@date_time` is accepted **only on positional keys** (`<n>@date_time`,
+`header@date_time`): on a named key (`<name>@date_time`, `body:<name>@date_time`,
+`header:<name>@date_time`) the message is refused before any request to Meta.
+
+Why: a real send on the test number of a template with named parameters and a `date_time`
+parameter carrying its `parameter_name` was refused by Meta with error 100 ("Parameter name is
+missing or empty"); the same `date_time` value in a template with positional parameters was
+delivered. `@currency` on a named key was delivered.
 
 **`whatsappParams`:**
 
 ```json
-{ "due@date_time": "31 ottobre" }
+{ "1": "settimanale", "2@date_time": "31 ottobre" }
 ```
 
-**Payload fragment** (`whatsapp_template_value_types_test.go`, "date_time suffix on a named
-header"):
+**Payload fragment** (`whatsapp_template_value_types_test.go`, "date_time on a positional body
+param"):
 
 ```json
-[{ "type": "header", "parameters": [{ "type": "date_time", "date_time": { "fallback_value": "31 ottobre" }, "parameter_name": "due" }] }]
+[{ "type": "body", "parameters": [
+  { "type": "text", "text": "settimanale" },
+  { "type": "date_time", "date_time": { "fallback_value": "31 ottobre" } }
+]}]
 ```
-
-Note: this example applies `@date_time` to a header; this is not confirmed by Meta's
-documentation for a HEADER component specifically — it
-is implemented per the BODY/carousel-body shape Meta does confirm.
 
 ---
 

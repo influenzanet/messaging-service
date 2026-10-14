@@ -17,19 +17,32 @@ func TestValueTypeSuffixPayload(t *testing.T) {
 		want   string
 	}{
 		{
-			// This example's values come from Meta's docs; named body parameters
-			// are matched by parameter_name, so their array order is immaterial to Meta
-			// and here follows the deterministic alphabetical sort (due, total).
-			name: "currency and date_time body params, from Meta's example",
+			// Named body parameters are matched by parameter_name; currency is accepted by Meta in a
+			// template with named parameters (verified with a real send on the test number).
+			name: "currency on a named body param",
 			params: map[string]string{
 				"total@currency": `{"fallback_value":"€10,50","code":"EUR","amount_1000":10500}`,
-				"due@date_time":  "31 ottobre",
+				"due":            "31 ottobre",
 			},
 			want: `{"messaging_product":"whatsapp","to":"+391234567890","type":"template","template":{
 				"name":"tpl","language":{"code":"it"},"components":[
 				{"type":"body","parameters":[
-				  {"type":"date_time","date_time":{"fallback_value":"31 ottobre"},"parameter_name":"due"},
+				  {"type":"text","text":"31 ottobre","parameter_name":"due"},
 				  {"type":"currency","currency":{"fallback_value":"€10,50","code":"EUR","amount_1000":10500},"parameter_name":"total"}]}]}}`,
+		},
+		{
+			// Meta accepts date_time only in a template with positional parameters (a real send with a
+			// named date_time parameter is refused with error 100).
+			name: "date_time on a positional body param",
+			params: map[string]string{
+				"1":           "settimanale",
+				"2@date_time": "31 ottobre",
+			},
+			want: `{"messaging_product":"whatsapp","to":"+391234567890","type":"template","template":{
+				"name":"tpl","language":{"code":"it"},"components":[
+				{"type":"body","parameters":[
+				  {"type":"text","text":"settimanale"},
+				  {"type":"date_time","date_time":{"fallback_value":"31 ottobre"}}]}]}}`,
 		},
 		{
 			name:   "explicit @text suffix behaves like the default",
@@ -46,11 +59,11 @@ func TestValueTypeSuffixPayload(t *testing.T) {
 				{"type":"body","parameters":[{"type":"currency","currency":{"fallback_value":"10","code":"EUR","amount_1000":1000}}]}]}}`,
 		},
 		{
-			name:   "date_time suffix on a named header",
-			params: map[string]string{"header:due@date_time": "31 ottobre"},
+			name:   "date_time suffix on a positional header",
+			params: map[string]string{"header@date_time": "31 ottobre"},
 			want: `{"messaging_product":"whatsapp","to":"+391234567890","type":"template","template":{
 				"name":"tpl","language":{"code":"it"},"components":[
-				{"type":"header","parameters":[{"type":"date_time","date_time":{"fallback_value":"31 ottobre"},"parameter_name":"due"}]}]}}`,
+				{"type":"header","parameters":[{"type":"date_time","date_time":{"fallback_value":"31 ottobre"}}]}]}}`,
 		},
 	}
 	for _, tc := range cases {
@@ -77,7 +90,10 @@ func TestValueTypeSuffixRejectedBeforeHTTP(t *testing.T) {
 		"currency: lowercase code":           {"total@currency": `{"fallback_value":"x","code":"eur","amount_1000":10}`},
 		"currency: amount as string":         {"total@currency": `{"fallback_value":"x","code":"EUR","amount_1000":"10"}`},
 		"currency: amount as float":          {"total@currency": `{"fallback_value":"x","code":"EUR","amount_1000":10.5}`},
-		"date_time: empty value":             {"due@date_time": ""},
+		"date_time: empty value":             {"1@date_time": ""},
+		"date_time: named body param":        {"due@date_time": "31 ottobre"},
+		"date_time: body:<name> param":       {"body:due@date_time": "31 ottobre"},
+		"date_time: named header":            {"header:due@date_time": "31 ottobre"},
 		"unknown suffix":                     {"name@unknown": "x"},
 		"suffix on media header":             {"header_image@currency": "https://example.org/a.png"},
 		"suffix on button":                   {"button_0@currency": "x"},
