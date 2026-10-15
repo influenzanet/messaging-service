@@ -8,10 +8,31 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/influenzanet/messaging-service/internal/config"
 	"github.com/influenzanet/messaging-service/pkg/dbs/globaldb"
 	waClient "github.com/influenzanet/messaging-service/pkg/http/clients"
 	"github.com/influenzanet/messaging-service/pkg/types"
 )
+
+// testSchedulerWhatsAppSettings builds a WhatsAppSettings for scheduler tests, enabled with
+// the same test credentials the test client is built from when enabled is true, otherwise the
+// zero (disabled) value.
+func testSchedulerWhatsAppSettings(enabled bool) config.WhatsAppSettings {
+	if !enabled {
+		return config.WhatsAppSettings{}
+	}
+	return config.NewWhatsAppSettings(func(key string) string {
+		switch key {
+		case "WHATSAPP_ENABLED":
+			return "true"
+		case "WHATSAPP_TOKEN":
+			return "test-token"
+		case "WHATSAPP_PHONE_NUMBER_ID":
+			return "test-phone-id"
+		}
+		return ""
+	})
+}
 
 func TestShouldRunOutgoingWhatsApp(t *testing.T) {
 	tests := []struct {
@@ -130,7 +151,7 @@ func TestOutgoingWhatsAppRunnerIsNotStartedWhenWhatsAppIsDisabled(t *testing.T) 
 	go func() {
 		defer close(done)
 		// A period of one hour: a runner that enters its loop does not return in time.
-		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, false, defaultWhatsAppTemplateRetryDelay)
+		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, false, defaultWhatsAppTemplateRetryDelay, testSchedulerWhatsAppSettings(false))
 	}()
 
 	select {
@@ -144,7 +165,7 @@ func TestOutgoingWhatsAppRunnerIsNotStartedWhenWhatsAppIsDisabled(t *testing.T) 
 	started := make(chan struct{})
 	go func() {
 		defer close(started)
-		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, true, defaultWhatsAppTemplateRetryDelay)
+		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, true, defaultWhatsAppTemplateRetryDelay, testSchedulerWhatsAppSettings(true))
 	}()
 	select {
 	case <-started:
@@ -259,7 +280,7 @@ func TestOutgoingWhatsAppRunnerReturnsWheneverItMustNotStart(t *testing.T) {
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				runnerForOutgoingWhatsApp(nil, nil, tc.client, tc.freq, tc.enabled, defaultWhatsAppTemplateRetryDelay)
+				runnerForOutgoingWhatsApp(nil, nil, tc.client, tc.freq, tc.enabled, defaultWhatsAppTemplateRetryDelay, testSchedulerWhatsAppSettings(tc.enabled))
 			}()
 			select {
 			case <-done:

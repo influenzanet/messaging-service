@@ -6,9 +6,10 @@ package messaging_service
 // use is the one in the request payload, not the one stored on the template in the database.
 // SendInstantEmail and QueueEmailTemplateForSending never touch WhatsApp.
 //
-// These tests need MESSAGE_DB_CONNECTION_STR (like the rest of this package) and
-// WHATSAPP_ENABLED=true, because pkg/bulk_messages reads that variable once at package init.
-// They change no production code.
+// These tests need MESSAGE_DB_CONNECTION_STR (like the rest of this package). They configure
+// bulk_messages with an enabled WhatsAppSettings themselves, through the same Configure call
+// production code uses, instead of depending on the process environment. They change no
+// production code.
 
 import (
 	"context"
@@ -18,7 +19,9 @@ import (
 	"time"
 
 	"github.com/influenzanet/go-utils/pkg/api_types"
+	"github.com/influenzanet/messaging-service/internal/config"
 	api "github.com/influenzanet/messaging-service/pkg/api/messaging_service"
+	"github.com/influenzanet/messaging-service/pkg/bulk_messages"
 	"github.com/influenzanet/messaging-service/pkg/types"
 	emailMock "github.com/influenzanet/messaging-service/test/mocks/email-client-service"
 	loggingMock "github.com/influenzanet/messaging-service/test/mocks/logging_service"
@@ -207,14 +210,26 @@ func lmClearWhatsAppQueue(t *testing.T) {
 	}
 }
 
+// lmRequireWhatsAppEnabled configures bulk_messages with an enabled WhatsAppSettings for the
+// duration of the test, through the same Configure call cmd/messaging-service/main.go uses at
+// start-up, and restores a disabled value via t.Cleanup.
 func lmRequireWhatsAppEnabled(t *testing.T) {
 	t.Helper()
-	if os.Getenv("WHATSAPP_ENABLED") != "true" {
-		t.Skip("WHATSAPP_ENABLED is not true: pkg/bulk_messages reads it once at package init, so this case cannot run")
-	}
 	if os.Getenv("MESSAGE_DB_CONNECTION_STR") == "" {
 		t.Skip("MESSAGE_DB_CONNECTION_STR not set")
 	}
+	bulk_messages.Configure(config.NewWhatsAppSettings(func(key string) string {
+		switch key {
+		case "WHATSAPP_ENABLED":
+			return "true"
+		case "WHATSAPP_TOKEN":
+			return "one-time-test-token"
+		case "WHATSAPP_PHONE_NUMBER_ID":
+			return "one-time-test-phone-id"
+		}
+		return ""
+	}))
+	t.Cleanup(func() { bulk_messages.Configure(config.WhatsAppSettings{}) })
 }
 
 // TestSendMessageToAllUsersQueuesWhatsApp verifies the claim that the one-time endpoints

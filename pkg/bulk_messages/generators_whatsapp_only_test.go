@@ -70,8 +70,7 @@ func TestWhatsAppOnlyUserGetsNoEmail(t *testing.T) {
 	for _, g := range whatsAppOnlyGenerators {
 		g := g
 		t.Run(g.name, func(t *testing.T) {
-			whatsAppEnabled = true
-			defer func() { whatsAppEnabled = false }()
+			configureWhatsAppForTest(t, true)
 			db, instanceID, cleanup := fallbackDBService(t)
 			defer cleanup()
 			ctrl := gomock.NewController(t)
@@ -114,8 +113,7 @@ func TestWhatsAppOnlyUserFallsBackToEmailWhenWhatsAppCannotBePrepared(t *testing
 	for _, g := range whatsAppOnlyGenerators {
 		g := g
 		t.Run(g.name, func(t *testing.T) {
-			whatsAppEnabled = true
-			defer func() { whatsAppEnabled = false }()
+			configureWhatsAppForTest(t, true)
 			db, instanceID, cleanup := fallbackDBService(t)
 			defer cleanup()
 			ctrl := gomock.NewController(t)

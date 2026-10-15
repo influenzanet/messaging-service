@@ -141,11 +141,15 @@ func main() {
 	messageDBService := messagedb.NewMessageDBService(conf.MessageDBConfig)
 	globalDBService := globaldb.NewGlobalDBService(conf.GlobalDBConfig)
 
+	// Single place that decides "is WhatsApp on?" for this process.
+	whatsAppSettings := config.WhatsAppSettingsFromEnv()
+	config.LogWhatsAppStartup("message-scheduler", whatsAppSettings)
+
 	// WhatsApp client for direct HTTP delivery (optional)
 	whatsAppClient := waClient.NewWhatsAppClient(
-		os.Getenv("WHATSAPP_TOKEN"),
-		os.Getenv("WHATSAPP_PHONE_NUMBER_ID"),
-		os.Getenv("WHATSAPP_API_VERSION"),
+		whatsAppSettings.Token(),
+		whatsAppSettings.PhoneNumberID(),
+		whatsAppSettings.APIVersion(),
 	)
 	if whatsAppClient != nil {
 		logger.Info.Println("WhatsApp direct delivery enabled for message-scheduler")
@@ -153,9 +157,10 @@ func main() {
 		logger.Warning.Println("WhatsApp direct delivery disabled: missing WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID")
 	}
 
-	// WHATSAPP_ENABLED is read once by pkg/bulk_messages: take the value the generators use,
-	// so that delivery cannot keep running on a channel that no longer generates messages.
-	whatsAppEnabled := bulk_messages.WhatsAppGenerationEnabled()
+	// At start-up no instance is known yet, so every instance gets the same answer today;
+	// Enabled("") is the hook where a future per-instance, database-backed configuration
+	// would change this without the caller changing.
+	whatsAppEnabled := whatsAppSettings.Enabled("")
 
 	// Generating WhatsApp messages this process cannot deliver only fills the queue: refuse
 	// generation instead, and name what is missing. Never fatal, the e-mail channel goes on.
@@ -163,16 +168,22 @@ func main() {
 	for _, problem := range whatsAppProblems {
 		logger.Error.Println(problem)
 	}
-	if !generateWhatsApp && whatsAppEnabled {
-		logger.Error.Println("WhatsApp message generation is disabled in the message-scheduler until the WhatsApp delivery configuration is complete")
-		bulk_messages.SetWhatsAppGenerationEnabled(false)
+	if generateWhatsApp {
+		bulk_messages.Configure(whatsAppSettings)
+	} else {
+		// Same effect as before: a disabled settings value stops the generators from
+		// queueing WhatsApp messages this process could not deliver anyway.
+		bulk_messages.Configure(config.WhatsAppSettings{})
+		if whatsAppEnabled {
+			logger.Error.Println("WhatsApp message generation is disabled in the message-scheduler until the WhatsApp delivery configuration is complete")
+		}
 	}
 
 	go runnerForLowPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.LowPrio)
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)
 	go runnerForParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ParticipantMessages)
 	go runnerForResearcherNotifications(messageDBService, globalDBService, clients, conf.Frequencies.ResearcherNotifications)
-	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, whatsAppClient, conf.Frequencies.WhatsApp, whatsAppEnabled, conf.WhatsAppTemplateRetryDelay)
+	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, whatsAppClient, conf.Frequencies.WhatsApp, whatsAppEnabled, conf.WhatsAppTemplateRetryDelay, whatsAppSettings)
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
@@ -437,7 +448,7 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending researcher notifications", threadID)
 }
 
-func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, freq int, enabled bool, templateRetryDelay int64) {
+func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, freq int, enabled bool, templateRetryDelay int64, settings config.WhatsAppSettings) {
 	if run, reason := shouldRunOutgoingWhatsApp(enabled, freq, wac != nil); !run {
 		logger.Warning.Printf("outgoing whatsapp runner not started: %s. Messages already in outgoing-whatsapp stay queued and are not delivered.", reason)
 		return
@@ -451,12 +462,12 @@ func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 
 	olderThan := getThreadLockInterval(freq)
 	for {
-		go handleOutgoingWhatsApp(mdb, gdb, wac, olderThan, templateRetryDelay)
+		go handleOutgoingWhatsApp(mdb, gdb, wac, olderThan, templateRetryDelay, settings)
 		time.Sleep(period)
 	}
 }
 
-func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, lastAttemptOlderThan int64, templateRetryDelay int64) {
+func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, lastAttemptOlderThan int64, templateRetryDelay int64, settings config.WhatsAppSettings) {
 	threadID := generateThreadID("WA")
 	logger.Info.Printf("--> Process <%s> started: fetching and sending outgoing whatsapp messages...", threadID)
 
@@ -466,6 +477,14 @@ func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Globa
 		logger.Error.Printf("%v", err)
 	}
 	for _, instance := range instances {
+		// Coherence check against the same decision the generators use: today Enabled
+		// ignores the instance and agrees with the switch that already gated this runner,
+		// but this is the hook where a future per-instance, database-backed configuration
+		// takes effect without this loop changing.
+		if !settings.Enabled(instance.InstanceID) {
+			logger.Warning.Printf("[%s] WhatsApp is not enabled for this instance, its outgoing messages stay queued", instance.InstanceID)
+			continue
+		}
 		wg.Add(1)
 		go handleOutgoingWhatsAppForInstance(mdb, instance.InstanceID, wac, lastAttemptOlderThan, templateRetryDelay, &wg)
 	}

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/influenzanet/messaging-service/internal/config"
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
 	"github.com/influenzanet/messaging-service/pkg/types"
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
@@ -131,45 +132,60 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	}
 
 	t.Run("WHATSAPP_ENABLED not set", func(t *testing.T) {
-		whatsAppEnabled = false
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithWA, map[string]string{})
+		configureWhatsAppForTest(t, false)
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when WHATSAPP_ENABLED is not true")
 		}
 	})
 
+	// This is the coherence fix: a gRPC server with WHATSAPP_ENABLED=true but no Meta
+	// credentials must not queue WhatsApp messages that no process could ever deliver.
+	t.Run("WHATSAPP_ENABLED true but no token configured", func(t *testing.T) {
+		previous := configuredWhatsAppSettings()
+		t.Cleanup(func() { Configure(previous) })
+		Configure(config.NewWhatsAppSettings(func(key string) string {
+			switch key {
+			case "WHATSAPP_ENABLED":
+				return "true"
+			case "WHATSAPP_PHONE_NUMBER_ID":
+				return "test-phone-id"
+			}
+			return ""
+		}))
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithWA, map[string]string{})
+		if got != nil {
+			t.Error("expected nil when the switch is on but WHATSAPP_TOKEN is missing")
+		}
+	})
+
 	t.Run("template without WhatsApp name", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithoutWA, map[string]string{})
+		configureWhatsAppForTest(t, true)
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithoutWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when template has no WhatsApp name")
 		}
 	})
 
 	t.Run("user without verified phone", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(noPhoneUser, templateWithWA, map[string]string{})
+		configureWhatsAppForTest(t, true)
+		got := prepareOutgoingWhatsApp("italy", noPhoneUser, templateWithWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when user has no verified phone")
 		}
 	})
 
 	t.Run("user with channels=email only", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email"}), templateWithWA, map[string]string{})
+		configureWhatsAppForTest(t, true)
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email"}), templateWithWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when user prefers email only")
 		}
 	})
 
 	t.Run("user with channels=email,whatsapp - generates message", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithWA, map[string]string{})
+		configureWhatsAppForTest(t, true)
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithWA, map[string]string{})
 		if got == nil {
 			t.Fatal("expected non-nil OutgoingWhatsApp")
 		}
@@ -182,19 +198,17 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("missing WhatsApp param key in contentInfos - returns nil", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		// Template expects "studyKey" in contentInfos, but it's missing
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{})
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when a required WhatsApp param is missing from contentInfos")
 		}
 	})
 
 	t.Run("WhatsApp param key present in contentInfos - generates message", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{"studyKey": "flu-2025"})
+		configureWhatsAppForTest(t, true)
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{"studyKey": "flu-2025"})
 		if got == nil {
 			t.Fatal("expected non-nil when all params are present")
 		}
@@ -207,8 +221,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	// everything after the first "=" is the literal (so "=" alone is an empty literal and
 	// "==x" is the literal "=x"). No existing contentKey starts with "=".
 	t.Run("literal value is sent as-is, without looking it up in contentInfos", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		template := types.EmailTemplate{
 			MessageType:          "weekly",
 			DefaultLanguage:      "it",
@@ -216,7 +229,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 			WhatsAppTemplateName: "influenzanet_weekly_v1",
 			WhatsAppParams:       map[string]string{"season": "=Stagione 2026/27"},
 		}
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
 		if got == nil {
 			t.Fatal("expected a message: a literal must not need a contentInfos entry")
 		}
@@ -226,8 +239,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("bare = is an empty literal", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		template := types.EmailTemplate{
 			MessageType:          "weekly",
 			DefaultLanguage:      "it",
@@ -235,7 +247,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 			WhatsAppTemplateName: "influenzanet_weekly_v1",
 			WhatsAppParams:       map[string]string{"note": "="},
 		}
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
 		if got == nil {
 			t.Fatal("expected a message")
 		}
@@ -245,8 +257,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("== escapes to a literal =", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		template := types.EmailTemplate{
 			MessageType:          "weekly",
 			DefaultLanguage:      "it",
@@ -254,7 +265,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 			WhatsAppTemplateName: "influenzanet_weekly_v1",
 			WhatsAppParams:       map[string]string{"code": "==x"},
 		}
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
 		if got == nil {
 			t.Fatal("expected a message")
 		}
@@ -264,9 +275,8 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("variable value is still resolved from contentInfos, unchanged", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{"studyKey": "flu-2025"})
+		configureWhatsAppForTest(t, true)
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{"studyKey": "flu-2025"})
 		if got == nil {
 			t.Fatal("expected non-nil when all params are present")
 		}
@@ -276,8 +286,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	})
 
 	t.Run("invalid template params drop the message, same as a missing variable", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		// "button_10" is not a valid button key: queue-time validation must catch this
 		// before the message is ever written to the outgoing queue.
 		template := types.EmailTemplate{
@@ -287,16 +296,15 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 			WhatsAppTemplateName: "influenzanet_weekly_v1",
 			WhatsAppParams:       map[string]string{"button_10": "=x"},
 		}
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"whatsapp"}), template, map[string]string{})
 		if got != nil {
 			t.Errorf("expected nil for invalid template params, got a message to %q", got.ToPhoneNumber)
 		}
 	})
 
 	t.Run("missing variable still drops the message", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{})
+		configureWhatsAppForTest(t, true)
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithParams, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when a required WhatsApp variable is missing from contentInfos")
 		}
@@ -305,50 +313,45 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 	t.Run("user with no preferred channel - returns nil even with a verified phone", func(t *testing.T) {
 		// An empty list means the participant never opted in to WhatsApp, or a
 		// preference was lost: neither is a reason to send a paid message.
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		for name, channels := range map[string][]string{"nil": nil, "empty": {}} {
-			if got := prepareOutgoingWhatsApp(verifiedPhoneUser(channels), templateWithWA, map[string]string{}); got != nil {
+			if got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser(channels), templateWithWA, map[string]string{}); got != nil {
 				t.Errorf("%s channels: expected nil, got a message to %q", name, got.ToPhoneNumber)
 			}
 		}
 	})
 
 	t.Run("language: user language kept when the template is maintained in it", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		user := verifiedPhoneUser([]string{"whatsapp"})
 		user.Account.PreferredLanguage = "en"
-		got := prepareOutgoingWhatsApp(user, templateWithWA, map[string]string{})
+		got := prepareOutgoingWhatsApp("italy", user, templateWithWA, map[string]string{})
 		if got == nil || got.Lang != "en" {
 			t.Fatalf("expected a message in 'en', got %v", got)
 		}
 	})
 
 	t.Run("language: unmaintained user language falls back to the template default", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		user := verifiedPhoneUser([]string{"whatsapp"})
 		user.Account.PreferredLanguage = "de"
-		got := prepareOutgoingWhatsApp(user, templateWithWA, map[string]string{})
+		got := prepareOutgoingWhatsApp("italy", user, templateWithWA, map[string]string{})
 		if got == nil || got.Lang != "it" {
 			t.Fatalf("expected a message in the default 'it', got %v", got)
 		}
 	})
 
 	t.Run("language: template without any language yields no message", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
+		configureWhatsAppForTest(t, true)
 		bare := types.EmailTemplate{MessageType: "weekly", WhatsAppTemplateName: "influenzanet_weekly_v1"}
-		if got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), bare, map[string]string{}); got != nil {
+		if got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"whatsapp"}), bare, map[string]string{}); got != nil {
 			t.Errorf("expected nil so that the e-mail is sent instead, got a message in %q", got.Lang)
 		}
 	})
 
 	t.Run("user with channels=whatsapp only - generates message", func(t *testing.T) {
-		whatsAppEnabled = true
-		defer func() { whatsAppEnabled = false }()
-		got := prepareOutgoingWhatsApp(verifiedPhoneUser([]string{"whatsapp"}), templateWithWA, map[string]string{})
+		configureWhatsAppForTest(t, true)
+		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"whatsapp"}), templateWithWA, map[string]string{})
 		if got == nil {
 			t.Fatal("expected a message when whatsapp is the only preferred channel")
 		}
@@ -370,8 +373,7 @@ func disconnectedMessageDBService(t *testing.T) *messagedb.MessageDBService {
 }
 
 func TestSaveOutgoingWhatsAppWhenQueueingFails(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 
 	user := &umAPI.User{
 		Id:      "user1",
@@ -383,7 +385,7 @@ func TestSaveOutgoingWhatsAppWhenQueueingFails(t *testing.T) {
 	}
 	template := types.EmailTemplate{MessageType: "weekly", DefaultLanguage: "it", WhatsAppTemplateName: "influenzanet_weekly_v1"}
 
-	if prepared := prepareOutgoingWhatsApp(user, template, map[string]string{}); prepared == nil {
+	if prepared := prepareOutgoingWhatsApp("italy", user, template, map[string]string{}); prepared == nil {
 		t.Fatal("precondition: the message must be preparable, so that only the queue write can fail")
 	}
 
@@ -400,8 +402,7 @@ func TestSaveOutgoingWhatsAppQueuesTheMessage(t *testing.T) {
 	if connStr == "" {
 		t.Skip("MESSAGE_DB_CONNECTION_STR not set: this case needs a reachable MongoDB")
 	}
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 
 	dbService := messagedb.NewMessageDBService(types.DBConfig{
 		URI:             "mongodb://" + os.Getenv("MESSAGE_DB_USERNAME") + ":" + os.Getenv("MESSAGE_DB_PASSWORD") + "@" + connStr,

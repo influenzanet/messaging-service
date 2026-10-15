@@ -6,6 +6,7 @@ import (
 
 	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/internal/config"
+	"github.com/influenzanet/messaging-service/pkg/bulk_messages"
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
 	"github.com/influenzanet/messaging-service/pkg/types"
 
@@ -38,6 +39,12 @@ func initConfig() Config {
 
 func main() {
 	conf := initConfig()
+
+	// Single place that decides "is WhatsApp on?" for this process; bulk_messages reads it
+	// through Configure instead of checking an environment variable itself.
+	whatsAppSettings := config.WhatsAppSettingsFromEnv()
+	config.LogWhatsAppStartup("messaging-service", whatsAppSettings)
+	bulk_messages.Configure(whatsAppSettings)
 
 	// ---> client connections
 	clients := &types.APIClients{}

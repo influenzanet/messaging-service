@@ -11,8 +11,8 @@ package bulk_messages
 //     real MongoDB and reads the language back out of the two queues, which is what the
 //     message-scheduler will later hand to Meta.
 //
-// The generator layer needs MESSAGE_DB_CONNECTION_STR and is skipped otherwise. The tests swap
-// the package-level whatsAppEnabled flag, so they must not run in parallel.
+// The generator layer needs MESSAGE_DB_CONNECTION_STR and is skipped otherwise. The tests
+// configure the package-level WhatsApp settings, so they must not run in parallel.
 
 import (
 	"context"
@@ -335,8 +335,7 @@ func lmRunGenerator(t *testing.T, generator string, set lmTemplateSet) string {
 }
 
 func TestLanguageMatrixGenerateForAllUsers(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 
 	rows := make([]string, 0, len(lmTemplateSets))
 	for _, set := range lmTemplateSets {
@@ -346,8 +345,7 @@ func TestLanguageMatrixGenerateForAllUsers(t *testing.T) {
 }
 
 func TestLanguageMatrixGenerateForStudyParticipants(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 
 	rows := make([]string, 0, len(lmTemplateSets))
 	for _, set := range lmTemplateSets {
@@ -361,8 +359,7 @@ func TestLanguageMatrixGenerateForStudyParticipants(t *testing.T) {
 // raw participant language (bulk_messages.go:667), so an Italian body can announce itself as
 // German. The WhatsApp path has no equivalent variable.
 func TestEmailLanguageContentVariable(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 	db, instanceID, cleanup := lmDBService(t)
 	defer cleanup()
 	ctrl := gomock.NewController(t)
@@ -406,8 +403,7 @@ func TestEmailLanguageContentVariable(t *testing.T) {
 // copies the study key. It holds no language logic, so the languages it queues are identical to
 // the ones the generators produce when called directly.
 func TestAutoMessageDelegatesWithoutOwnLanguageLogic(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 
 	set := lmTemplateSets[1] // it,en with default it: the set where the languages differ per user
 	cases := []struct {

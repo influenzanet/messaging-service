@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -29,13 +28,6 @@ const (
 	channelWhatsApp    = "whatsapp"
 )
 
-// Read once at init — config is immutable at runtime.
-var whatsAppEnabled = os.Getenv("WHATSAPP_ENABLED") == "true"
-
-func init() {
-	logger.Info.Printf("WhatsApp message generation enabled: %v", whatsAppEnabled)
-}
-
 // buildLoginURL constructs a login URL with properly escaped query parameters.
 func buildLoginURL(webURL, token, studyKey string) string {
 	if studyKey != "" {
@@ -55,7 +47,7 @@ func saveOutgoingWhatsApp(
 	template types.EmailTemplate,
 	contentInfos map[string]string,
 ) *types.OutgoingWhatsApp {
-	waOutgoing := prepareOutgoingWhatsApp(user, template, contentInfos)
+	waOutgoing := prepareOutgoingWhatsApp(instanceID, user, template, contentInfos)
 	if waOutgoing != nil {
 		if _, err := messageDBService.AddToOutgoingWhatsApp(instanceID, *waOutgoing); err != nil {
 			logger.Error.Printf("failed to queue outgoing whatsapp for user %s, falling back to e-mail: %v", user.Id, err)
@@ -573,11 +565,12 @@ func resolveWhatsAppValue(contentKey string, contentInfos map[string]string) (st
 // prepareOutgoingWhatsApp builds an OutgoingWhatsApp struct ready to be saved to the
 // outgoing-whatsapp collection. Returns nil if WhatsApp is not applicable for this user/template.
 func prepareOutgoingWhatsApp(
+	instanceID string,
 	user *umAPI.User,
 	template types.EmailTemplate,
 	contentInfos map[string]string,
 ) *types.OutgoingWhatsApp {
-	if !whatsAppEnabled {
+	if !configuredWhatsAppSettings().Enabled(instanceID) {
 		return nil
 	}
 	if template.WhatsAppTemplateName == "" {

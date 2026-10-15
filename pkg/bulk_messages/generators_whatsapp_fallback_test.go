@@ -307,8 +307,7 @@ func assertFallbackTaken(t *testing.T, label string, rows queueRows, logs *captu
 }
 
 func TestGenerateForAllUsersFallsBackToEmailWhenWhatsAppQueueFails(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 	db, instanceID, cleanup := fallbackDBService(t, "outgoing-whatsapp")
 	defer cleanup()
 	ctrl := gomock.NewController(t)
@@ -322,8 +321,7 @@ func TestGenerateForAllUsersFallsBackToEmailWhenWhatsAppQueueFails(t *testing.T)
 }
 
 func TestGenerateForStudyParticipantsFallsBackToEmailWhenWhatsAppQueueFails(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 	db, instanceID, cleanup := fallbackDBService(t, "outgoing-whatsapp")
 	defer cleanup()
 	ctrl := gomock.NewController(t)
@@ -345,8 +343,7 @@ func insertFallbackTemplate(t *testing.T, db *messagedb.MessageDBService, instan
 }
 
 func TestGenerateParticipantMessagesFallsBackToEmailWhenWhatsAppQueueFails(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 	db, instanceID, cleanup := fallbackDBService(t, "outgoing-whatsapp")
 	defer cleanup()
 	insertFallbackTemplate(t, db, instanceID)
@@ -370,8 +367,7 @@ func TestGenerateParticipantMessagesFallsBackToEmailWhenWhatsAppQueueFails(t *te
 }
 
 func TestParticipantMessageSurvivesWhenBothQueuesFail(t *testing.T) {
-	whatsAppEnabled = true
-	defer func() { whatsAppEnabled = false }()
+	configureWhatsAppForTest(t, true)
 	db, instanceID, cleanup := fallbackDBService(t, "outgoing-whatsapp", "outgoing-emails")
 	defer cleanup()
 	insertFallbackTemplate(t, db, instanceID)
