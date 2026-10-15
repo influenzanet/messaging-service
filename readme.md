@@ -16,7 +16,7 @@ The two files follow the same structure and allow the same configuration options
 
 ## Enabling WhatsApp
 
-Whether WhatsApp is on for an instance is decided in one place, `config.WhatsAppSettings` (`internal/config/whatsapp.go`, shared by the gRPC server and the message-scheduler), from the `WHATSAPP_*` environment variables. How to enable or disable it, every variable with its default and the start-up log lines are documented in `docs/whatsapp-activation.md` of the orbyta-cluster-management repository.
+Whether WhatsApp is on for an instance is decided in one place, `config.WhatsAppSettings` (`internal/config/whatsapp.go`, shared by the gRPC server and the message-scheduler): user-management's answer for the instance (`GetPlatformConfig`, cached for 60 s), this process's Meta credentials, and the local kill switch `WHATSAPP_ENABLED=false`. How to enable or disable it, every variable with its default and the start-up log lines are documented in `docs/whatsapp-activation.md` of the orbyta-cluster-management repository.
 
 ## WhatsApp scheduler retries
 
