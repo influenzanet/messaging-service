@@ -1,9 +1,12 @@
 package bulk_messages
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/influenzanet/messaging-service/internal/config"
+	"github.com/influenzanet/messaging-service/pkg/types"
+	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 )
 
 // testWhatsAppSettings builds a WhatsAppSettings for tests, enabled with fixed test
@@ -57,4 +60,31 @@ func TestConfiguredWhatsAppSettingsDefaultsToDisabled(t *testing.T) {
 	if zero.Enabled("any-instance") {
 		t.Fatal("expected the zero WhatsAppSettings to be disabled")
 	}
+}
+
+// The generators read the settings from many goroutines; Configure must be safe to call while
+// they do. Run with -race: a plain variable here would be reported as a data race.
+func TestConfigureIsSafeWhileGeneratorsRead(t *testing.T) {
+	previous := configuredWhatsAppSettings()
+	defer Configure(previous)
+
+	user := &umAPI.User{Id: "race-user"}
+	template := types.EmailTemplate{MessageType: "race", WhatsAppTemplateName: "race_tpl"}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(2)
+		go func(enabled bool) {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				Configure(testWhatsAppSettings(enabled))
+			}
+		}(i%2 == 0)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				_ = prepareOutgoingWhatsApp("race-instance", user, template, map[string]string{})
+			}
+		}()
+	}
+	wg.Wait()
 }
