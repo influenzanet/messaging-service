@@ -14,6 +14,10 @@ The email-client-service expects two configuration files at the MESSAGING_CONFIG
 
 The two files follow the same structure and allow the same configuration options. (See example in /test/configs)
 
+## Enabling WhatsApp
+
+Whether WhatsApp is on for an instance is decided in one place, `config.WhatsAppSettings` (`internal/config/whatsapp.go`, shared by the gRPC server and the message-scheduler), from the `WHATSAPP_*` environment variables. How to enable or disable it, every variable with its default and the start-up log lines are documented in `docs/whatsapp-activation.md` of the orbyta-cluster-management repository.
+
 ## WhatsApp scheduler retries
 
 Failures that a single message cannot cause stop the current instance's tick at once,
