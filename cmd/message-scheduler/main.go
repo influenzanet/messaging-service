@@ -141,8 +141,9 @@ func main() {
 	messageDBService := messagedb.NewMessageDBService(conf.MessageDBConfig)
 	globalDBService := globaldb.NewGlobalDBService(conf.GlobalDBConfig)
 
-	// Single place that decides "is WhatsApp on?" for this process.
-	whatsAppSettings := config.WhatsAppSettingsFromEnv()
+	// Single place that decides "is WhatsApp on?" for this process; the per-instance half of
+	// that decision (Enabled) asks user-management through clients.UserManagementService.
+	whatsAppSettings := config.WhatsAppSettingsFromEnv(clients.UserManagementService)
 	config.LogWhatsAppStartup("message-scheduler", whatsAppSettings)
 
 	// WhatsApp client for direct HTTP delivery (optional)
@@ -157,10 +158,11 @@ func main() {
 		logger.Warning.Println("WhatsApp direct delivery disabled: missing WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID")
 	}
 
-	// At start-up no instance is known yet, so every instance gets the same answer today;
-	// Enabled("") is the hook where a future per-instance, database-backed configuration
-	// would change this without the caller changing.
-	whatsAppEnabled := whatsAppSettings.Enabled("")
+	// At start-up no instance is known yet, so there is nothing to ask user-management about:
+	// CanSend is the local-only precondition (kill switch plus this process's own Meta
+	// credentials), not the per-instance decision. The delivery loop below asks the
+	// per-instance question, Enabled(instance.InstanceID), once instances are known.
+	whatsAppEnabled := whatsAppSettings.CanSend()
 
 	// Generating WhatsApp messages this process cannot deliver only fills the queue: refuse
 	// generation instead, and name what is missing. Never fatal, the e-mail channel goes on.
@@ -477,10 +479,10 @@ func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Globa
 		logger.Error.Printf("%v", err)
 	}
 	for _, instance := range instances {
-		// Coherence check against the same decision the generators use: today Enabled
-		// ignores the instance and agrees with the switch that already gated this runner,
-		// but this is the hook where a future per-instance, database-backed configuration
-		// takes effect without this loop changing.
+		// Per-instance decision shared with the generators: on top of the local
+		// precondition that already gated this runner, user-management may turn WhatsApp
+		// off for a specific instance, or lack credentials this process needs may turn it
+		// off here even where user-management allows it.
 		if !settings.Enabled(instance.InstanceID) {
 			logger.Warning.Printf("[%s] WhatsApp is not enabled for this instance, its outgoing messages stay queued", instance.InstanceID)
 			continue

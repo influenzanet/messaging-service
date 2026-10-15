@@ -139,8 +139,9 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 		}
 	})
 
-	// This is the coherence fix: a gRPC server with WHATSAPP_ENABLED=true but no Meta
-	// credentials must not queue WhatsApp messages that no process could ever deliver.
+	// This is the coherence fix: a gRPC server with user-management saying WhatsApp is on
+	// but no Meta credentials must not queue WhatsApp messages that no process could ever
+	// deliver.
 	t.Run("WHATSAPP_ENABLED true but no token configured", func(t *testing.T) {
 		previous := configuredWhatsAppSettings()
 		t.Cleanup(func() { Configure(previous) })
@@ -152,7 +153,7 @@ func TestPrepareOutgoingWhatsApp(t *testing.T) {
 				return "test-phone-id"
 			}
 			return ""
-		}))
+		}, allInstancesPlatformConfigSource(true)))
 		got := prepareOutgoingWhatsApp("italy", verifiedPhoneUser([]string{"email", "whatsapp"}), templateWithWA, map[string]string{})
 		if got != nil {
 			t.Error("expected nil when the switch is on but WHATSAPP_TOKEN is missing")

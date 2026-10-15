@@ -12,11 +12,23 @@ import (
 	"github.com/influenzanet/messaging-service/pkg/dbs/globaldb"
 	waClient "github.com/influenzanet/messaging-service/pkg/http/clients"
 	"github.com/influenzanet/messaging-service/pkg/types"
+	umAPI "github.com/influenzanet/user-management-service/pkg/api"
+	"google.golang.org/grpc"
 )
 
+// allInstancesPlatformConfigSource is a config.PlatformConfigSource that answers the same
+// WhatsApp-enabled value for every instance it is asked about, for scheduler tests that do not
+// care about per-instance behaviour and just need user-management to agree with the local
+// switch.
+type allInstancesPlatformConfigSource bool
+
+func (s allInstancesPlatformConfigSource) GetPlatformConfig(_ context.Context, _ *umAPI.PlatformConfigReq, _ ...grpc.CallOption) (*umAPI.PlatformConfig, error) {
+	return &umAPI.PlatformConfig{WhatsappEnabled: bool(s)}, nil
+}
+
 // testSchedulerWhatsAppSettings builds a WhatsAppSettings for scheduler tests, enabled with
-// the same test credentials the test client is built from when enabled is true, otherwise the
-// zero (disabled) value.
+// the same test credentials the test client is built from and a source that reports every
+// instance as on when enabled is true, otherwise the zero (disabled) value.
 func testSchedulerWhatsAppSettings(enabled bool) config.WhatsAppSettings {
 	if !enabled {
 		return config.WhatsAppSettings{}
@@ -31,7 +43,7 @@ func testSchedulerWhatsAppSettings(enabled bool) config.WhatsAppSettings {
 			return "test-phone-id"
 		}
 		return ""
-	})
+	}, allInstancesPlatformConfigSource(true))
 }
 
 func TestShouldRunOutgoingWhatsApp(t *testing.T) {

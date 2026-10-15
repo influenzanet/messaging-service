@@ -40,12 +40,6 @@ func initConfig() Config {
 func main() {
 	conf := initConfig()
 
-	// Single place that decides "is WhatsApp on?" for this process; bulk_messages reads it
-	// through Configure instead of checking an environment variable itself.
-	whatsAppSettings := config.WhatsAppSettingsFromEnv()
-	config.LogWhatsAppStartup("messaging-service", whatsAppSettings)
-	bulk_messages.Configure(whatsAppSettings)
-
 	// ---> client connections
 	clients := &types.APIClients{}
 	umClient, close := gc.ConnectToUserManagementService(conf.ServiceURLs.UserManagementService)
@@ -64,6 +58,14 @@ func main() {
 	defer close()
 	clients.LoggingService = loggingClient
 	// <---
+
+	// Single place that decides "is WhatsApp on?" for this process; bulk_messages reads it
+	// through Configure instead of checking an environment variable itself. Built after the
+	// client connections above: the per-instance half of the decision (Enabled) asks
+	// user-management through clients.UserManagementService.
+	whatsAppSettings := config.WhatsAppSettingsFromEnv(clients.UserManagementService)
+	config.LogWhatsAppStartup("messaging-service", whatsAppSettings)
+	bulk_messages.Configure(whatsAppSettings)
 
 	messageDBService := messagedb.NewMessageDBService(conf.MessageDBConfig)
 

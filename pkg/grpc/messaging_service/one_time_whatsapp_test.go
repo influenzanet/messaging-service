@@ -31,8 +31,18 @@ import (
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"io"
 )
+
+// allInstancesPlatformConfigSource is a config.PlatformConfigSource that answers the same
+// WhatsApp-enabled value for every instance it is asked about, for tests that just need
+// user-management to agree with the local switch.
+type allInstancesPlatformConfigSource bool
+
+func (s allInstancesPlatformConfigSource) GetPlatformConfig(_ context.Context, _ *umAPI.PlatformConfigReq, _ ...grpc.CallOption) (*umAPI.PlatformConfig, error) {
+	return &umAPI.PlatformConfig{WhatsappEnabled: bool(s)}, nil
+}
 
 const (
 	lmOneTimeMsgType = "one-time-language-test"
@@ -228,7 +238,7 @@ func lmRequireWhatsAppEnabled(t *testing.T) {
 			return "one-time-test-phone-id"
 		}
 		return ""
-	}))
+	}, allInstancesPlatformConfigSource(true)))
 	t.Cleanup(func() { bulk_messages.Configure(config.WhatsAppSettings{}) })
 }
 

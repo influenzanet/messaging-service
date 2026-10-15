@@ -1,16 +1,28 @@
 package bulk_messages
 
 import (
+	"context"
 	"sync"
 	"testing"
 
 	"github.com/influenzanet/messaging-service/internal/config"
 	"github.com/influenzanet/messaging-service/pkg/types"
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
+	"google.golang.org/grpc"
 )
 
+// allInstancesPlatformConfigSource is a config.PlatformConfigSource that answers the same
+// WhatsApp-enabled value for every instance it is asked about, for tests that do not care
+// about per-instance behaviour and just need user-management to agree with the local switch.
+type allInstancesPlatformConfigSource bool
+
+func (s allInstancesPlatformConfigSource) GetPlatformConfig(_ context.Context, _ *umAPI.PlatformConfigReq, _ ...grpc.CallOption) (*umAPI.PlatformConfig, error) {
+	return &umAPI.PlatformConfig{WhatsappEnabled: bool(s)}, nil
+}
+
 // testWhatsAppSettings builds a WhatsAppSettings for tests, enabled with fixed test
-// credentials when enabled is true, otherwise the zero (disabled) value.
+// credentials and a source that reports every instance as on when enabled is true, otherwise
+// the zero (disabled) value.
 func testWhatsAppSettings(enabled bool) config.WhatsAppSettings {
 	if !enabled {
 		return config.WhatsAppSettings{}
@@ -25,7 +37,7 @@ func testWhatsAppSettings(enabled bool) config.WhatsAppSettings {
 			return "test-phone-id"
 		}
 		return ""
-	})
+	}, allInstancesPlatformConfigSource(true))
 }
 
 // configureWhatsAppForTest points the generators at an enabled or disabled WhatsAppSettings
