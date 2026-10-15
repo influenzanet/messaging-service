@@ -365,6 +365,26 @@ func (mr *MockUserManagementApiClientMockRecorder) GetOrCreateTemptoken(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateTemptoken", reflect.TypeOf((*MockUserManagementApiClient)(nil).GetOrCreateTemptoken), varargs...)
 }
 
+// GetPlatformConfig mocks base method.
+func (m *MockUserManagementApiClient) GetPlatformConfig(ctx context.Context, in *api.PlatformConfigReq, opts ...grpc.CallOption) (*api.PlatformConfig, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetPlatformConfig", varargs...)
+	ret0, _ := ret[0].(*api.PlatformConfig)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPlatformConfig indicates an expected call of GetPlatformConfig.
+func (mr *MockUserManagementApiClientMockRecorder) GetPlatformConfig(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlatformConfig", reflect.TypeOf((*MockUserManagementApiClient)(nil).GetPlatformConfig), varargs...)
+}
+
 // GetTempTokens mocks base method.
 func (m *MockUserManagementApiClient) GetTempTokens(ctx context.Context, in *api_types.TempTokenInfo, opts ...grpc.CallOption) (*api_types.TempTokenInfos, error) {
 	m.ctrl.T.Helper()
@@ -663,26 +683,6 @@ func (mr *MockUserManagementApiClientMockRecorder) SaveProfile(ctx, in any, opts
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveProfile", reflect.TypeOf((*MockUserManagementApiClient)(nil).SaveProfile), varargs...)
-}
-
-// SendMessage mocks base method.
-func (m *MockUserManagementApiClient) SendMessage(ctx context.Context, in *api.SendMessageRequest, opts ...grpc.CallOption) (*api.ServiceStatus, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "SendMessage", varargs...)
-	ret0, _ := ret[0].(*api.ServiceStatus)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// SendMessage indicates an expected call of SendMessage.
-func (mr *MockUserManagementApiClientMockRecorder) SendMessage(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMessage", reflect.TypeOf((*MockUserManagementApiClient)(nil).SendMessage), varargs...)
 }
 
 // SendVerificationCode mocks base method.
