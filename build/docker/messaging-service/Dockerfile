@@ -1,7 +1,7 @@
 ##########################
 # STAGE 1
 ##########################
-FROM golang:1.23-alpine AS builder
+FROM golang:1.26.10-alpine AS builder
 RUN apk update && apk add --no-cache git ca-certificates && update-ca-certificates
 ENV GO111MODULE=on
 # Prepare module directory
