@@ -172,7 +172,7 @@ func wrapCardError(cardIndex int, err error) error {
 }
 
 func newCardKeyError(templateName string, cardIndex int, key, message string) error {
-	return wrapCardError(cardIndex, newTemplateParamsError(templateName, key, message))
+	return wrapCardError(cardIndex, newTemplateParamsError(templateName, key, "%s", message))
 }
 
 func newCardSuffixError(templateName string, cardIndex int, key string) error {
