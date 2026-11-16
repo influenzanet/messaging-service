@@ -1,0 +1,156 @@
+# WhatsApp delivery in the message-scheduler
+
+How the message-scheduler sends the messages queued in `outgoing-whatsapp` and archives them in
+`sent-whatsapp`: when the runner starts, how each kind of failure is handled, and what an
+archived row records.
+
+## When the runner starts
+
+The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `true`, when
+`MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
+client could be built; the reason it did not start is logged once as a warning at startup.
+Messages already in `outgoing-whatsapp` stay queued and are not delivered until the runner
+is enabled again. When `WHATSAPP_ENABLED` is `true` but this delivery configuration is
+incomplete, the message-scheduler logs an error naming each missing variable and stops
+generating WhatsApp messages for that process, instead of queueing messages nobody will
+send; participants who prefer WhatsApp receive the e-mail instead, and the e-mail channel is
+never affected.
+
+## Account-wide failures
+
+Failures that a single message cannot cause stop the current instance's tick at once,
+without consuming any message's five-attempt retry budget: HTTP 401/403, Meta
+authentication, account and sender-number codes (`33`, `131045`, and the Graph shape
+`100` with subcode `33`), and HTTP 429 and Meta rate-limit codes other than `131056`
+(including `131064`, the classification-violation limit). An HTTP 408 or 5xx status, or a
+transport error, is read as transient before any Meta code is considered. Every claimed
+message keeps its `lastSendAttempt` lock until its normal expiry; the stop is logged with
+the failure class and the message type.
+
+## Rate limits
+
+A rate-limit stop also pauses the instance's WhatsApp sending, in every scheduler replica: the
+time before which nobody sends is stored in the instance's message database (collection
+`whatsapp-throttle`, one document), and a tick that starts earlier logs "WhatsApp sending
+paused until ..." and returns before claiming or sending anything. The wait starts at 60 s,
+doubles with every throttle in a row up to one hour, gets up to 25 % of jitter, and is
+extended to the `Retry-After` of Meta's answer when that is longer (seconds or HTTP date, cut
+to one hour). It is never shorter than the claim lock, so the messages the stopped tick had
+claimed are free again when sending resumes. The stored time only moves forward, so replicas
+throttled together never shorten each other's wait, and throttles that arrive while a pause is
+active count as the same event (the series grows once); a tick that is mid-queue re-reads the
+pause before each batch and stops when one has been stored. The first message Meta accepts
+after the pause resets the series, so the next throttle starts again from 60 s. A throttle
+never charges an attempt.
+
+## Refused templates
+
+A template Meta refuses — paused or disabled (`132015`, `132016`), or a marketing template
+rejected because the account has disabled marketing messages on Cloud API (`131063`) — holds
+back that template in that language only. The other templates keep going in the same tick,
+and Meta is not called again for the refused one in that tick. Every queued message of the
+refused template pays one attempt: the ones on their last attempt are archived as failed with
+Meta's code, and the others wait `MESSAGE_SCHEDULER_WHATSAPP_TEMPLATE_RETRY_DELAY` seconds
+(default 3600) before the queue hands them out again, by moving their `lastSendAttempt`
+forward. With the five-attempt cap and the default delay, a template that stays refused has
+its messages archived about four hours after the first refusal; a template Meta accepts again
+in the meantime is delivered on the next try. Only messages the tick claimed itself or that no
+tick holds are touched, so overlapping ticks never charge a message twice. The deferral is
+logged at ERROR with the template, the language, Meta's code and how many messages were
+deferred and archived.
+
+## Transient failures
+
+Transient failures (HTTP 408 and 5xx, Meta `is_transient` other than on `131056`, codes
+`1`, `2`, `131000`, `131016`, `131057`, transport errors) can belong to one message or to
+an outage, so one such failure is held: if the next message that reaches the sender fails
+transiently too, the tick stops with nothing charged; if it succeeds or fails for a
+message-specific reason, the held message was at fault and is charged one attempt like
+any other failure. A failure left undecided at the end of the tick, or whose claim may
+have expired meanwhile, is not charged. This keeps an outage from draining the queue and
+keeps one persistently failing message from blocking the messages behind it, at a price:
+during a partial outage, a message that fails transiently while its
+neighbour succeeds is charged, and after five such charges it is archived undelivered;
+two messages that both keep failing transiently and sit next to each other in the fetch
+order are read as an outage on every tick, so nothing in the scheduler ever decides them,
+and they block that instance's queue until one of them is removed or delivers. The circuit
+is per tick/instance, not a persistent or cross-instance breaker. Meta pair-rate limit
+`131056` preserves the retry budget but only defers that recipient, and does not decide a
+held failure.
+
+## Permanent failures
+
+Failures Meta will refuse again whatever the number of attempts (invalid or missing template
+parameters `132000`, `132012`, `132018`, `131008`, `131009`, text too long or against the format
+policy `132005`, `132007`, template missing in the requested language `132001`, message
+undeliverable `131026`, unsupported message type `131051`, and `100` unless an HTTP status,
+the transient flag or subcode `33` classifies the response first) are archived as failed at the
+first attempt, with class `permanent` and Meta's code, after a single call to Meta and without
+moving the attempt counter; the log says why, without the recipient's number. Like any answer
+from Meta, such a failure also decides a held transient failure. Other message-specific
+failures (for instance the per-user marketing limit `131049`, and any code the classifier does
+not know) follow the five-attempt limit.
+The error classifier is in
+`pkg/http/clients/whatsapp_errors.go`; logs expose numeric HTTP/Meta codes, Meta's
+`fbtrace_id` and the transport cause, never Meta's free-form response body.
+
+## Archived messages
+
+Every message archived in `sent-whatsapp` records how it left the queue: `status` is
+`delivered` when Meta accepted it and `failed` when the scheduler gave up on it at the
+five-attempt cap, `sentAt` is the moment it was archived, and a failed row keeps `errorCode`
+(Meta's numeric code, `0` when the failure never reached Meta) and `errorClass` (the class the
+retry policy read from that failure). Meta's free-form message is not stored, and the content
+parameters are dropped on archiving. Rows archived by older versions carry none of these
+fields and read as an unknown outcome. Meta's message id is not stored: the client does
+not return it.
+
+## The delivered marker
+
+A message Meta has accepted is marked `delivered` on its queued row before that row is
+archived, and the row is removed only once the archive write has succeeded. An operator who
+finds a queued message carrying `delivered` is looking at one whose archive write, or whose
+queue delete, failed: check `sent-whatsapp` first, the message may already be archived there.
+The next tick that claims it archives it instead of sending it, so it is never posted to Meta
+twice, and it is charged no attempt. The marker is written with `omitempty`, so a row that was
+never delivered carries no such field at all: query `{delivered: true}`, never
+`{delivered: false}`. Two cases remain open by design: a process that dies
+between Meta's answer and the mark sends that message once more when the claim expires, and a
+database that refuses both the mark and the archive write leaves the old behaviour in place.
+
+## Claims and the send window
+
+A batch is claimed at one instant: every message of a fetch receives the same
+`lastSendAttempt`, so a claim loop that lasts longer than the lock can no longer hand out a
+message it has already claimed in that same call. A send starts only while the claim is younger
+than the send window, which is the stricter of nine tenths of the lock and the lock minus the
+send timeout, both measured from before the claim loop. The send timeout is the WhatsApp
+client's own HTTP timeout, 30 s, read from it rather than repeated, so the lock has to exceed
+that timeout by as much of a batch as the tick is meant to send. At the staging interval of 30
+s the lock lasts 75 s and the window is 45 s, so a send cannot outlive the claim it works
+under; the messages skipped this way are charged nothing and keep their claim until it expires.
+When claiming the batch alone takes longer than the window, the tick stops there and says so at
+ERROR: every message of that batch would be skipped, nothing would change, and the next fetch
+would claim the same rows again. A tick stops for the same reason, and says so at ERROR, when a
+fetch hands back a message this tick has already acted on: a pass over the queue that outlives
+the claims it wrote reads the same rows again, and a message that kept its claim and its
+attempt count would be sent once per pass. Meta's per-recipient limit is the common case, since
+it charges nothing and leaves the row queued; an archive write that keeps failing and a held
+transient failure have the same shape. Such a row is retried on the next tick, and on every
+tick after that, until it is accepted. A row the send window made the tick skip is not one of
+these: nothing was done to it, so it comes back without stopping anything, and a fast fetch
+with slow sends keeps draining batch after batch. The window requires
+`MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` to be at least 13 s, since the lock is 2.5 times the
+interval: below that no window exists, the batch limit alone applies, and the runner says so
+once at startup. The window grows with the interval and is what a tick has to work in, so 13 s
+is the point where it starts to exist, not a value to configure: an interval of 13 s leaves a
+window of about 2 s and a tick then sends roughly one message per fetch, where the staging
+interval of 30 s leaves 45 s. At a high send latency a tick therefore leaves the tail of a
+batch to the next tick, since the window is measured from before the claim. That is the cost of never sending on a claim that may
+already have expired, not a delivery fault.
+
+## Tests
+
+The scheduler tests use an isolated MongoDB database for each test and need
+`F04_TEST_MONGODB_URI` set to a **test-only** MongoDB URI, for example
+`go test -race ./cmd/message-scheduler ./pkg/http/clients`. No real Meta messages are sent.
