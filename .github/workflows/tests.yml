@@ -20,11 +20,15 @@ jobs:
           - 27017:27017
 
     steps:
+      # The api submodule holds the proto contracts that pkg/api is generated from.
       - uses: actions/checkout@v4
+        with:
+          submodules: true
 
+      # The Go version go.mod requires, so the build does not download a toolchain.
       - uses: actions/setup-go@v5
         with:
-          go-version: "1.23"
+          go-version-file: go.mod
 
       - name: Build
         run: go build ./...
@@ -32,12 +36,19 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # Reported for information only: a few inherited files are not
-      # gofmt-clean, so formatting is not enforced yet and nothing is
-      # reformatted here.
-      - name: Gofmt (report only)
-        continue-on-error: true
-        run: gofmt -l .
+      - name: Gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt-clean; run gofmt -w on them:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      # Regenerates pkg/api with the toolchain pinned in proto-toolchain.mk from
+      # the contracts pinned by the api gitlink, and fails on any difference.
+      - name: Generated API drift check
+        run: make api-check
 
       # The inherited globaldb test expects the two instances a developer's
       # database carries and hardcodes the INF_ prefix; a fresh service
@@ -63,7 +74,18 @@ jobs:
           DB_DB_NAME_PREFIX: CI_
           MESSAGING_CONFIG_FOLDER: ${{ github.workspace }}/test/configs
           # Used by the message-scheduler tests that need a real database;
-          # without it they skip themselves.
+          # without it they fail under CI (test/testenv).
           F04_TEST_MONGODB_URI: mongodb://admin:root@localhost:27017/?authSource=admin
           WHATSAPP_ENABLED: "true"
-        run: go test -race ./...
+        # -v so that the next step can see skipped tests; bash for pipefail.
+        shell: bash
+        run: go test -race -v ./... 2>&1 | tee "$RUNNER_TEMP/go-test.log"
+
+      # A skipped test is a test CI did not run. The database tests fail
+      # rather than skip under CI, and this catches any other skip.
+      - name: No skipped tests
+        run: |
+          if grep -E -- '--- SKIP' "$RUNNER_TEMP/go-test.log"; then
+            echo "Tests were skipped; CI must run every test."
+            exit 1
+          fi
