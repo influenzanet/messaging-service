@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
 	waClient "github.com/influenzanet/messaging-service/pkg/http/clients"
 	"github.com/influenzanet/messaging-service/pkg/types"
+	"github.com/influenzanet/messaging-service/test/testenv"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -110,10 +110,7 @@ type schedulerTestDB struct {
 
 func newSchedulerTestDB(t *testing.T) *schedulerTestDB {
 	t.Helper()
-	uri := os.Getenv("F04_TEST_MONGODB_URI")
-	if uri == "" {
-		t.Skip("F04_TEST_MONGODB_URI is not configured")
-	}
+	uri := testenv.Require(t, "F04_TEST_MONGODB_URI", "the scheduler tests need a test-only MongoDB")
 
 	prefix := "f04_scheduler_" + uuid.NewString() + "_"
 	service := messagedb.NewMessageDBService(types.DBConfig{

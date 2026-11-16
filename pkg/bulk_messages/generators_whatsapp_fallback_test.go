@@ -26,6 +26,7 @@ import (
 	"github.com/influenzanet/messaging-service/pkg/types"
 	studyMock "github.com/influenzanet/messaging-service/test/mocks/study-service"
 	userMock "github.com/influenzanet/messaging-service/test/mocks/user-management-service"
+	"github.com/influenzanet/messaging-service/test/testenv"
 	studyAPI "github.com/influenzanet/study-service/pkg/api"
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"go.mongodb.org/mongo-driver/bson"
@@ -90,10 +91,7 @@ var rejectEverything = bson.M{"neverPresentField": bson.M{"$exists": true}}
 
 func fallbackDBService(t *testing.T, failingCollections ...string) (*messagedb.MessageDBService, string, func()) {
 	t.Helper()
-	connStr := os.Getenv("MESSAGE_DB_CONNECTION_STR")
-	if connStr == "" {
-		t.Skip("MESSAGE_DB_CONNECTION_STR not set")
-	}
+	connStr := testenv.Require(t, "MESSAGE_DB_CONNECTION_STR", "the generator tests need a reachable MongoDB")
 	db := messagedb.NewMessageDBService(types.DBConfig{
 		URI:             "mongodb://" + os.Getenv("MESSAGE_DB_USERNAME") + ":" + os.Getenv("MESSAGE_DB_PASSWORD") + "@" + connStr,
 		DBNamePrefix:    fallbackDBPrefix,

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/influenzanet/messaging-service/pkg/dbs/globaldb"
 	waClient "github.com/influenzanet/messaging-service/pkg/http/clients"
 	"github.com/influenzanet/messaging-service/pkg/types"
+	"github.com/influenzanet/messaging-service/test/testenv"
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"google.golang.org/grpc"
 )
@@ -127,10 +127,7 @@ func TestShouldRunOutgoingWhatsApp(t *testing.T) {
 // runner that wrongly starts reads an empty instance list instead of dereferencing nil.
 func newSchedulerTestGlobalDB(t *testing.T) *globaldb.GlobalDBService {
 	t.Helper()
-	uri := os.Getenv("F04_TEST_MONGODB_URI")
-	if uri == "" {
-		t.Skip("F04_TEST_MONGODB_URI is not configured")
-	}
+	uri := testenv.Require(t, "F04_TEST_MONGODB_URI", "the scheduler tests need a test-only MongoDB")
 
 	service := globaldb.NewGlobalDBService(types.DBConfig{
 		URI:             uri,

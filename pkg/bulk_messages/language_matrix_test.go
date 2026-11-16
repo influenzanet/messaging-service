@@ -11,8 +11,9 @@ package bulk_messages
 //     real MongoDB and reads the language back out of the two queues, which is what the
 //     message-scheduler will later hand to Meta.
 //
-// The generator layer needs MESSAGE_DB_CONNECTION_STR and is skipped otherwise. The tests
-// configure the package-level WhatsApp settings, so they must not run in parallel.
+// The generator layer needs MESSAGE_DB_CONNECTION_STR and is skipped otherwise (under CI it
+// fails instead). The tests configure the package-level WhatsApp settings, so they must not run
+// in parallel.
 
 import (
 	"context"
@@ -32,6 +33,7 @@ import (
 	"github.com/influenzanet/messaging-service/pkg/types"
 	studyMock "github.com/influenzanet/messaging-service/test/mocks/study-service"
 	userMock "github.com/influenzanet/messaging-service/test/mocks/user-management-service"
+	"github.com/influenzanet/messaging-service/test/testenv"
 	studyAPI "github.com/influenzanet/study-service/pkg/api"
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"go.mongodb.org/mongo-driver/bson"
@@ -204,10 +206,7 @@ func lmHeaderCells() []string {
 
 func lmDBService(t *testing.T) (*messagedb.MessageDBService, string, func()) {
 	t.Helper()
-	connStr := os.Getenv("MESSAGE_DB_CONNECTION_STR")
-	if connStr == "" {
-		t.Skip("MESSAGE_DB_CONNECTION_STR not set")
-	}
+	connStr := testenv.Require(t, "MESSAGE_DB_CONNECTION_STR", "the language matrix tests need a reachable MongoDB")
 	db := messagedb.NewMessageDBService(types.DBConfig{
 		URI:             "mongodb://" + os.Getenv("MESSAGE_DB_USERNAME") + ":" + os.Getenv("MESSAGE_DB_PASSWORD") + "@" + connStr,
 		DBNamePrefix:    lmDBPrefix,

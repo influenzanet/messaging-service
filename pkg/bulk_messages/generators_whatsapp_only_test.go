@@ -4,8 +4,9 @@ package bulk_messages
 // WhatsApp message and no e-mail, in each of the three bulk generators. The e-mail is still
 // the fallback when the WhatsApp message cannot be prepared. These tests reuse the helpers of
 // generators_whatsapp_fallback_test.go, but with a working outgoing-whatsapp collection. They
-// need MESSAGE_DB_CONNECTION_STR and are skipped otherwise, and must not run in parallel
-// because the log capture swaps a package-level writer.
+// need MESSAGE_DB_CONNECTION_STR and are skipped otherwise (under CI they fail instead, see
+// test/testenv), and must not run in parallel because the log capture swaps a package-level
+// writer.
 
 import (
 	"context"

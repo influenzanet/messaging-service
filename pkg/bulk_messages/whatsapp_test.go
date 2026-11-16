@@ -10,6 +10,7 @@ import (
 	"github.com/influenzanet/messaging-service/internal/config"
 	"github.com/influenzanet/messaging-service/pkg/dbs/messagedb"
 	"github.com/influenzanet/messaging-service/pkg/types"
+	"github.com/influenzanet/messaging-service/test/testenv"
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -399,10 +400,7 @@ func TestSaveOutgoingWhatsAppWhenQueueingFails(t *testing.T) {
 }
 
 func TestSaveOutgoingWhatsAppQueuesTheMessage(t *testing.T) {
-	connStr := os.Getenv("MESSAGE_DB_CONNECTION_STR")
-	if connStr == "" {
-		t.Skip("MESSAGE_DB_CONNECTION_STR not set: this case needs a reachable MongoDB")
-	}
+	connStr := testenv.Require(t, "MESSAGE_DB_CONNECTION_STR", "this case needs a reachable MongoDB")
 	configureWhatsAppForTest(t, true)
 
 	dbService := messagedb.NewMessageDBService(types.DBConfig{

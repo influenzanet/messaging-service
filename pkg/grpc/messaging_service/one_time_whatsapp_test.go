@@ -14,7 +14,6 @@ package messaging_service
 import (
 	"context"
 	"encoding/base64"
-	"os"
 	"testing"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	loggingMock "github.com/influenzanet/messaging-service/test/mocks/logging_service"
 	studyMock "github.com/influenzanet/messaging-service/test/mocks/study-service"
 	userMock "github.com/influenzanet/messaging-service/test/mocks/user-management-service"
+	"github.com/influenzanet/messaging-service/test/testenv"
 	studyAPI "github.com/influenzanet/study-service/pkg/api"
 	umAPI "github.com/influenzanet/user-management-service/pkg/api"
 	"go.mongodb.org/mongo-driver/bson"
@@ -225,9 +225,7 @@ func lmClearWhatsAppQueue(t *testing.T) {
 // start-up, and restores a disabled value via t.Cleanup.
 func lmRequireWhatsAppEnabled(t *testing.T) {
 	t.Helper()
-	if os.Getenv("MESSAGE_DB_CONNECTION_STR") == "" {
-		t.Skip("MESSAGE_DB_CONNECTION_STR not set")
-	}
+	testenv.Require(t, "MESSAGE_DB_CONNECTION_STR", "the one-time WhatsApp tests need a reachable MongoDB")
 	bulk_messages.Configure(config.NewWhatsAppSettings(func(key string) string {
 		switch key {
 		case "WHATSAPP_ENABLED":

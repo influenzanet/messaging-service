@@ -5,8 +5,8 @@ package bulk_messages
 // e-mail when user-management says WhatsApp is off for the instance, and the WhatsApp message
 // when it says on - exactly the two halves of the activation design in one test, reusing the
 // generator harness of generators_whatsapp_only_test.go. They need MESSAGE_DB_CONNECTION_STR
-// and are skipped otherwise, and must not run in parallel because the log capture swaps a
-// package-level writer.
+// and are skipped otherwise (under CI they fail instead, see test/testenv), and must not run in
+// parallel because the log capture swaps a package-level writer.
 
 import (
 	"testing"
