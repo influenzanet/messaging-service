@@ -1,0 +1,3 @@
+# Local tooling of the api target (proto-toolchain.mk): host binaries, not part of any image.
+/.proto-tools/
+/intermediate/
