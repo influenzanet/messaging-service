@@ -3,6 +3,7 @@ package messagedb
 import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 // WhatsAppQueueDepth describes an instance's outgoing-whatsapp queue at one moment.
@@ -64,4 +65,18 @@ func (dbService *MessageDBService) GetWhatsAppQueueDepth(instanceID string, now,
 		}
 	}
 	return depth, cursor.Err()
+}
+
+// HasOutgoingWhatsApp reports whether an instance's outgoing-whatsapp queue holds any message at
+// all, deferred ones included. It stops at the first message it finds, so it costs the same on a
+// long queue as on an empty one.
+func (dbService *MessageDBService) HasOutgoingWhatsApp(instanceID string) (bool, error) {
+	ctx, cancel := dbService.getContext()
+	defer cancel()
+
+	count, err := dbService.collectionRefOutgoingWhatsApp(instanceID).CountDocuments(ctx, bson.M{}, options.Count().SetLimit(1))
+	if err != nil {
+		return false, err
+	}
+	return count > 0, nil
 }

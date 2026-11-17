@@ -14,10 +14,12 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/coneno/logger"
 	"github.com/influenzanet/messaging-service/internal/config"
 	"github.com/influenzanet/messaging-service/pkg/dbs/globaldb"
+	"github.com/influenzanet/messaging-service/pkg/types"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -74,5 +76,102 @@ func TestHandleOutgoingWhatsAppProcessesInstancesWhenSettingsAreEnabled(t *testi
 
 	if !strings.Contains(infos.String(), "Finished processing 0 whatsapp messages") {
 		t.Errorf("expected the instance to reach handleOutgoingWhatsAppForInstance, got %q", infos.String())
+	}
+}
+
+// An instance that does not use WhatsApp is skipped on every tick. With nothing in its queue,
+// the skip writes nothing above Debug: one warning per tick per such instance would bury the
+// alerts.
+// Fails if the skip logs a warning, an error or an info line about the instance when its queue
+// is empty, or stops logging it at Debug.
+func TestHandleOutgoingWhatsAppIsQuietForAnOffInstanceWithNothingQueued(t *testing.T) {
+	db := newSchedulerTestDB(t)
+	gdb := newSchedulerTestGlobalDB(t)
+	insertSchedulerTestInstance(t, gdb, schedulerTestInstanceID)
+
+	warnings := captureLog(t, logger.Warning)
+	errorsLog := captureErrorLog(t)
+	infos := captureLog(t, logger.Info)
+	debugs := captureLog(t, logger.Debug)
+
+	handleOutgoingWhatsApp(db.service, gdb, nil, 60, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, config.WhatsAppSettings{})
+
+	if warnings.String() != "" || errorsLog.String() != "" {
+		t.Errorf("expected nothing above Debug, got warnings %q, errors %q", warnings.String(), errorsLog.String())
+	}
+	if strings.Contains(infos.String(), "not enabled for this instance") {
+		t.Errorf("expected no info line about the skip, got %q", infos.String())
+	}
+	if !strings.Contains(debugs.String(), "["+schedulerTestInstanceID+"] WhatsApp is not enabled for this instance, nothing queued") {
+		t.Errorf("expected the skip at Debug, got %q", debugs.String())
+	}
+}
+
+// The check is per instance: of two instances where WhatsApp is off, only the one with
+// messages waiting warns, and the other stays at Debug.
+// Fails if the check reads another instance's queue, or one waiting queue makes every skipped
+// instance warn.
+func TestHandleOutgoingWhatsAppWarnsOnlyForTheOffInstanceWithMessagesWaiting(t *testing.T) {
+	db := newSchedulerTestDB(t)
+	gdb := newSchedulerTestGlobalDB(t)
+	// One letter, like schedulerTestInstanceID: the test database prefix leaves no room for
+	// more under MongoDB's 63-character limit on database names.
+	const emptyInstanceID = "j"
+	insertSchedulerTestInstance(t, gdb, emptyInstanceID)
+	insertSchedulerTestInstance(t, gdb, schedulerTestInstanceID)
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := db.service.DBClient.Database(db.prefix + emptyInstanceID + "_messageDB").Drop(ctx); err != nil {
+			t.Errorf("drop the database of %s: %v", emptyInstanceID, err)
+		}
+	})
+	// The empty instance's database exists, with a sent message and nothing queued.
+	if _, err := db.service.AddToSentWhatsApp(emptyInstanceID, types.OutgoingWhatsApp{
+		MessageType: "test", ToPhoneNumber: "+391234567890", TemplateName: "test_template", Lang: "it",
+	}, deliveredWhatsApp()); err != nil {
+		t.Fatalf("archive a message for %s: %v", emptyInstanceID, err)
+	}
+	db.add(t, 1, 0)
+
+	warnings := captureLog(t, logger.Warning)
+	debugs := captureLog(t, logger.Debug)
+
+	handleOutgoingWhatsApp(db.service, gdb, nil, 60, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, config.WhatsAppSettings{})
+
+	if !strings.Contains(warnings.String(), "["+schedulerTestInstanceID+"] WhatsApp is not enabled for this instance, its outgoing messages stay queued") {
+		t.Errorf("expected a warning for the instance with a message waiting, got %q", warnings.String())
+	}
+	if strings.Contains(warnings.String(), emptyInstanceID) {
+		t.Errorf("expected no warning for the instance with nothing queued, got %q", warnings.String())
+	}
+	if !strings.Contains(debugs.String(), "["+emptyInstanceID+"] WhatsApp is not enabled for this instance, nothing queued") {
+		t.Errorf("expected the empty instance at Debug, got %q", debugs.String())
+	}
+}
+
+// A queue that cannot be read could hold messages that are never sent, so the skip warns with
+// the error instead of falling silent.
+// Fails if a failed read is taken for an empty queue.
+func TestHandleOutgoingWhatsAppWarnsWhenAnOffInstanceQueueCannotBeRead(t *testing.T) {
+	db := newSchedulerTestDB(t)
+	gdb := newSchedulerTestGlobalDB(t)
+	insertSchedulerTestInstance(t, gdb, schedulerTestInstanceID)
+	// A user with no right on the message database: the queue check fails.
+	service := db.serviceWithPrivileges(t, "no_count", bson.A{bson.M{
+		"resource": bson.M{"db": "scheduler_unrelated", "collection": ""},
+		"actions":  bson.A{"find"},
+	}})
+
+	warnings := captureLog(t, logger.Warning)
+	debugs := captureLog(t, logger.Debug)
+
+	handleOutgoingWhatsApp(service, gdb, nil, 60, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, config.WhatsAppSettings{})
+
+	if !strings.Contains(warnings.String(), "["+schedulerTestInstanceID+"] WhatsApp is not enabled for this instance, and its outgoing-whatsapp queue cannot be read: ") {
+		t.Errorf("expected a warning about the unreadable queue, got %q", warnings.String())
+	}
+	if strings.Contains(debugs.String(), "nothing queued") {
+		t.Errorf("expected the failed read not to be reported as an empty queue, got %q", debugs.String())
 	}
 }

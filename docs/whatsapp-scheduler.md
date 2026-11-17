@@ -242,6 +242,12 @@ the others, and `oldest_waiting_s` is the age of the oldest of those others (0 w
 none). No line is written for an instance where WhatsApp is off, nor when the runner did not
 start.
 
+An instance where WhatsApp is off is skipped on every tick. With nothing in its queue that is a
+DEBUG line only. When messages are waiting there, every tick writes a WARNING
+(`WhatsApp is not enabled for this instance, its outgoing messages stay queued`): they are not
+sent, and do not expire, until WhatsApp is turned back on for that instance or they are removed
+by hand. A queue that cannot be read gives a WARNING too.
+
 ### Rules for the log stack
 
 Each deployment sets these up in the log tooling it has; the ones below are a starting point.

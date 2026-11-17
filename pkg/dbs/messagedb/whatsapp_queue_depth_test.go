@@ -60,3 +60,39 @@ func TestGetWhatsAppQueueDepthOfAnEmptyQueue(t *testing.T) {
 		t.Fatalf("queue depth of an empty queue = %+v", depth)
 	}
 }
+
+// The check behind the skipped-instance warning: it sees any message in this instance's queue,
+// a deferred one too, and nothing queued for another instance.
+// Fails if it reads the wrong instance, ignores deferred messages, or reports an empty or
+// missing queue as holding messages.
+func TestHasOutgoingWhatsApp(t *testing.T) {
+	instanceID := freshWhatsAppInstance(t)
+	otherInstanceID := freshWhatsAppInstance(t)
+
+	has, err := testDBService.HasOutgoingWhatsApp(instanceID)
+	if err != nil || has {
+		t.Fatalf("a queue that does not exist: has = %v, err = %v", has, err)
+	}
+
+	if _, err := testDBService.AddToOutgoingWhatsApp(otherInstanceID, types.OutgoingWhatsApp{
+		MessageType: "weekly", ToPhoneNumber: "+393330000002", TemplateName: "t", Lang: "it",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	has, err = testDBService.HasOutgoingWhatsApp(instanceID)
+	if err != nil || has {
+		t.Fatalf("a message of another instance only: has = %v, err = %v", has, err)
+	}
+
+	// Deferred until after now, the way a refused template holds its messages.
+	if _, err := testDBService.AddToOutgoingWhatsApp(instanceID, types.OutgoingWhatsApp{
+		MessageType: "weekly", ToPhoneNumber: "+393330000003", TemplateName: "t", Lang: "it",
+		LastSendAttempt: time.Now().Unix() + 3600,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	has, err = testDBService.HasOutgoingWhatsApp(instanceID)
+	if err != nil || !has {
+		t.Fatalf("one deferred message: has = %v, err = %v", has, err)
+	}
+}

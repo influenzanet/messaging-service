@@ -501,7 +501,7 @@ func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Globa
 		// off for a specific instance, or lack credentials this process needs may turn it
 		// off here even where user-management allows it.
 		if !settings.Enabled(instance.InstanceID) {
-			logger.Warning.Printf("[%s] WhatsApp is not enabled for this instance, its outgoing messages stay queued", instance.InstanceID)
+			logWhatsAppOffInstance(mdb, instance.InstanceID)
 			continue
 		}
 		wg.Add(1)
@@ -509,6 +509,23 @@ func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Globa
 	}
 	wg.Wait()
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending outgoing whatsapp messages", threadID)
+}
+
+// logWhatsAppOffInstance reports an instance the tick skips because WhatsApp is off for it. An
+// instance that never uses WhatsApp is skipped on every tick, so with nothing queued the line is
+// Debug only; a warning there would come once a tick for every such instance and bury the
+// alerts. Messages waiting in its queue are never sent while WhatsApp stays off, which an
+// operator has to see: that, and a queue that cannot be read, are warnings.
+func logWhatsAppOffInstance(mdb *messagedb.MessageDBService, instanceID string) {
+	queued, err := mdb.HasOutgoingWhatsApp(instanceID)
+	switch {
+	case err != nil:
+		logger.Warning.Printf("[%s] WhatsApp is not enabled for this instance, and its outgoing-whatsapp queue cannot be read: %v", instanceID, err)
+	case queued:
+		logger.Warning.Printf("[%s] WhatsApp is not enabled for this instance, its outgoing messages stay queued", instanceID)
+	default:
+		logger.Debug.Printf("[%s] WhatsApp is not enabled for this instance, nothing queued", instanceID)
+	}
 }
 
 type whatsAppSender interface {
