@@ -34,10 +34,12 @@ help:
 	@echo "  DOCKER_OPTS : default docker build options (default : $(DOCKER_OPTS))"
 	@echo "  TEST_ARGS : Arguments to pass to go test call"
 
+# pkg/api is deleted and replaced only once every proto has been generated: a protoc that
+# fails, or cannot run on this machine, stops the recipe first and leaves pkg/api alone.
 api: $(PROTO_TOOLS)
 	if [ ! -d $(PROTO_BUILD_DIR) ]; then mkdir -p $(PROTO_BUILD_DIR); else  find $(PROTO_BUILD_DIR) -type f -delete &&  mkdir -p $(PROTO_BUILD_DIR); fi
-	find $(API_PATH)/email_client_service/*.proto -maxdepth 1 -type f -exec $(PROTOC_CMD) {} --proto_path=$(API_PATH) --go_out=$(PROTO_BUILD_DIR) --go-grpc_out=$(PROTO_BUILD_DIR) \;
-	find $(API_PATH)/messaging_service/*.proto -maxdepth 1 -type f -exec $(PROTOC_CMD) {} --proto_path=$(API_PATH) --go_out=$(PROTO_BUILD_DIR) --go-grpc_out=$(PROTO_BUILD_DIR) \;
+	for f in $(API_PATH)/email_client_service/*.proto; do $(PROTOC_CMD) $$f --proto_path=$(API_PATH) --go_out=$(PROTO_BUILD_DIR) --go-grpc_out=$(PROTO_BUILD_DIR) || exit 1; done
+	for f in $(API_PATH)/messaging_service/*.proto; do $(PROTOC_CMD) $$f --proto_path=$(API_PATH) --go_out=$(PROTO_BUILD_DIR) --go-grpc_out=$(PROTO_BUILD_DIR) || exit 1; done
 	find "./pkg/api" -delete
 	mv $(PROTO_BUILD_DIR)/github.com/influenzanet/messaging-service/pkg/api pkg/api
 	find $(PROTO_BUILD_DIR) -delete
