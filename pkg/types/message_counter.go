@@ -6,6 +6,7 @@ type MessageCounter struct {
 	Total     int
 	Failed    int
 	Success   int
+	NoChannel int
 	StartTime int64
 	Duration  int64
 }
@@ -18,6 +19,12 @@ func (mc *MessageCounter) IncreaseCounter(success bool) {
 		mc.Failed += 1
 	}
 	mc.Duration = time.Now().Unix() - mc.StartTime
+}
+
+// IncreaseNoChannel counts a message not generated because the participant has no
+// notification channel. It does not count towards Total.
+func (mc *MessageCounter) IncreaseNoChannel() {
+	mc.NoChannel += 1
 }
 
 func (mc *MessageCounter) Stop() {

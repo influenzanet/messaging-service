@@ -147,18 +147,24 @@ func TestUserPrefersChannel(t *testing.T) {
 	withChannels := func(ch []string) *umAPI.User {
 		return &umAPI.User{ContactPreferences: &umAPI.ContactPreferences{PreferredChannels: ch}}
 	}
+	// An empty list (which proto3 cannot tell apart from a missing one) is a participant who
+	// turned every channel off: it matches no channel. user-management resolves a missing
+	// list to ["email"] before it sends the user here.
 	cases := []struct {
-		name      string
-		user      *umAPI.User
-		wantEmail bool
-		wantWA    bool
+		name        string
+		user        *umAPI.User
+		wantEmail   bool
+		wantWA      bool
+		wantChannel bool
 	}{
-		{"whatsapp only", withChannels([]string{"whatsapp"}), false, true},
-		{"email only", withChannels([]string{"email"}), true, false},
-		{"both", withChannels([]string{"email", "whatsapp"}), true, true},
-		{"empty defaults to email", withChannels([]string{}), true, false},
-		{"nil channels default to email", withChannels(nil), true, false},
-		{"no contact preferences default to email", &umAPI.User{}, true, false},
+		{"whatsapp only", withChannels([]string{"whatsapp"}), false, true, true},
+		{"email only", withChannels([]string{"email"}), true, false, true},
+		{"both", withChannels([]string{"email", "whatsapp"}), true, true, true},
+		{"empty list is no channel", withChannels([]string{}), false, false, false},
+		{"nil list is no channel", withChannels(nil), false, false, false},
+		{"no contact preferences is no channel", &umAPI.User{}, false, false, false},
+		{"only an unknown channel is no channel", withChannels([]string{"sms"}), false, false, false},
+		{"an unknown channel next to e-mail", withChannels([]string{"sms", "email"}), true, false, true},
 	}
 	for _, c := range cases {
 		c := c
@@ -168,6 +174,9 @@ func TestUserPrefersChannel(t *testing.T) {
 			}
 			if got := userPrefersChannel(c.user, channelWhatsApp); got != c.wantWA {
 				t.Errorf("whatsapp: expected %v, got %v", c.wantWA, got)
+			}
+			if got := hasNotificationChannel(c.user); got != c.wantChannel {
+				t.Errorf("hasNotificationChannel: expected %v, got %v", c.wantChannel, got)
 			}
 		})
 	}

@@ -135,6 +135,11 @@ func GenerateForAllUsers(
 			continue
 		}
 
+		if !hasNotificationChannel(user) {
+			counters.IncreaseNoChannel()
+			continue
+		}
+
 		contentInfos := map[string]string{}
 		for k, v := range globalTemplateInfos {
 			contentInfos[k] = v
@@ -176,7 +181,7 @@ func GenerateForAllUsers(
 		counters.IncreaseCounter(true)
 	}
 	counters.Stop()
-	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel, instanceID)
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s for %s. Skipped, no notification channel: %d.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel, instanceID, counters.NoChannel)
 }
 
 func GenerateForStudyParticipants(
@@ -228,6 +233,11 @@ func GenerateForStudyParticipants(
 			continue
 		}
 
+		if !hasNotificationChannel(user) {
+			counters.IncreaseNoChannel()
+			continue
+		}
+
 		contentInfos := map[string]string{}
 		for k, v := range globalTemplateInfos {
 			contentInfos[k] = v
@@ -266,7 +276,7 @@ func GenerateForStudyParticipants(
 		counters.IncreaseCounter(true)
 	}
 	counters.Stop()
-	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s for %s.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel, instanceID)
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s for %s. Skipped, no notification channel: %d.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel, instanceID, counters.NoChannel)
 }
 
 func GenerateParticipantMessages(
@@ -341,6 +351,15 @@ func GenerateParticipantMessages(
 
 				sentMessages := []string{}
 				for _, m := range resp.Messages {
+					// A participant with no channel gets nothing, and the message is consumed
+					// all the same: kept, it would be fetched again on every run and arrive
+					// long out of date once the participant turns a channel back on.
+					if !hasNotificationChannel(user) {
+						counters.IncreaseNoChannel()
+						sentMessages = append(sentMessages, m.Id)
+						continue
+					}
+
 					template, ok := messageTemplateCache[m.Type]
 					if !ok {
 						template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, study.Key)
@@ -432,7 +451,7 @@ func GenerateParticipantMessages(
 		msgCountsLog = "none"
 	}
 
-	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %ds for %s. Message counts: [%s]", counters.Total, counters.Failed, "scheduled participant", counters.Duration, messageLabel, msgCountsLog)
+	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %ds for %s. Message counts: [%s]. Skipped, no notification channel: %d.", counters.Total, counters.Failed, "scheduled participant", counters.Duration, messageLabel, msgCountsLog, counters.NoChannel)
 }
 
 func GenerateResearcherNotificationMessages(
@@ -523,19 +542,26 @@ func GenerateResearcherNotificationMessages(
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for auto email '%s'.", counters.Total, counters.Failed, "researcher notifications", counters.Duration, messageLabel)
 }
 
-// userPrefersChannel returns true if the given channel is in the user's preferred_channels.
-// If preferred_channels is nil or empty, defaults to true only for "email" (backward compatible).
+// userPrefersChannel returns true if the given channel is in the user's preferred channels.
+// An empty list means the participant turned every channel off, so it matches no channel.
+// user-management sends ["email"] for accounts that predate the list, so an empty list that
+// reaches this service is always the participant's choice.
 func userPrefersChannel(user *umAPI.User, channel string) bool {
-	channels := user.GetContactPreferences().GetPreferredChannels()
-	if len(channels) == 0 {
-		return channel == channelEmail
-	}
-	for _, c := range channels {
+	for _, c := range user.GetContactPreferences().GetPreferredChannels() {
 		if c == channel {
 			return true
 		}
 	}
 	return false
+}
+
+// hasNotificationChannel reports whether the participant wants notifications on at least one
+// channel this service sends on. A participant without one gets no notification at all: the
+// generators skip them before anything is prepared, so neither the e-mail fallback for
+// WhatsApp nor a login token reaches them. Transactional e-mails (password reset, account
+// verification) do not go through the generators and are not affected.
+func hasNotificationChannel(user *umAPI.User) bool {
+	return userPrefersChannel(user, channelEmail) || userPrefersChannel(user, channelWhatsApp)
 }
 
 // getVerifiedPhone returns the first verified phone number from the user's contact infos,
@@ -584,8 +610,8 @@ func prepareOutgoingWhatsApp(
 		return nil
 	}
 
-	// No preferred channel means no WhatsApp: the participant never opted in, or a
-	// preference was lost, and a paid message must not be sent on either account.
+	// Only a participant who chose WhatsApp gets it: a paid message must not be sent to
+	// anyone who did not opt in.
 	if !userPrefersChannel(user, channelWhatsApp) {
 		return nil
 	}
