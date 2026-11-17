@@ -44,9 +44,12 @@ type Config struct {
 	// WhatsAppTemplateRetryDelay is how long, in seconds, the messages of a template Meta
 	// refuses wait before they are tried again.
 	WhatsAppTemplateRetryDelay int64
-	MessageDBConfig            types.DBConfig
-	GlobalDBConfig             types.DBConfig
-	ServiceURLs                struct {
+	// WhatsAppMaxAge is how long, in seconds, a message may wait in the queue: an older one is
+	// archived as expired and never sent.
+	WhatsAppMaxAge  int64
+	MessageDBConfig types.DBConfig
+	GlobalDBConfig  types.DBConfig
+	ServiceURLs     struct {
 		UserManagementService string
 		EmailClientService    string
 		StudyService          string
@@ -91,6 +94,10 @@ func initConfig() Config {
 	conf.WhatsAppTemplateRetryDelay, err = parseWhatsAppTemplateRetryDelay(os.Getenv("MESSAGE_SCHEDULER_WHATSAPP_TEMPLATE_RETRY_DELAY"))
 	if err != nil {
 		logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_WHATSAPP_TEMPLATE_RETRY_DELAY: %v", err)
+	}
+	conf.WhatsAppMaxAge, err = parseWhatsAppMaxAge(os.Getenv("MESSAGE_SCHEDULER_WHATSAPP_MAX_AGE"))
+	if err != nil {
+		logger.Error.Fatalf("cannot parse MESSAGE_SCHEDULER_WHATSAPP_MAX_AGE: %v", err)
 	}
 
 	conf.LogLevel = config.GetLogLevel()
@@ -185,7 +192,7 @@ func main() {
 	go runnerForAutoMessages(messageDBService, globalDBService, clients, conf.Frequencies.AutoMessage)
 	go runnerForParticipantMessages(messageDBService, globalDBService, clients, conf.Frequencies.ParticipantMessages)
 	go runnerForResearcherNotifications(messageDBService, globalDBService, clients, conf.Frequencies.ResearcherNotifications)
-	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, whatsAppClient, conf.Frequencies.WhatsApp, whatsAppEnabled, conf.WhatsAppTemplateRetryDelay, whatsAppSettings)
+	go runnerForOutgoingWhatsApp(messageDBService, globalDBService, whatsAppClient, conf.Frequencies.WhatsApp, whatsAppEnabled, conf.WhatsAppTemplateRetryDelay, conf.WhatsAppMaxAge, whatsAppSettings)
 	runnerForHighPrioOutgoingEmails(messageDBService, globalDBService, clients, conf.Frequencies.HighPrio)
 }
 
@@ -450,7 +457,7 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending researcher notifications", threadID)
 }
 
-func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, freq int, enabled bool, templateRetryDelay int64, settings config.WhatsAppSettings) {
+func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, freq int, enabled bool, templateRetryDelay int64, maxAge int64, settings config.WhatsAppSettings) {
 	if run, reason := shouldRunOutgoingWhatsApp(enabled, freq, wac != nil); !run {
 		logger.Warning.Printf("outgoing whatsapp runner not started: %s. Messages already in outgoing-whatsapp stay queued and are not delivered.", reason)
 		return
@@ -461,15 +468,18 @@ func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Gl
 	if problem := whatsAppLockProblem(freq, whatsAppSendTimeout); problem != "" {
 		logger.Warning.Printf("outgoing whatsapp: %s", problem)
 	}
+	if problem := whatsAppMaxAgeProblem(maxAge, templateRetryDelay); problem != "" {
+		logger.Warning.Printf("outgoing whatsapp: %s", problem)
+	}
 
 	olderThan := getThreadLockInterval(freq)
 	for {
-		go handleOutgoingWhatsApp(mdb, gdb, wac, olderThan, templateRetryDelay, settings)
+		go handleOutgoingWhatsApp(mdb, gdb, wac, olderThan, templateRetryDelay, maxAge, settings)
 		time.Sleep(period)
 	}
 }
 
-func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, lastAttemptOlderThan int64, templateRetryDelay int64, settings config.WhatsAppSettings) {
+func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, lastAttemptOlderThan int64, templateRetryDelay int64, maxAge int64, settings config.WhatsAppSettings) {
 	threadID := generateThreadID("WA")
 	logger.Info.Printf("--> Process <%s> started: fetching and sending outgoing whatsapp messages...", threadID)
 
@@ -488,7 +498,7 @@ func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Globa
 			continue
 		}
 		wg.Add(1)
-		go handleOutgoingWhatsAppForInstance(mdb, instance.InstanceID, wac, lastAttemptOlderThan, templateRetryDelay, &wg)
+		go handleOutgoingWhatsAppForInstance(mdb, instance.InstanceID, wac, lastAttemptOlderThan, templateRetryDelay, maxAge, &wg)
 	}
 	wg.Wait()
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending outgoing whatsapp messages", threadID)
@@ -599,7 +609,7 @@ func pauseWhatsAppAfterThrottle(mdb *messagedb.MessageDBService, instanceID stri
 	logger.Warning.Printf("[%s] Meta is limiting WhatsApp sending (%s, Meta code %d, retry-after %d s): pausing for %d s, until %s, throttle number %d in a row", instanceID, sendErr.Class(), sendErr.Code, int64(sendErr.RetryAfter/time.Second), int64(delay/time.Second), time.Unix(state.NotBefore, 0).UTC().Format(time.RFC3339), state.Level)
 }
 
-func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, lastAttemptOlderThan int64, templateRetryDelay int64, wg *sync.WaitGroup) {
+func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, lastAttemptOlderThan int64, templateRetryDelay int64, maxAge int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	// While Meta limits the sender nothing is claimed or sent: the wait is stored in the
@@ -615,6 +625,9 @@ func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instance
 	throttleToReset := throttle.Level > 0
 
 	counters := types.InitMessageCounter()
+	// Messages this tick archived as expired: they are not sent, so they are not counted with
+	// the messages it tried to send.
+	expired := 0
 
 	// How long after this batch was claimed a send may still start.
 	sendWindow := whatsAppSendWindow(lastAttemptOlderThan, whatsAppSendTimeout)
@@ -717,6 +730,15 @@ processQueue:
 				continue
 			}
 
+			if whatsAppMessageExpired(msg.AddedAt, time.Now().Unix(), maxAge) {
+				// Waited too long to be of use: archived unsent, without asking Meta. Nothing
+				// was sent, so a held failure is neither decided nor affected by it.
+				if expireWhatsApp(mdb, instanceID, msg) {
+					expired++
+				}
+				continue
+			}
+
 			if refusedTemplates[whatsAppTemplateKey(msg)] {
 				// Already deferred with the rest of its template when Meta refused it.
 				counters.IncreaseCounter(false)
@@ -808,7 +830,8 @@ processQueue:
 				if errors.Is(markErr, messagedb.ErrOutgoingWhatsAppNotFound) {
 					// The claim expired and another tick has already archived this message,
 					// or the participant withdrew WhatsApp while it was being sent and
-					// DeleteOutgoingWhatsAppForUser archived it as cancelled (accepted, D11).
+					// DeleteOutgoingWhatsAppForUser archived it as cancelled. Accepted: the
+					// send cannot be called back once it has started.
 					logger.Warning.Printf("[%s] WhatsApp message '%s' left the queue while it was being sent, leaving the archive to the tick that owns it", instanceID, msg.MessageType)
 					continue
 				}
@@ -823,6 +846,9 @@ processQueue:
 		}
 	}
 	counters.Stop()
+	if expired > 0 {
+		logger.Warning.Printf("[%s] %d WhatsApp message(s) archived as expired without being sent: they waited in the queue longer than %d s", instanceID, expired, maxAge)
+	}
 	logger.Info.Printf("[%s] Finished processing %d whatsapp messages in %d s.", instanceID, counters.Success, counters.Duration)
 }
 

@@ -43,7 +43,7 @@ func TestHandleOutgoingWhatsAppSkipsEveryInstanceWhenSettingsAreDisabled(t *test
 	// wac is nil on purpose: if the skip did not hold, the first send attempt would panic on
 	// a nil *waClient.WhatsAppClient receiver instead of silently reaching Meta, which is a
 	// safer failure for a test than a real network call would be.
-	handleOutgoingWhatsApp(db.service, gdb, nil, 60, defaultWhatsAppTemplateRetryDelay, config.WhatsAppSettings{})
+	handleOutgoingWhatsApp(db.service, gdb, nil, 60, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, config.WhatsAppSettings{})
 
 	if !strings.Contains(warnings.String(), "WhatsApp is not enabled for this instance") {
 		t.Errorf("expected the per-instance skip warning, got %q", warnings.String())
@@ -70,7 +70,7 @@ func TestHandleOutgoingWhatsAppProcessesInstancesWhenSettingsAreEnabled(t *testi
 
 	infos := captureLog(t, logger.Info)
 
-	handleOutgoingWhatsApp(db.service, gdb, nil, 60, defaultWhatsAppTemplateRetryDelay, testSchedulerWhatsAppSettings(true))
+	handleOutgoingWhatsApp(db.service, gdb, nil, 60, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, testSchedulerWhatsAppSettings(true))
 
 	if !strings.Contains(infos.String(), "Finished processing 0 whatsapp messages") {
 		t.Errorf("expected the instance to reach handleOutgoingWhatsAppForInstance, got %q", infos.String())

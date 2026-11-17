@@ -9,6 +9,9 @@ const (
 	// WhatsAppStatusCancelled marks a message taken out of the queue unsent because the
 	// participant withdrew WhatsApp or the subscription it belonged to.
 	WhatsAppStatusCancelled = "cancelled"
+	// WhatsAppStatusExpired marks a message taken out of the queue unsent because it waited
+	// longer than the scheduler's maximum age.
+	WhatsAppStatusExpired = "expired"
 )
 
 // WhatsAppSendOutcome is how a message left the queue. On a failure it names Meta's numeric

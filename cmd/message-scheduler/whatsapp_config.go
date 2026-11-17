@@ -15,17 +15,23 @@ const defaultWhatsAppTemplateRetryDelay int64 = 3600
 // parseWhatsAppTemplateRetryDelay reads MESSAGE_SCHEDULER_WHATSAPP_TEMPLATE_RETRY_DELAY: empty
 // means the default, anything else must be a positive number of seconds.
 func parseWhatsAppTemplateRetryDelay(value string) (int64, error) {
+	return parsePositiveSeconds(value, defaultWhatsAppTemplateRetryDelay)
+}
+
+// parsePositiveSeconds reads a duration setting in seconds: empty means defaultSeconds,
+// anything else must be a positive whole number.
+func parsePositiveSeconds(value string, defaultSeconds int64) (int64, error) {
 	if value == "" {
-		return defaultWhatsAppTemplateRetryDelay, nil
+		return defaultSeconds, nil
 	}
-	delay, err := strconv.ParseInt(value, 10, 64)
+	seconds, err := strconv.ParseInt(value, 10, 64)
 	if err != nil {
 		return 0, err
 	}
-	if delay <= 0 {
-		return 0, fmt.Errorf("%d is not a positive number of seconds", delay)
+	if seconds <= 0 {
+		return 0, fmt.Errorf("%d is not a positive number of seconds", seconds)
 	}
-	return delay, nil
+	return seconds, nil
 }
 
 // shouldRunOutgoingWhatsApp decides whether the outgoing WhatsApp runner is started, and

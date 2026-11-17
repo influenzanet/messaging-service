@@ -160,7 +160,7 @@ func TestOutgoingWhatsAppRunnerIsNotStartedWhenWhatsAppIsDisabled(t *testing.T) 
 	go func() {
 		defer close(done)
 		// A period of one hour: a runner that enters its loop does not return in time.
-		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, false, defaultWhatsAppTemplateRetryDelay, testSchedulerWhatsAppSettings(false))
+		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, false, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, testSchedulerWhatsAppSettings(false))
 	}()
 
 	select {
@@ -174,7 +174,7 @@ func TestOutgoingWhatsAppRunnerIsNotStartedWhenWhatsAppIsDisabled(t *testing.T) 
 	started := make(chan struct{})
 	go func() {
 		defer close(started)
-		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, true, defaultWhatsAppTemplateRetryDelay, testSchedulerWhatsAppSettings(true))
+		runnerForOutgoingWhatsApp(db.service, gdb, client, 3600, true, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, testSchedulerWhatsAppSettings(true))
 	}()
 	select {
 	case <-started:
@@ -289,7 +289,7 @@ func TestOutgoingWhatsAppRunnerReturnsWheneverItMustNotStart(t *testing.T) {
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
-				runnerForOutgoingWhatsApp(nil, nil, tc.client, tc.freq, tc.enabled, defaultWhatsAppTemplateRetryDelay, testSchedulerWhatsAppSettings(tc.enabled))
+				runnerForOutgoingWhatsApp(nil, nil, tc.client, tc.freq, tc.enabled, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, testSchedulerWhatsAppSettings(tc.enabled))
 			}()
 			select {
 			case <-done:

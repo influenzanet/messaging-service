@@ -541,7 +541,7 @@ func TestWhatsAppConcurrentTicksWhilePausedMakeNoSenderCall(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			<-start
-			handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, defaultWhatsAppTemplateRetryDelay, &wg)
+			handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, &wg)
 		}()
 	}
 	close(start)
@@ -570,7 +570,7 @@ func TestWhatsAppConcurrentTicksThrottledTogetherCountOneEvent(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			<-start
-			handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, defaultWhatsAppTemplateRetryDelay, &wg)
+			handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, &wg)
 		}()
 	}
 	close(start)

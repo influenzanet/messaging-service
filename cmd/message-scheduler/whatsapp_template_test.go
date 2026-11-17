@@ -81,7 +81,7 @@ func (db *schedulerTestDB) queuedWithTemplate(t *testing.T, name, lang string) [
 func runWhatsAppHandlerWithTemplateDelay(db *schedulerTestDB, sender whatsAppSender, lockSeconds, templateRetryDelay int64) {
 	var wg sync.WaitGroup
 	wg.Add(1)
-	handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, lockSeconds, templateRetryDelay, &wg)
+	handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, lockSeconds, templateRetryDelay, defaultWhatsAppMaxAge, &wg)
 	wg.Wait()
 }
 
@@ -271,8 +271,8 @@ func TestConcurrentWhatsAppTicksChargeABrokenTemplateOnce(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(2)
-	go handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, 3600, &wg)
-	go handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, 3600, &wg)
+	go handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, 3600, defaultWhatsAppMaxAge, &wg)
+	go handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, 3600, defaultWhatsAppMaxAge, &wg)
 	wg.Wait()
 
 	msgs := db.queuedWithTemplate(t, brokenTemplate, "it")

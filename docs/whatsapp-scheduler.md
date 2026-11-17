@@ -10,7 +10,8 @@ The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `
 `MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
 client could be built; the reason it did not start is logged once as a warning at startup.
 Messages already in `outgoing-whatsapp` stay queued and are not delivered until the runner
-is enabled again. When `WHATSAPP_ENABLED` is `true` but this delivery configuration is
+is enabled again; those that have by then waited longer than the maximum age are archived
+as expired instead (see below). When `WHATSAPP_ENABLED` is `true` but this delivery configuration is
 incomplete, the message-scheduler logs an error naming each missing variable and stops
 generating WhatsApp messages for that process, instead of queueing messages nobody will
 send; participants who prefer WhatsApp receive the e-mail instead, and the e-mail channel is
@@ -94,11 +95,37 @@ The error classifier is in
 `pkg/http/clients/whatsapp_errors.go`; logs expose numeric HTTP/Meta codes, Meta's
 `fbtrace_id` and the transport cause, never Meta's free-form response body.
 
+## Maximum age
+
+A message that has waited in `outgoing-whatsapp` longer than
+`MESSAGE_SCHEDULER_WHATSAPP_MAX_AGE` seconds (default 86400, one day), counted from its
+`addedAt`, is archived as `expired` and never sent. A reminder that arrives a day late is
+of no use, and after a long stop (WhatsApp turned off for an instance, a runner that was
+not started) the queue would otherwise send every old message at once. The check runs when
+a tick claims the message, before anything is sent, and one value applies to every message
+type. A message Meta has already accepted (the delivered marker below) is archived as
+delivered whatever its age. Expiring a message asks nothing of Meta, so it charges no
+attempt and does not decide a held transient failure. The tick logs, at WARNING, how many
+messages it expired; no line is written per message.
+
+The queued row is deleted before the archive row is written, so a participant's
+cancellation running at the same moment cannot leave two archive rows for one message:
+whoever removes the row archives it. If the archive write then fails, the message is gone
+from the queue without an archive row, and only the error log records it; it is not sent
+either way. If the delete fails, the message stays queued and a later tick expires it.
+
+The maximum age has to be longer than a refused template keeps its messages: five tries,
+`MESSAGE_SCHEDULER_WHATSAPP_TEMPLATE_RETRY_DELAY` apart. When it is not, those messages
+expire before their last try, and the runner says so once at startup. With a retry delay of
+three hours the window is 15 hours, inside the default.
+
 ## Archived messages
 
 Every message archived in `sent-whatsapp` records how it left the queue: `status` is
-`delivered` when Meta accepted it and `failed` when the scheduler gave up on it at the
-five-attempt cap, `sentAt` is the moment it was archived, and a failed row keeps `errorCode`
+`delivered` when Meta accepted it, `failed` when the scheduler gave up on it at the
+five-attempt cap, `cancelled` when it was taken out of the queue because the participant
+withdrew WhatsApp or the subscription, and `expired` when it waited longer than the maximum
+age; `sentAt` is the moment it was archived, and a failed row keeps `errorCode`
 (Meta's numeric code, `0` when the failure never reached Meta) and `errorClass` (the class the
 retry policy read from that failure). Meta's free-form message is not stored, and the content
 parameters are dropped on archiving. Rows archived by older versions carry none of these
