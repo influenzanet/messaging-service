@@ -227,22 +227,47 @@ func TestWhatsAppMessageOlderThanMaxAgeIsArchivedAsExpiredWithoutSending(t *test
 	}
 }
 
+// sendHookWhatsAppSender runs onSend before passing each send to the sender it wraps, once per
+// recipient, so that a test can change the queue while a tick is under way.
+type sendHookWhatsAppSender struct {
+	whatsAppSender
+	onSend func(to string)
+}
+
+func (s *sendHookWhatsAppSender) SendTemplateMessage(ctx context.Context, to, template, lang string, params map[string]string) error {
+	s.onSend(to)
+	return s.whatsAppSender.SendTemplateMessage(ctx, to, template, lang, params)
+}
+
 // Nothing reaches Meta when an expired message is dropped, so it must not decide a transient
-// failure held before it: the held message stays undecided and is not charged.
+// failure held before it: the held message stays undecided and is not charged. The queue hands
+// out the oldest messages first, so an expired message comes after a held one only when it
+// becomes free during the tick, as when another tick's claim on it runs out; the sender queues
+// it while the held message is being sent, and the next fetch of the tick picks it up.
 // Fails if expiring a message is treated like an answer from Meta.
 func TestWhatsAppExpiredMessageDoesNotDecideAHeldFailure(t *testing.T) {
 	const stale = "+391111111101"
 	db := newSchedulerTestDB(t)
-	// Fetched first: fails transiently and is held. On its last attempt, so a charge would
-	// archive it as failed.
+	// Fails transiently and is held. On its last attempt, so a charge would archive it as
+	// failed.
 	db.addAged(t, poisonPhone, 0, maxWhatsAppSendAttempts-1)
-	db.addAged(t, stale, testMaxAge+60, 0)
-	sender := &perPhoneWhatsAppSender{script: map[string][]error{
-		poisonPhone: {&waClient.WhatsAppSendError{StatusCode: http.StatusServiceUnavailable}},
-	}}
+	var once sync.Once
+	sender := &sendHookWhatsAppSender{
+		whatsAppSender: &perPhoneWhatsAppSender{script: map[string][]error{
+			poisonPhone: {&waClient.WhatsAppSendError{StatusCode: http.StatusServiceUnavailable}},
+		}},
+		onSend: func(to string) {
+			if to == poisonPhone {
+				once.Do(func() { db.addAged(t, stale, testMaxAge+60, 0) })
+			}
+		},
+	}
 
 	runWhatsAppHandlerWithMaxAge(db, sender, testMaxAge)
 
+	if got := db.archivedFor(t, stale).Status; got != types.WhatsAppStatusExpired {
+		t.Fatalf("the stale message was archived as %q, want %q", got, types.WhatsAppStatusExpired)
+	}
 	if queued := db.queuedFor(t, poisonPhone); queued != 1 {
 		t.Fatalf("the held message left the queue: %d rows queued, want 1", queued)
 	}
@@ -251,9 +276,6 @@ func TestWhatsAppExpiredMessageDoesNotDecideAHeldFailure(t *testing.T) {
 	}
 	if archived := db.archivedRowsFor(t, poisonPhone); archived != 0 {
 		t.Fatalf("the held message was archived: %d rows", archived)
-	}
-	if got := db.archivedFor(t, stale).Status; got != types.WhatsAppStatusExpired {
-		t.Fatalf("the stale message was archived as %q, want %q", got, types.WhatsAppStatusExpired)
 	}
 }
 
@@ -375,36 +397,43 @@ func TestWhatsAppExpiryKeepsTheMessageQueuedWhenTheDeleteFails(t *testing.T) {
 // delete fails there while every other write succeeds.
 func (db *schedulerTestDB) serviceThatCannotDelete(t *testing.T) *messagedb.MessageDBService {
 	t.Helper()
+	return db.serviceWithPrivileges(t, "no_delete", bson.A{bson.M{
+		"resource": bson.M{"db": db.database.Name(), "collection": ""},
+		"actions":  bson.A{"find", "insert", "update"},
+	}})
+}
+
+// serviceWithPrivileges opens a second database service on the same data, logged in as a user
+// that holds only the given privileges. kind tells the users of one test apart.
+func (db *schedulerTestDB) serviceWithPrivileges(t *testing.T, kind string, privileges bson.A) *messagedb.MessageDBService {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	admin := db.service.DBClient.Database("admin")
-	name := "scheduler_no_delete_" + strings.ReplaceAll(db.prefix, "-", "")
+	name := "scheduler_" + kind + "_" + strings.ReplaceAll(db.prefix, "-", "")
 	const password = "test-password"
 	if err := admin.RunCommand(ctx, bson.D{
 		{Key: "createRole", Value: name},
-		{Key: "privileges", Value: bson.A{bson.M{
-			"resource": bson.M{"db": db.database.Name(), "collection": ""},
-			"actions":  bson.A{"find", "insert", "update"},
-		}}},
+		{Key: "privileges", Value: privileges},
 		{Key: "roles", Value: bson.A{}},
 	}).Err(); err != nil {
-		t.Fatalf("create the role without delete: %v", err)
+		t.Fatalf("create the role %s: %v", name, err)
 	}
 	if err := admin.RunCommand(ctx, bson.D{
 		{Key: "createUser", Value: name},
 		{Key: "pwd", Value: password},
 		{Key: "roles", Value: bson.A{name}},
 	}).Err(); err != nil {
-		t.Fatalf("create the user without delete: %v", err)
+		t.Fatalf("create the user %s: %v", name, err)
 	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := admin.RunCommand(ctx, bson.D{{Key: "dropUser", Value: name}}).Err(); err != nil {
-			t.Errorf("drop the user without delete: %v", err)
+			t.Errorf("drop the user %s: %v", name, err)
 		}
 		if err := admin.RunCommand(ctx, bson.D{{Key: "dropRole", Value: name}}).Err(); err != nil {
-			t.Errorf("drop the role without delete: %v", err)
+			t.Errorf("drop the role %s: %v", name, err)
 		}
 	})
 
@@ -427,7 +456,7 @@ func (db *schedulerTestDB) serviceThatCannotDelete(t *testing.T) *messagedb.Mess
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if err := service.DBClient.Disconnect(ctx); err != nil {
-			t.Errorf("disconnect the database service without delete: %v", err)
+			t.Errorf("disconnect the database service of %s: %v", name, err)
 		}
 	})
 	return service

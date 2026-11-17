@@ -31,6 +31,9 @@ func (db *schedulerTestDB) setClaimAge(t *testing.T, ageSeconds int64) {
 // without disconnecting the client the test harness still has to close.
 // lastSendAttempt is written explicitly: $lt never matches a missing field, so a document
 // without it would simply never be fetched and the test would pass without proving anything.
+// addedAt is written too: the queue hands out the oldest messages first and a missing field
+// sorts before any number, so without it the document would be fetched ahead of the messages
+// queued before it.
 func (db *schedulerTestDB) addUndecodable(t *testing.T) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -40,6 +43,7 @@ func (db *schedulerTestDB) addUndecodable(t *testing.T) {
 		"toPhoneNumber":   undecodablePhone,
 		"templateName":    "test_template",
 		"lang":            "it",
+		"addedAt":         time.Now().Unix(),
 		"lastSendAttempt": int64(0),
 		"sendAttempt":     "not-a-number",
 	}); err != nil {

@@ -130,7 +130,25 @@ age; `sentAt` is the moment it was archived, and a failed row keeps `errorCode`
 retry policy read from that failure). Meta's free-form message is not stored, and the content
 parameters are dropped on archiving. Rows archived by older versions carry none of these
 fields and read as an unknown outcome. Meta's message id is not stored: the client does
-not return it.
+not return it. `addedAt` is the moment the message was queued (older versions overwrote it
+with the archive time), and `archivedAt` is the archive time again, as a date.
+
+## Retention and indexes
+
+MongoDB deletes an archived row 180 days after its `archivedAt`, through a TTL index on that
+field. A TTL index only acts on dates, which is why the archive time is also stored there and
+not only in `sentAt`, a number: a row without `archivedAt`, archived by an older version, is
+never deleted this way.
+
+The message-scheduler creates the indexes of the WhatsApp collections when it starts, for
+every instance in the global database, whether WhatsApp is on for it or not. On
+`outgoing-whatsapp`: `{addedAt, _id, lastSendAttempt}` for the claim,
+`{templateName, lang, lastSendAttempt}` for the deferral of a refused template, and `{userId}`
+for the cancellation and the purge of a participant's messages. On `sent-whatsapp`: `{userId}`
+for the purge of a deleted account, and the retention index. Creating them again is harmless.
+A retention index with another expiry, or with none, is changed in place with `collMod`. A
+failure is logged at ERROR with the instance and does not stop the scheduler; an instance
+added later gets its indexes at the next start.
 
 ## The delivered marker
 
@@ -146,6 +164,11 @@ between Meta's answer and the mark sends that message once more when the claim e
 database that refuses both the mark and the archive write leaves the old behaviour in place.
 
 ## Claims and the send window
+
+The queue hands out the oldest messages first, by `addedAt`, and messages queued in the same
+second by `_id`, which is the order they were queued in when one process queued them. The claim index puts the sort keys before the claim
+age, so a claim reads the free messages already in order and stops at the first one, rather
+than sorting the whole queue on every claim.
 
 A batch is claimed at one instant: every message of a fetch receives the same
 `lastSendAttempt`, so a claim loop that lasts longer than the lock can no longer hand out a

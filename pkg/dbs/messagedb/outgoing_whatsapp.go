@@ -8,6 +8,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func (dbService *MessageDBService) AddToOutgoingWhatsApp(instanceID string, msg types.OutgoingWhatsApp) (types.OutgoingWhatsApp, error) {
@@ -30,12 +31,13 @@ func (dbService *MessageDBService) AddToOutgoingWhatsApp(instanceID string, msg 
 // that took it out: a delivered message and one the scheduler gave up on are otherwise stored
 // identically. Whatever the outcome, the row keeps only the masked number and no content
 // parameters: neither has any use once the message has left the queue, and the parameters
-// may carry a login token or other personal data.
+// may carry a login token or other personal data. addedAt stays the moment the message was
+// queued; the archive time goes to sentAt and, as a date the retention index can expire,
+// to archivedAt.
 func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg types.OutgoingWhatsApp, outcome types.WhatsAppSendOutcome) (types.SentWhatsApp, error) {
 	ctx, cancel := dbService.getContext()
 	defer cancel()
-	archivedAt := time.Now().Unix()
-	msg.AddedAt = archivedAt
+	archivedAt := time.Now()
 	msg.ToPhoneNumber = types.MaskPhone(msg.ToPhoneNumber)
 	msg.ContentParams = nil
 	msg.ID = primitive.NilObjectID
@@ -47,7 +49,8 @@ func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg type
 		Status:           outcome.Status,
 		ErrorCode:        outcome.ErrorCode,
 		ErrorClass:       outcome.ErrorClass,
-		SentAt:           archivedAt,
+		SentAt:           archivedAt.Unix(),
+		ArchivedAt:       archivedAt,
 	}
 	res, err := dbService.collectionRefSentWhatsApp(instanceID).InsertOne(ctx, sent)
 	if err != nil {
@@ -57,6 +60,19 @@ func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg type
 	return sent, nil
 }
 
+// outgoingWhatsAppClaimFilter selects the queued messages no tick holds at now: their claim is
+// older than olderThan seconds.
+func outgoingWhatsAppClaimFilter(now, olderThan int64) bson.M {
+	return bson.M{"lastSendAttempt": bson.M{"$lt": now - olderThan}}
+}
+
+// outgoingWhatsAppClaimOrder hands out the oldest messages first, so that a backlog drains in
+// the order it was queued and the messages closest to the maximum age go before the others.
+// Messages queued in the same second go in _id order, which is the order they were queued in
+// when the same process queued them.
+var outgoingWhatsAppClaimOrder = bson.D{{Key: "addedAt", Value: 1}, {Key: "_id", Value: 1}}
+
+// FetchOutgoingWhatsApp claims up to amount messages no tick holds, oldest first.
 func (dbService *MessageDBService) FetchOutgoingWhatsApp(instanceID string, amount int, olderThan int64) (messages []types.OutgoingWhatsApp, err error) {
 	ctx, cancel := dbService.getContext()
 	defer cancel()
@@ -65,11 +81,12 @@ func (dbService *MessageDBService) FetchOutgoingWhatsApp(instanceID string, amou
 	// longer than olderThan hand out a message it has already claimed in this same call.
 	now := time.Now().Unix()
 	counter := 0
+	update := bson.M{"$set": bson.M{"lastSendAttempt": now}}
+	filter := outgoingWhatsAppClaimFilter(now, olderThan)
+	opts := options.FindOneAndUpdate().SetSort(outgoingWhatsAppClaimOrder)
 	for counter < amount {
 		var newMsg types.OutgoingWhatsApp
-		update := bson.M{"$set": bson.M{"lastSendAttempt": now}}
-		filter := bson.M{"lastSendAttempt": bson.M{"$lt": now - olderThan}}
-		err = dbService.collectionRefOutgoingWhatsApp(instanceID).FindOneAndUpdate(ctx, filter, update).Decode(&newMsg)
+		err = dbService.collectionRefOutgoingWhatsApp(instanceID).FindOneAndUpdate(ctx, filter, update, opts).Decode(&newMsg)
 		if err != nil {
 			break
 		}
@@ -198,6 +215,19 @@ func (dbService *MessageDBService) DeferOutgoingWhatsAppOfTemplate(instanceID, t
 	return res.ModifiedCount, nil
 }
 
+// outgoingWhatsAppToCancelFilter selects the participant's queued messages of the given types
+// (no types: every type) that Meta has not accepted yet.
+func outgoingWhatsAppToCancelFilter(userID string, messageTypes []string) bson.M {
+	filter := bson.M{
+		"userId":    userID,
+		"delivered": bson.M{"$ne": true},
+	}
+	if len(messageTypes) > 0 {
+		filter["messageType"] = bson.M{"$in": messageTypes}
+	}
+	return filter
+}
+
 // CancelOutgoingWhatsAppForUser takes the participant's queued messages out of the queue and
 // archives each one as cancelled. Only messages of the given types are cancelled; no types
 // means every type. It returns how many messages it took out of the queue.
@@ -215,13 +245,7 @@ func (dbService *MessageDBService) CancelOutgoingWhatsAppForUser(instanceID stri
 	if userID == "" {
 		return 0, errors.New("user id is required")
 	}
-	filter := bson.M{
-		"userId":    userID,
-		"delivered": bson.M{"$ne": true},
-	}
-	if len(messageTypes) > 0 {
-		filter["messageType"] = bson.M{"$in": messageTypes}
-	}
+	filter := outgoingWhatsAppToCancelFilter(userID, messageTypes)
 
 	var cancelled int64
 	for {

@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 // Outcomes of a WhatsApp message that left the outgoing queue. Without them an archived row
 // that Meta accepted and one the scheduler gave up on cannot be told apart: both carry the
 // same fields, sendAttempt included.
@@ -36,4 +38,7 @@ type SentWhatsApp struct {
 	ErrorClass string `bson:"errorClass,omitempty"`
 	// SentAt is the moment the message was archived, delivered or given up on.
 	SentAt int64 `bson:"sentAt"`
+	// ArchivedAt is the same moment as a BSON date, to millisecond precision: the archive's
+	// retention index expires rows on it, and such an index ignores a number like SentAt.
+	ArchivedAt time.Time `bson:"archivedAt"`
 }

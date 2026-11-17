@@ -147,6 +147,7 @@ func main() {
 
 	messageDBService := messagedb.NewMessageDBService(conf.MessageDBConfig)
 	globalDBService := globaldb.NewGlobalDBService(conf.GlobalDBConfig)
+	ensureWhatsAppIndexes(messageDBService, globalDBService)
 
 	// Single place that decides "is WhatsApp on?" for this process; the per-instance half of
 	// that decision (Enabled) asks user-management through clients.UserManagementService.
