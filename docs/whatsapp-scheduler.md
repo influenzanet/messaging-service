@@ -8,7 +8,9 @@ archived row records.
 
 The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `true`, when
 `MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
-client could be built; the reason it did not start is logged once as a warning at startup.
+client could be built. The reason it did not start is logged once at startup: as the alert
+`runner_not_started` (see "Alerts" below) unless `WHATSAPP_ENABLED` is exactly `false`, and as
+a warning when it is.
 Messages already in `outgoing-whatsapp` stay queued and are not delivered until the runner
 is enabled again; those that have by then waited longer than the maximum age are archived
 as expired instead (see below). When `WHATSAPP_ENABLED` is `true` but this delivery configuration is
@@ -56,9 +58,9 @@ Meta's code, and the others wait `MESSAGE_SCHEDULER_WHATSAPP_TEMPLATE_RETRY_DELA
 forward. With the five-attempt cap and the default delay, a template that stays refused has
 its messages archived about four hours after the first refusal; a template Meta accepts again
 in the meantime is delivered on the next try. Only messages the tick claimed itself or that no
-tick holds are touched, so overlapping ticks never charge a message twice. The deferral is
-logged at ERROR with the template, the language, Meta's code and how many messages were
-deferred and archived.
+tick holds are touched, so overlapping ticks never charge a message twice. The deferral raises
+the alert `template_refused` once, with the template, the language, Meta's code and how many
+messages were deferred and archived.
 
 ## Transient failures
 
@@ -87,7 +89,7 @@ policy `132005`, `132007`, template missing in the requested language `132001`, 
 undeliverable `131026`, unsupported message type `131051`, and `100` unless an HTTP status,
 the transient flag or subcode `33` classifies the response first) are archived as failed at the
 first attempt, with class `permanent` and Meta's code, after a single call to Meta and without
-moving the attempt counter; the log says why, without the recipient's number. Like any answer
+moving the attempt counter; the alert `permanent_failure` says why, without the recipient's number. Like any answer
 from Meta, such a failure also decides a held transient failure. Other message-specific
 failures (for instance the per-user marketing limit `131049`, and any code the classifier does
 not know) follow the five-attempt limit.
@@ -105,8 +107,8 @@ not started) the queue would otherwise send every old message at once. The check
 a tick claims the message, before anything is sent, and one value applies to every message
 type. A message Meta has already accepted (the delivered marker below) is archived as
 delivered whatever its age. Expiring a message asks nothing of Meta, so it charges no
-attempt and does not decide a held transient failure. The tick logs, at WARNING, how many
-messages it expired; no line is written per message.
+attempt and does not decide a held transient failure. The tick raises the alert `expired`
+once, with how many messages it expired; no line is written per message.
 
 The queued row is deleted before the archive row is written, so a participant's
 cancellation running at the same moment cannot leave two archive rows for one message:
@@ -198,6 +200,60 @@ window of about 2 s and a tick then sends roughly one message per fetch, where t
 interval of 30 s leaves 45 s. At a high send latency a tick therefore leaves the tail of a
 batch to the next tick, since the window is measured from before the claim. That is the cost of never sending on a claim that may
 already have expired, not a delivery fault.
+
+## Alerts
+
+An alert is only a log line: the scheduler sends no notification itself, and whatever watches the
+logs where it runs turns these lines into notifications. A line an operator has to act on is
+logged at ERROR and starts with `WA_ALERT`, then the name of
+the alert, then `key=value` fields, then a colon and an explanation, for example:
+
+```
+WA_ALERT template_refused instance=italy template=weekly_reminder_v4 lang=it code=132015 deferred=212 archived_failed=0 retry_delay_s=10800: WhatsApp template refused by Meta: ...
+```
+
+A value that holds a space, a quote or an equals sign, or is empty, is quoted. No alert carries a
+phone number, a message parameter or a token. The names are what the alert rules match: change
+one only together with the rules.
+
+| Alert | When | Fields | What to do |
+|---|---|---|---|
+| `runner_not_started` | At startup, the runner did not start although `WHATSAPP_ENABLED` is not `false`. | none; the explanation names the missing variable | Set the variable the line names (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`, `MESSAGE_SCHEDULER_INTERVAL_WHATSAPP`) and restart. Until then nothing is sent and nothing expires. Where WhatsApp is not used, set `WHATSAPP_ENABLED=false`. |
+| `auth_stop` | Meta refused the sender (HTTP 401 or 403, an authentication, account or sender-number code). The tick stops; it comes back on every tick until fixed. | `instance`, `status`, `code`, `subcode` | Check the token (expired, revoked, missing a permission) and the state of the WhatsApp account and number in Meta's Business Manager. A new token goes into the secrets of both the message-scheduler and user-management. |
+| `throttle_pause` | Meta is limiting the sender; sending pauses (see "Rate limits"). | `instance`, `code`, `pause_s`, `until`, `in_a_row`; or `stored=false` when the pause could not be written | Nothing for a single one. When `in_a_row` keeps growing, or it comes back for hours, check the number's messaging limit tier and quality rating. `stored=false` also means the database refuses writes. |
+| `template_refused` | Meta refused a template in one language (paused, disabled, marketing turned off). Once per template per tick. | `instance`, `template`, `lang`, `code`, `deferred`, `archived_failed`, `retry_delay_s` | Check the template in WhatsApp Manager: `132015` paused for quality, `132016` disabled, `131063` marketing messages turned off for the account. `archived_failed` counts messages lost for good. |
+| `permanent_failure` | Meta refused one message for good; it is archived as failed at the first attempt. | `instance`, `type`, `template`, `lang`, `code` | Several in a row with the same template mean the binding is wrong (parameters `132000`/`132012`/`132018`, language `132001`): every message of that binding will fail, so fix it. A lone `131026` is a recipient who is not on WhatsApp. |
+| `archived_failed` | A message used up its five attempts and is archived as failed. | `instance`, `type`, `template`, `lang`, `code`, `class`, `attempts` | Look at the code and the class; a stream of them points at a problem the classifier does not know. |
+| `expired` | Messages waited longer than the maximum age and were archived unsent. Once per tick. | `instance`, `count`, `max_age_s` | They are lost. Find out why they waited: a runner that was down, WhatsApp off for the instance, a backlog. |
+| `queue_backlog` | After a tick, messages that are not held back by a refused template have waited more than an hour. On every tick while it lasts. | `instance`, `stale`, `oldest_waiting_s`, `threshold_s` | Read the instance's other alerts and the ERROR lines of its ticks: a sender that keeps failing, two transient failures that block the queue, a claim window too short for the batch. |
+| `cancel_failed` | Logged by **user-management**: the cancellation of a participant's queued messages failed after its retries. | `user`, `attempts`, `code` | The messages are sent or expire at the maximum age. Check that messaging is reachable from user-management. |
+
+### The queue line
+
+After every tick of an instance where WhatsApp is on, the scheduler writes one INFO line with the
+size of that instance's queue, paused ticks included:
+
+```
+WA_QUEUE instance=italy queued=12 waiting=9 deferred=3 oldest_waiting_s=40
+```
+
+`deferred` counts the messages of a refused template waiting for their retry delay, `waiting`
+the others, and `oldest_waiting_s` is the age of the oldest of those others (0 when there is
+none). No line is written for an instance where WhatsApp is off, nor when the runner did not
+start.
+
+### Rules for the log stack
+
+Each deployment sets these up in the log tooling it has; the ones below are a starting point.
+
+- Notify on every `runner_not_started`, `auth_stop`, `template_refused` and `cancel_failed`
+  line, and on `queue_backlog` and `expired`, grouped by alert and instance.
+- `permanent_failure` and `archived_failed` come one per message: notify on a count over a
+  window (for instance one or more in 15 minutes), grouped by instance and template.
+- `throttle_pause`: notify when `in_a_row` reaches 3, or `stored=false` appears.
+- Absence: no `WA_QUEUE` line for an instance where WhatsApp is on for 10 minutes means the
+  scheduler or its runner is not running.
+- The `WA_QUEUE` fields can be turned into gauges where the log stack supports it.
 
 ## Tests
 

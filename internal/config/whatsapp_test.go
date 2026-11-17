@@ -740,3 +740,23 @@ func TestEnabledNeverLogsCredentialValues(t *testing.T) {
 		t.Errorf("unexpected credential value in log output: %q", out)
 	}
 }
+
+// Only the exact value "false" is the kill switch an operator sets on purpose. Unset and
+// "true" follow user-management, and a value that is not understood is off only as a fail-safe:
+// the scheduler raises an alert in every case but the first.
+// Fails if another value counts as the kill switch, or "false" no longer does.
+func TestTurnedOffByKillSwitch(t *testing.T) {
+	for value, want := range map[string]bool{
+		"false": true,
+		"":      false,
+		"true":  false,
+		"TRUE":  false,
+		"False": false,
+		"0":     false,
+	} {
+		settings := NewWhatsAppSettings(envMap(map[string]string{"WHATSAPP_ENABLED": value}), nil)
+		if got := settings.TurnedOffByKillSwitch(); got != want {
+			t.Fatalf("WHATSAPP_ENABLED=%q: TurnedOffByKillSwitch() = %v, want %v", value, got, want)
+		}
+	}
+}

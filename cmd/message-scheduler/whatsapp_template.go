@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/coneno/logger"
@@ -48,6 +49,8 @@ func deferWhatsAppTemplate(mdb *messagedb.MessageDBService, instanceID string, m
 	if err != nil {
 		logger.Error.Printf("[%s] cannot defer the messages of WhatsApp template '%s' (%s): %v", instanceID, msg.TemplateName, msg.Lang, err)
 	}
-	logger.Error.Printf("[%s] WhatsApp template '%s' (%s) refused by Meta (code %d, %s): %d message(s) wait %d s before the next try, %d archived as failed after their last attempt; the other templates keep going",
-		instanceID, msg.TemplateName, msg.Lang, outcome.ErrorCode, outcome.ErrorClass, deferred, retryDelay, archived)
+	logWhatsAppAlert(alertTemplateRefused, []alertField{
+		{"instance", instanceID}, {"template", msg.TemplateName}, {"lang", msg.Lang}, {"code", outcome.ErrorCode},
+		{"deferred", deferred}, {"archived_failed", archived}, {"retry_delay_s", retryDelay},
+	}, fmt.Sprintf("WhatsApp template refused by Meta: %d message(s) wait %d s before the next try, %d archived as failed after their last attempt; the other templates keep going", deferred, retryDelay, archived))
 }

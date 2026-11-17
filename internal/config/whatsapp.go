@@ -122,6 +122,13 @@ func (s WhatsAppSettings) switchAllows() bool {
 	return s.enabledSwitch == "" || s.enabledSwitch == "true"
 }
 
+// TurnedOffByKillSwitch reports whether WHATSAPP_ENABLED is exactly "false", the explicit way to
+// turn WhatsApp off in this process. Any other value, unset or one that is not understood,
+// leaves an operator who may expect WhatsApp to run.
+func (s WhatsAppSettings) TurnedOffByKillSwitch() bool {
+	return s.enabledSwitch == "false"
+}
+
 // hasCredentials reports whether this process has the Meta credentials it needs to actually
 // send a WhatsApp message, regardless of what the kill switch or user-management say.
 func (s WhatsAppSettings) hasCredentials() bool {

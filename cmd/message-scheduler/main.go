@@ -460,7 +460,13 @@ func handleResearcherNotifications(mdb *messagedb.MessageDBService, gdb *globald
 
 func runnerForOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBService, wac *waClient.WhatsAppClient, freq int, enabled bool, templateRetryDelay int64, maxAge int64, settings config.WhatsAppSettings) {
 	if run, reason := shouldRunOutgoingWhatsApp(enabled, freq, wac != nil); !run {
-		logger.Warning.Printf("outgoing whatsapp runner not started: %s. Messages already in outgoing-whatsapp stay queued and are not delivered.", reason)
+		if settings.TurnedOffByKillSwitch() {
+			logger.Warning.Printf("outgoing whatsapp runner not started: %s. Messages already in outgoing-whatsapp stay queued and are not delivered.", reason)
+			return
+		}
+		// WhatsApp is not turned off here, so user-management may enable it for an instance and
+		// messages be queued that nothing will ever send.
+		logWhatsAppAlert(alertRunnerNotStarted, nil, fmt.Sprintf("outgoing whatsapp runner not started: %s. Messages already in outgoing-whatsapp stay queued and are not delivered; set WHATSAPP_ENABLED=false where WhatsApp is not used.", reason))
 		return
 	}
 	period := time.Duration(freq) * time.Second
@@ -552,8 +558,13 @@ func archiveWhatsApp(mdb *messagedb.MessageDBService, instanceID string, msg typ
 func recordFailedWhatsAppAttempt(mdb *messagedb.MessageDBService, instanceID string, msg types.OutgoingWhatsApp, cause error) {
 	if msg.SendAttempt+1 >= maxWhatsAppSendAttempts {
 		// Permanently failed — archive and remove from queue.
-		logger.Warning.Printf("WhatsApp message '%s' in instance %s exceeded max attempts (%d), archiving", msg.MessageType, instanceID, maxWhatsAppSendAttempts)
-		_ = archiveWhatsApp(mdb, instanceID, msg, failedWhatsApp(cause))
+		outcome := failedWhatsApp(cause)
+		if archiveWhatsApp(mdb, instanceID, msg, outcome) == nil {
+			logWhatsAppAlert(alertArchivedFailed, []alertField{
+				{"instance", instanceID}, {"type", msg.MessageType}, {"template", msg.TemplateName}, {"lang", msg.Lang},
+				{"code", outcome.ErrorCode}, {"class", outcome.ErrorClass}, {"attempts", maxWhatsAppSendAttempts},
+			}, "WhatsApp message archived as failed: it used up its attempts")
+		}
 		return
 	}
 	// Increment counter; lastSendAttempt stays at lock value, providing natural backoff.
@@ -604,14 +615,21 @@ func pauseWhatsAppAfterThrottle(mdb *messagedb.MessageDBService, instanceID stri
 	notBefore := whatsAppThrottleNotBefore(now, delay)
 	state, err := mdb.RecordWhatsAppThrottle(instanceID, notBefore, now.Unix())
 	if err != nil {
-		logger.Error.Printf("[%s] cannot store the WhatsApp pause, the next tick will try again at its normal pace: %v", instanceID, err)
+		logWhatsAppAlert(alertThrottlePause, []alertField{
+			{"instance", instanceID}, {"code", sendErr.Code}, {"stored", false},
+		}, fmt.Sprintf("Meta is limiting WhatsApp sending (%s) but the pause cannot be stored, the next tick will try again at its normal pace: %v", sendErr.Class(), err))
 		return
 	}
-	logger.Warning.Printf("[%s] Meta is limiting WhatsApp sending (%s, Meta code %d, retry-after %d s): pausing for %d s, until %s, throttle number %d in a row", instanceID, sendErr.Class(), sendErr.Code, int64(sendErr.RetryAfter/time.Second), int64(delay/time.Second), time.Unix(state.NotBefore, 0).UTC().Format(time.RFC3339), state.Level)
+	logWhatsAppAlert(alertThrottlePause, []alertField{
+		{"instance", instanceID}, {"code", sendErr.Code}, {"pause_s", int64(delay / time.Second)},
+		{"until", time.Unix(state.NotBefore, 0).UTC().Format(time.RFC3339)}, {"in_a_row", state.Level},
+	}, fmt.Sprintf("Meta is limiting WhatsApp sending (%s, retry-after %d s): sending paused", sendErr.Class(), int64(sendErr.RetryAfter/time.Second)))
 }
 
 func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, lastAttemptOlderThan int64, templateRetryDelay int64, maxAge int64, wg *sync.WaitGroup) {
 	defer wg.Done()
+	// However the tick ends, paused included, it states what it leaves in the queue.
+	defer func() { reportWhatsAppQueue(mdb, instanceID, time.Now().Unix()) }()
 
 	// While Meta limits the sender nothing is claimed or sent: the wait is stored in the
 	// database, so it binds every scheduler of the instance and survives a restart.
@@ -766,7 +784,13 @@ processQueue:
 							// when sending resumes.
 							pauseWhatsAppAfterThrottle(mdb, instanceID, sendErr, lastAttemptOlderThan, throttle.Level)
 						}
-						logger.Error.Printf("[%s] stopping the WhatsApp tick on a sender-side failure (%s) at '%s'; nothing charged, locks left to expire", instanceID, class, msg.MessageType)
+						if class == waClient.WhatsAppErrorAuth {
+							logWhatsAppAlert(alertAuthStop, []alertField{
+								{"instance", instanceID}, {"status", sendErr.StatusCode}, {"code", sendErr.Code}, {"subcode", sendErr.Subcode},
+							}, fmt.Sprintf("stopping the WhatsApp tick: Meta refused the sender (%s) at '%s'; nothing charged, locks left to expire", class, msg.MessageType))
+						} else {
+							logger.Error.Printf("[%s] stopping the WhatsApp tick on a sender-side failure (%s) at '%s'; nothing charged, locks left to expire", instanceID, class, msg.MessageType)
+						}
 						warnAboutHeldWhatsApp(instanceID, undecided)
 						break processQueue
 					case waClient.WhatsAppErrorTemplate:
@@ -786,7 +810,9 @@ processQueue:
 						// Meta answered and will refuse the same request again: a held failure is
 						// decided like after any answer, and this message is archived at once.
 						chargeUndecided()
-						logger.Error.Printf("[%s] WhatsApp message '%s' archived at the first attempt: Meta refused it permanently (code %d, %s); retrying cannot fix it", instanceID, msg.MessageType, sendErr.Code, class)
+						logWhatsAppAlert(alertPermanentFailure, []alertField{
+							{"instance", instanceID}, {"type", msg.MessageType}, {"template", msg.TemplateName}, {"lang", msg.Lang}, {"code", sendErr.Code},
+						}, "WhatsApp message archived at the first attempt: Meta refused it permanently; retrying cannot fix it")
 						if archiveWhatsApp(mdb, instanceID, msg, failedWhatsApp(err)) != nil {
 							// The message stays queued: charging it keeps the attempt cap in force,
 							// so a database that keeps refusing the archive cannot have it sent to
@@ -848,7 +874,9 @@ processQueue:
 	}
 	counters.Stop()
 	if expired > 0 {
-		logger.Warning.Printf("[%s] %d WhatsApp message(s) archived as expired without being sent: they waited in the queue longer than %d s", instanceID, expired, maxAge)
+		logWhatsAppAlert(alertExpired, []alertField{
+			{"instance", instanceID}, {"count", expired}, {"max_age_s", maxAge},
+		}, fmt.Sprintf("%d WhatsApp message(s) archived as expired without being sent: they waited in the queue longer than %d s", expired, maxAge))
 	}
 	logger.Info.Printf("[%s] Finished processing %d whatsapp messages in %d s.", instanceID, counters.Success, counters.Duration)
 }

@@ -181,7 +181,7 @@ func TestWhatsAppMessageOlderThanMaxAgeIsArchivedAsExpiredWithoutSending(t *test
 	db.addAged(t, stale, testMaxAge+60, 2)
 	db.addAged(t, fresh, testMaxAge-60, 0)
 	sender := &perPhoneWhatsAppSender{}
-	warnings := captureWarningLog(t)
+	errorsLog := captureErrorLog(t)
 	before := time.Now().Unix()
 
 	runWhatsAppHandlerWithMaxAge(db, sender, testMaxAge)
@@ -222,8 +222,8 @@ func TestWhatsAppMessageOlderThanMaxAgeIsArchivedAsExpiredWithoutSending(t *test
 		t.Fatalf("the message inside the max age was archived as %q, want %q", got, types.WhatsAppStatusDelivered)
 	}
 
-	if !strings.Contains(warnings.String(), "1 WhatsApp message(s) archived as expired") {
-		t.Fatalf("the tick did not report the expired message; warnings: %s", warnings.String())
+	if !strings.Contains(errorsLog.String(), "WA_ALERT expired instance=i count=1 ") {
+		t.Fatalf("the tick did not report the expired message; errors: %s", errorsLog.String())
 	}
 }
 
