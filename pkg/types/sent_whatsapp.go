@@ -6,6 +6,9 @@ package types
 const (
 	WhatsAppStatusDelivered = "delivered"
 	WhatsAppStatusFailed    = "failed"
+	// WhatsAppStatusCancelled marks a message taken out of the queue unsent because the
+	// participant withdrew WhatsApp or the subscription it belonged to.
+	WhatsAppStatusCancelled = "cancelled"
 )
 
 // WhatsAppSendOutcome is how a message left the queue. On a failure it names Meta's numeric

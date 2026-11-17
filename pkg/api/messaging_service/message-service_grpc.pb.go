@@ -31,6 +31,7 @@ const (
 	MessagingServiceApi_GetEmailTemplates_FullMethodName              = "/influenzanet.message_service.MessagingServiceApi/GetEmailTemplates"
 	MessagingServiceApi_SaveEmailTemplate_FullMethodName              = "/influenzanet.message_service.MessagingServiceApi/SaveEmailTemplate"
 	MessagingServiceApi_DeleteEmailTemplate_FullMethodName            = "/influenzanet.message_service.MessagingServiceApi/DeleteEmailTemplate"
+	MessagingServiceApi_DeleteOutgoingWhatsAppForUser_FullMethodName  = "/influenzanet.message_service.MessagingServiceApi/DeleteOutgoingWhatsAppForUser"
 )
 
 // MessagingServiceApiClient is the client API for MessagingServiceApi service.
@@ -48,6 +49,8 @@ type MessagingServiceApiClient interface {
 	GetEmailTemplates(ctx context.Context, in *GetEmailTemplatesReq, opts ...grpc.CallOption) (*EmailTemplates, error)
 	SaveEmailTemplate(ctx context.Context, in *SaveEmailTemplateReq, opts ...grpc.CallOption) (*EmailTemplate, error)
 	DeleteEmailTemplate(ctx context.Context, in *DeleteEmailTemplateReq, opts ...grpc.CallOption) (*ServiceStatus, error)
+	// Service to service: called by user-management whenever a participant withdraws WhatsApp.
+	DeleteOutgoingWhatsAppForUser(ctx context.Context, in *DeleteOutgoingWhatsAppForUserReq, opts ...grpc.CallOption) (*DeleteOutgoingWhatsAppForUserResp, error)
 }
 
 type messagingServiceApiClient struct {
@@ -157,6 +160,15 @@ func (c *messagingServiceApiClient) DeleteEmailTemplate(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *messagingServiceApiClient) DeleteOutgoingWhatsAppForUser(ctx context.Context, in *DeleteOutgoingWhatsAppForUserReq, opts ...grpc.CallOption) (*DeleteOutgoingWhatsAppForUserResp, error) {
+	out := new(DeleteOutgoingWhatsAppForUserResp)
+	err := c.cc.Invoke(ctx, MessagingServiceApi_DeleteOutgoingWhatsAppForUser_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessagingServiceApiServer is the server API for MessagingServiceApi service.
 // All implementations must embed UnimplementedMessagingServiceApiServer
 // for forward compatibility
@@ -172,6 +184,8 @@ type MessagingServiceApiServer interface {
 	GetEmailTemplates(context.Context, *GetEmailTemplatesReq) (*EmailTemplates, error)
 	SaveEmailTemplate(context.Context, *SaveEmailTemplateReq) (*EmailTemplate, error)
 	DeleteEmailTemplate(context.Context, *DeleteEmailTemplateReq) (*ServiceStatus, error)
+	// Service to service: called by user-management whenever a participant withdraws WhatsApp.
+	DeleteOutgoingWhatsAppForUser(context.Context, *DeleteOutgoingWhatsAppForUserReq) (*DeleteOutgoingWhatsAppForUserResp, error)
 	mustEmbedUnimplementedMessagingServiceApiServer()
 }
 
@@ -211,6 +225,9 @@ func (UnimplementedMessagingServiceApiServer) SaveEmailTemplate(context.Context,
 }
 func (UnimplementedMessagingServiceApiServer) DeleteEmailTemplate(context.Context, *DeleteEmailTemplateReq) (*ServiceStatus, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteEmailTemplate not implemented")
+}
+func (UnimplementedMessagingServiceApiServer) DeleteOutgoingWhatsAppForUser(context.Context, *DeleteOutgoingWhatsAppForUserReq) (*DeleteOutgoingWhatsAppForUserResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteOutgoingWhatsAppForUser not implemented")
 }
 func (UnimplementedMessagingServiceApiServer) mustEmbedUnimplementedMessagingServiceApiServer() {}
 
@@ -423,6 +440,24 @@ func _MessagingServiceApi_DeleteEmailTemplate_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingServiceApi_DeleteOutgoingWhatsAppForUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteOutgoingWhatsAppForUserReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceApiServer).DeleteOutgoingWhatsAppForUser(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingServiceApi_DeleteOutgoingWhatsAppForUser_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceApiServer).DeleteOutgoingWhatsAppForUser(ctx, req.(*DeleteOutgoingWhatsAppForUserReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessagingServiceApi_ServiceDesc is the grpc.ServiceDesc for MessagingServiceApi service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -473,6 +508,10 @@ var MessagingServiceApi_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteEmailTemplate",
 			Handler:    _MessagingServiceApi_DeleteEmailTemplate_Handler,
+		},
+		{
+			MethodName: "DeleteOutgoingWhatsAppForUser",
+			Handler:    _MessagingServiceApi_DeleteOutgoingWhatsAppForUser_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

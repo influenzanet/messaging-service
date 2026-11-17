@@ -806,7 +806,9 @@ processQueue:
 			// than one it sends again.
 			if markErr := mdb.MarkOutgoingWhatsAppDelivered(instanceID, msg.ID.Hex()); markErr != nil {
 				if errors.Is(markErr, messagedb.ErrOutgoingWhatsAppNotFound) {
-					// The claim expired and another tick has already archived this message.
+					// The claim expired and another tick has already archived this message,
+					// or the participant withdrew WhatsApp while it was being sent and
+					// DeleteOutgoingWhatsAppForUser archived it as cancelled (accepted, D11).
 					logger.Warning.Printf("[%s] WhatsApp message '%s' left the queue while it was being sent, leaving the archive to the tick that owns it", instanceID, msg.MessageType)
 					continue
 				}

@@ -194,3 +194,70 @@ func (dbService *MessageDBService) DeferOutgoingWhatsAppOfTemplate(instanceID, t
 	}
 	return res.ModifiedCount, nil
 }
+
+// CancelOutgoingWhatsAppForUser takes the participant's queued messages out of the queue and
+// archives each one as cancelled. Only messages of the given types are cancelled; no types
+// means every type. It returns how many messages it took out of the queue.
+//
+// Each message is removed with a find-and-delete of its own, so that calls running at the same
+// time (a retry overlapping the first attempt) never archive the same message twice. A message
+// Meta has already accepted is left to the scheduler, which archives it as delivered. A message
+// a running tick has already claimed may still be sent: the tick holds its own copy, and only
+// notices on its next write that the row is gone.
+//
+// Should an archive write fail, the message stays out of the queue (the participant withdrew,
+// so it must not be sent) and the error is returned with the count so far; a retry carries on
+// with the messages still queued.
+func (dbService *MessageDBService) CancelOutgoingWhatsAppForUser(instanceID string, userID string, messageTypes []string) (int64, error) {
+	if userID == "" {
+		return 0, errors.New("user id is required")
+	}
+	filter := bson.M{
+		"userId":    userID,
+		"delivered": bson.M{"$ne": true},
+	}
+	if len(messageTypes) > 0 {
+		filter["messageType"] = bson.M{"$in": messageTypes}
+	}
+
+	var cancelled int64
+	for {
+		var msg types.OutgoingWhatsApp
+		ctx, cancel := dbService.getContext()
+		err := dbService.collectionRefOutgoingWhatsApp(instanceID).FindOneAndDelete(ctx, filter).Decode(&msg)
+		cancel()
+		if err == mongo.ErrNoDocuments {
+			return cancelled, nil
+		}
+		if err != nil {
+			return cancelled, err
+		}
+		cancelled++
+		if _, err := dbService.AddToSentWhatsApp(instanceID, msg, types.WhatsAppSendOutcome{Status: types.WhatsAppStatusCancelled}); err != nil {
+			return cancelled, err
+		}
+	}
+}
+
+// PurgeWhatsAppForUser deletes, for a deleted account, every queued message of the participant
+// and every archived one, without archiving anything. It returns how many rows it deleted from
+// the queue and from the archive. A message a running tick is sending at that moment may still
+// be archived after the purge; the archive's retention removes that row.
+func (dbService *MessageDBService) PurgeWhatsAppForUser(instanceID string, userID string) (int64, int64, error) {
+	if userID == "" {
+		return 0, 0, errors.New("user id is required")
+	}
+	filter := bson.M{"userId": userID}
+
+	ctx, cancel := dbService.getContext()
+	defer cancel()
+	queued, err := dbService.collectionRefOutgoingWhatsApp(instanceID).DeleteMany(ctx, filter)
+	if err != nil {
+		return 0, 0, err
+	}
+	archived, err := dbService.collectionRefSentWhatsApp(instanceID).DeleteMany(ctx, filter)
+	if err != nil {
+		return queued.DeletedCount, 0, err
+	}
+	return queued.DeletedCount, archived.DeletedCount, nil
+}
