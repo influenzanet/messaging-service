@@ -126,8 +126,10 @@ func TestWhatsAppRetryCapArchivesOnTheFifthFailure(t *testing.T) {
 	if err := db.sent.FindOne(ctx, bson.M{}).Decode(&archived); err != nil {
 		t.Fatalf("read the archived WhatsApp message: %v", err)
 	}
-	if archived.ToPhoneNumber != poisonPhone {
-		t.Fatalf("archived recipient = %q, want %q", archived.ToPhoneNumber, poisonPhone)
+	// Compared against the literal: the archive keeps the country prefix and the last four
+	// digits of poisonPhone, never the full number.
+	if archived.ToPhoneNumber != "+39***0000" {
+		t.Fatalf("archived recipient = %q, want %q", archived.ToPhoneNumber, "+39***0000")
 	}
 	// The archive keeps the counter as it was read for the last attempt: the attempt that
 	// exhausts the cap archives instead of incrementing.

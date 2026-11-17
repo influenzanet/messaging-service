@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/coneno/logger"
+	"github.com/influenzanet/messaging-service/pkg/types"
 )
 
 const (
@@ -102,13 +103,6 @@ func NewWhatsAppClient(token, phoneID, apiVersion string) *WhatsAppClient {
 	}
 }
 
-func maskPhone(phone string) string {
-	if len(phone) <= 6 {
-		return "***"
-	}
-	return phone[:3] + "***" + phone[len(phone)-4:]
-}
-
 // SendTemplateMessage sends a message using a specific WhatsApp template with named parameters.
 // The flat params map is parsed and validated by parseTemplateParams; see
 // whatsapp_template_params.go for the key conventions it recognizes.
@@ -152,7 +146,7 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 	req.Header.Set("Authorization", "Bearer "+c.apiToken)
 	req.Header.Set("Content-Type", "application/json")
 
-	logger.Info.Printf("WhatsApp SendTemplateMessage -> to:%s template:%s lang:%s", maskPhone(toPhoneNumber), templateName, lang)
+	logger.Info.Printf("WhatsApp SendTemplateMessage -> to:%s template:%s lang:%s", types.MaskPhone(toPhoneNumber), templateName, lang)
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		sendErr := &WhatsAppSendError{cause: err}

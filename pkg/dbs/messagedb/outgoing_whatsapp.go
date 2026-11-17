@@ -28,12 +28,15 @@ func (dbService *MessageDBService) AddToOutgoingWhatsApp(instanceID string, msg 
 
 // AddToSentWhatsApp archives a message that left the outgoing queue, together with the outcome
 // that took it out: a delivered message and one the scheduler gave up on are otherwise stored
-// identically. The content parameters are dropped, as they may carry personal data.
+// identically. Whatever the outcome, the row keeps only the masked number and no content
+// parameters: neither has any use once the message has left the queue, and the parameters
+// may carry a login token or other personal data.
 func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg types.OutgoingWhatsApp, outcome types.WhatsAppSendOutcome) (types.SentWhatsApp, error) {
 	ctx, cancel := dbService.getContext()
 	defer cancel()
 	archivedAt := time.Now().Unix()
 	msg.AddedAt = archivedAt
+	msg.ToPhoneNumber = types.MaskPhone(msg.ToPhoneNumber)
 	msg.ContentParams = nil
 	msg.ID = primitive.NilObjectID
 	// Queue bookkeeping: the archive states the outcome in its own status field.

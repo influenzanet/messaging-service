@@ -1,34 +1,18 @@
 package clients
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
-)
 
-func TestMaskPhone(t *testing.T) {
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"+391234567890", "+39***7890"},
-		{"+1555", "***"},
-		{"", "***"},
-		{"+44207", "***"},
-		{"+447911123456", "+44***3456"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.input, func(t *testing.T) {
-			got := maskPhone(tt.input)
-			if got != tt.expected {
-				t.Errorf("maskPhone(%q) = %q, want %q", tt.input, got, tt.expected)
-			}
-		})
-	}
-}
+	"github.com/coneno/logger"
+)
 
 func TestNewWhatsAppClient(t *testing.T) {
 	t.Run("returns nil when token empty", func(t *testing.T) {
@@ -275,5 +259,37 @@ func TestSendTemplateMessageTimeout(t *testing.T) {
 	err := c.SendTemplateMessage(ctx, "+391234567890", "test_template", "it", nil)
 	if err == nil {
 		t.Error("expected error with cancelled context")
+	}
+}
+
+// The send log names the recipient by its masked number only, on a delivery and on a failure.
+func TestSendTemplateMessageLogsOnlyTheMaskedNumber(t *testing.T) {
+	var logs bytes.Buffer
+	for _, l := range []*log.Logger{logger.Info, logger.Warning, logger.Error} {
+		prev := l.Writer()
+		l.SetOutput(&logs)
+		t.Cleanup(func() { l.SetOutput(prev) })
+	}
+
+	for _, status := range []int{http.StatusOK, http.StatusBadRequest} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			logs.Reset()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte(`{"error":{"code":131026}}`))
+			}))
+			t.Cleanup(server.Close)
+			c := NewWhatsAppClient("test-token", "test-phone-id", "")
+			c.apiBaseURL = server.URL
+
+			_ = c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", nil)
+
+			if !strings.Contains(logs.String(), "+39***7890") {
+				t.Errorf("the send log does not name the masked recipient: %q", logs.String())
+			}
+			if strings.Contains(logs.String(), "1234567890") {
+				t.Errorf("the send log holds the full number: %q", logs.String())
+			}
+		})
 	}
 }

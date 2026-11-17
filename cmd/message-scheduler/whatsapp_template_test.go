@@ -181,7 +181,7 @@ func TestWhatsAppBrokenTemplateArchivesAtTheAttemptCap(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var archived types.SentWhatsApp
-	if err := db.sent.FindOne(ctx, bson.M{"toPhoneNumber": "+391111111004"}).Decode(&archived); err != nil {
+	if err := db.sent.FindOne(ctx, bson.M{"toPhoneNumber": types.MaskPhone("+391111111004")}).Decode(&archived); err != nil {
 		t.Fatalf("the message on its last attempt must be archived: %v", err)
 	}
 	if archived.Status != types.WhatsAppStatusFailed || archived.ErrorCode != 132016 {

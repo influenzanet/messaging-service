@@ -729,7 +729,7 @@ func TestWhatsAppHeldFailureIsNotChargedAfterItsClaimExpired(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if stale, err := db.sent.CountDocuments(ctx, bson.M{"toPhoneNumber": poisonPhone}); err != nil {
+	if stale, err := db.sent.CountDocuments(ctx, bson.M{"toPhoneNumber": types.MaskPhone(poisonPhone)}); err != nil {
 		t.Fatalf("inspect the archive: %v", err)
 	} else if stale != 0 {
 		t.Fatalf("the held failure was charged and archived by the tick that lost its claim")
@@ -742,7 +742,7 @@ func TestWhatsAppHeldFailureIsNotChargedAfterItsClaimExpired(t *testing.T) {
 	db.expireLocks(t)
 	runWhatsAppHandler(db.service, sender, 2)
 
-	archived, err := db.sent.CountDocuments(ctx, bson.M{"toPhoneNumber": poisonPhone})
+	archived, err := db.sent.CountDocuments(ctx, bson.M{"toPhoneNumber": types.MaskPhone(poisonPhone)})
 	if err != nil {
 		t.Fatalf("inspect the archive: %v", err)
 	}

@@ -17,9 +17,9 @@ import (
 const archiveBlockerType = "archive-blocker"
 
 // blockArchive makes the archive write fail for one recipient: a unique index on the archive
-// collection plus a row that already holds that recipient's key, so the insert is refused with
-// a duplicate key error. This is the closest stand-in for a database that accepts the send but
-// refuses the archive write.
+// collection plus a row that already holds that recipient's key, the masked number the archive
+// stores, so the insert is refused with a duplicate key error. This is the closest stand-in for
+// a database that accepts the send but refuses the archive write.
 func (db *schedulerTestDB) blockArchive(t *testing.T, phone string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -30,7 +30,7 @@ func (db *schedulerTestDB) blockArchive(t *testing.T, phone string) {
 	}); err != nil {
 		t.Fatalf("create the unique index that blocks the archive: %v", err)
 	}
-	if _, err := db.sent.InsertOne(ctx, bson.M{"messageType": archiveBlockerType, "toPhoneNumber": phone}); err != nil {
+	if _, err := db.sent.InsertOne(ctx, bson.M{"messageType": archiveBlockerType, "toPhoneNumber": types.MaskPhone(phone)}); err != nil {
 		t.Fatalf("insert the row that blocks the archive of %s: %v", phone, err)
 	}
 }
@@ -57,13 +57,19 @@ type archivedWhatsApp struct {
 	SentAt        int64  `bson:"sentAt"`
 }
 
+// archivedFor reads the archive row of a recipient. The archive stores the number masked, so
+// the row is found by the masked number, and a row that still holds the full number fails the
+// test whatever it checks next.
 func (db *schedulerTestDB) archivedFor(t *testing.T, phone string) archivedWhatsApp {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var row archivedWhatsApp
-	if err := db.sent.FindOne(ctx, bson.M{"toPhoneNumber": phone}).Decode(&row); err != nil {
+	if err := db.sent.FindOne(ctx, bson.M{"toPhoneNumber": types.MaskPhone(phone)}).Decode(&row); err != nil {
 		t.Fatalf("read the archived WhatsApp message to %s: %v", phone, err)
+	}
+	if row.ToPhoneNumber == phone {
+		t.Fatalf("the archive holds the full number %s", phone)
 	}
 	return row
 }

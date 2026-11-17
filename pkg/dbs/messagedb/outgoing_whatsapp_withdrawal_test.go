@@ -104,7 +104,7 @@ func TestCancelOutgoingWhatsAppForUser(t *testing.T) {
 		}
 	})
 
-	t.Run("each cancelled message is archived once as cancelled, without its parameters", func(t *testing.T) {
+	t.Run("each cancelled message is archived once as cancelled, masked and without its parameters", func(t *testing.T) {
 		archived := archivedWhatsAppOf(t, testInstanceID, userA)
 		if got := archivedTypes(archived); !slices.Equal(got, []string{"newsletter", "weekly"}) {
 			t.Fatalf("archived types = %v, want [newsletter weekly]", got)
@@ -115,6 +115,9 @@ func TestCancelOutgoingWhatsAppForUser(t *testing.T) {
 			}
 			if len(row.ContentParams) != 0 {
 				t.Errorf("%s archived with its content parameters %v", row.MessageType, row.ContentParams)
+			}
+			if row.ToPhoneNumber != "+39***4567" {
+				t.Errorf("%s archived with recipient %q, want the masked +39***4567", row.MessageType, row.ToPhoneNumber)
 			}
 			if row.ErrorCode != 0 || row.ErrorClass != "" {
 				t.Errorf("%s archived with an error (%d, %q), but it was never sent", row.MessageType, row.ErrorCode, row.ErrorClass)
