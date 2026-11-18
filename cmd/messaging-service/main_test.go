@@ -33,7 +33,9 @@ func TestServerWhatsAppSettingsNeedNoMetaCredentials(t *testing.T) {
 	}
 }
 
-type recordingRemover struct{ calls []*umAPI.RemoveWhatsAppChannelReq }
+type recordingRemover struct {
+	calls []*umAPI.RemoveWhatsAppChannelReq
+}
 
 func (r *recordingRemover) RemoveWhatsAppChannel(_ context.Context, in *umAPI.RemoveWhatsAppChannelReq, _ ...grpc.CallOption) (*umAPI.RemoveWhatsAppChannelResp, error) {
 	r.calls = append(r.calls, in)
