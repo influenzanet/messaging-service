@@ -88,8 +88,8 @@ github.com/influenzanet/logging-service v0.2.0 h1:SVcNPhZEGP27Lhl4idzFf1ClCRMpNX
 github.com/influenzanet/logging-service v0.2.0/go.mod h1:QbzZVLsV4NyW6poTRFONtOuz3MEWuofmfK+hDuibCxM=
 github.com/influenzanet/study-service v1.7.2 h1:aCQQJBheZbKU6pzxyNsJ6K4IHEvsiNNJQ1UFjt0HDpw=
 github.com/influenzanet/study-service v1.7.2/go.mod h1:k1kPZeXSH3cUjzStovmRewJtYrcHct9BrNa688vmW4g=
-github.com/influenzanet/user-management-service v1.2.11-staging h1:oQa2JMZqwUKINewmSQ0jxp0W802CK0s2/fACzBamYCE=
-github.com/influenzanet/user-management-service v1.2.11-staging/go.mod h1:PiIjehjIeLJ8hyoVTMV4ZaHeag0oySld70zl2SabUnU=
+github.com/influenzanet/user-management-service v1.2.13-staging h1:dziMo8RPTbqDFlFflittJjXXURhZUzCBUhMdVh5Poks=
+github.com/influenzanet/user-management-service v1.2.13-staging/go.mod h1:jD4/bUaVk7PkRXZLg1YLWthKV29936EwUWL3Q2H542s=
 github.com/jmespath/go-jmespath v0.4.0/go.mod h1:T8mJZnbsbmF+m6zOOFylbeCJqk5+pHWvzYPziyZiYoo=
 github.com/jmespath/go-jmespath/internal/testify v1.5.1/go.mod h1:L3OGu8Wl2/fWfCI6z80xFu9LTZmf1ZRjMHUOPmWr69U=
 github.com/joho/godotenv v1.3.0/go.mod h1:7hK45KPybAkOC6peb+G5yklZfMxEjkZhHbwpqxOKXbg=

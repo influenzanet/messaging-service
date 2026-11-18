@@ -425,26 +425,6 @@ func (mr *MockUserManagementApiClientMockRecorder) GetUser(ctx, in any, opts ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUser", reflect.TypeOf((*MockUserManagementApiClient)(nil).GetUser), varargs...)
 }
 
-// GetUserContactPreferences mocks base method.
-func (m *MockUserManagementApiClient) GetUserContactPreferences(ctx context.Context, in *api.UserReference, opts ...grpc.CallOption) (*api.ContactPreferencesResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "GetUserContactPreferences", varargs...)
-	ret0, _ := ret[0].(*api.ContactPreferencesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetUserContactPreferences indicates an expected call of GetUserContactPreferences.
-func (mr *MockUserManagementApiClientMockRecorder) GetUserContactPreferences(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserContactPreferences", reflect.TypeOf((*MockUserManagementApiClient)(nil).GetUserContactPreferences), varargs...)
-}
-
 // InitiatePasswordReset mocks base method.
 func (m *MockUserManagementApiClient) InitiatePasswordReset(ctx context.Context, in *api.InitiateResetPasswordMsg, opts ...grpc.CallOption) (*api.ServiceStatus, error) {
 	m.ctrl.T.Helper()
@@ -583,6 +563,26 @@ func (mr *MockUserManagementApiClientMockRecorder) RemoveRoleForUser(ctx, in any
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRoleForUser", reflect.TypeOf((*MockUserManagementApiClient)(nil).RemoveRoleForUser), varargs...)
+}
+
+// RemoveWhatsAppChannel mocks base method.
+func (m *MockUserManagementApiClient) RemoveWhatsAppChannel(ctx context.Context, in *api.RemoveWhatsAppChannelReq, opts ...grpc.CallOption) (*api.RemoveWhatsAppChannelResp, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RemoveWhatsAppChannel", varargs...)
+	ret0, _ := ret[0].(*api.RemoveWhatsAppChannelResp)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveWhatsAppChannel indicates an expected call of RemoveWhatsAppChannel.
+func (mr *MockUserManagementApiClientMockRecorder) RemoveWhatsAppChannel(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveWhatsAppChannel", reflect.TypeOf((*MockUserManagementApiClient)(nil).RemoveWhatsAppChannel), varargs...)
 }
 
 // RenewJWT mocks base method.

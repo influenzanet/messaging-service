@@ -41,4 +41,41 @@ type SentWhatsApp struct {
 	// ArchivedAt is the same moment as a BSON date, to millisecond precision: the archive's
 	// retention index expires rows on it, and such an index ignores a number like SentAt.
 	ArchivedAt time.Time `bson:"archivedAt"`
+
+	// The delivery status Meta reported for the message through the webhook, after it accepted
+	// it. These fields are kept apart from Status, which says how the message left the queue
+	// (there "delivered" only means that Meta accepted it). They are absent until a status
+	// arrives; see WhatsAppDeliveryStatusRank for the order in which they may change.
+	MetaStatus string `bson:"metaStatus,omitempty"`
+	// MetaStatusAt is the moment of that status as Meta reported it, in Unix seconds.
+	MetaStatusAt int64 `bson:"metaStatusAt,omitempty"`
+	// MetaErrorCode is Meta's numeric error code of a failed status. Meta's error title, message
+	// and details are not kept.
+	MetaErrorCode int `bson:"metaErrorCode,omitempty"`
+}
+
+// Delivery statuses Meta reports for a message it accepted.
+const (
+	MetaStatusSent      = "sent"
+	MetaStatusDelivered = "delivered"
+	MetaStatusRead      = "read"
+	MetaStatusFailed    = "failed"
+)
+
+// WhatsAppDeliveryStatusRank orders Meta's delivery statuses. Meta's notifications can arrive
+// out of order (a read before its delivered), so a status replaces the recorded one only when it
+// ranks higher. Failed ranks highest: it is final, and the error code it carries is never lost
+// to a late sent or delivered. A status not listed here (0) is not recorded.
+func WhatsAppDeliveryStatusRank(status string) int {
+	switch status {
+	case MetaStatusSent:
+		return 1
+	case MetaStatusDelivered:
+		return 2
+	case MetaStatusRead:
+		return 3
+	case MetaStatusFailed:
+		return 4
+	}
+	return 0
 }

@@ -138,6 +138,12 @@ outcome, a row archived by an older version, and one whose acceptance named no i
 a warning) have no `wamid` field. `addedAt` is the moment the message was queued (older versions overwrote it
 with the archive time), and `archivedAt` is the archive time again, as a date.
 
+The delivery statuses Meta reports later for an accepted message are kept apart from `status`,
+where `delivered` only means that Meta accepted it: `metaStatus` (`sent`, `delivered`, `read` or
+`failed`), `metaStatusAt` (the time Meta gave, in Unix seconds) and, on a failure,
+`metaErrorCode`. A row has none of them until a status arrives; see "Delivery statuses and
+replies".
+
 ## Retention and indexes
 
 MongoDB deletes an archived row 180 days after its `archivedAt`, through a TTL index on that
@@ -155,6 +161,41 @@ and the retention index. Creating them again is harmless.
 A retention index with another expiry, or with none, is changed in place with `collMod`. A
 failure is logged at ERROR with the instance and does not stop the scheduler; an instance
 added later gets its indexes at the next start.
+
+## Delivery statuses and replies
+
+Meta reports what happens to a message after it accepted it, and forwards the messages
+participants send to the business number, through a webhook. The endpoint Meta calls checks the
+request's signature and hands its body to the processing in `pkg/whatsappwebhook`, which needs
+the archive and user-management, and the instance each business number id belongs to (one
+number, one instance, for now). Where that endpoint runs is not settled yet.
+
+- **Statuses.** A status is matched to the archived row by its `wamid` and recorded there (see
+  "Archived messages"). Statuses may arrive in any order and more than once: one replaces the
+  recorded status only when it comes later in `sent`, `delivered`, `read`, `failed`, so a late
+  `delivered` never undoes `read`, and `failed` is final. Only Meta's numeric error code is
+  kept. A status of a message that is not in the archive (a verification code, which
+  user-management sends, or a row already purged) changes nothing and is logged at DEBUG only,
+  and so is a status other than these four.
+- **Undeliverable numbers.** A `failed` status with error `131026` (the number is not on
+  WhatsApp, or cannot receive the message) takes WhatsApp out of the participant's notification
+  channels, through user-management, on its first occurrence. The archived row names the
+  account.
+- **Replies.** A text message whose body is `STOP`, in any case and with any spaces around it,
+  takes WhatsApp out of the channels of the account that holds the sender's number verified;
+  user-management finds that account. Any other message, of any type, changes nothing. No
+  reply is sent. The text is compared and dropped: it is never stored or logged, nor is the
+  sender's profile name; the logs name the sender by the masked number only.
+
+Removing the channel never adds e-mail, and a participant reached on WhatsApp only is left with
+no channel until they choose one in the settings. Meta repeats a notification it is not sure was
+received, so the processing changes nothing the second time. That makes Meta's retry the way
+to recover from a failure that may pass: when the archive or user-management cannot be reached
+(or user-management does not have the call yet), the rest of the notification is still
+handled and the processing reports an error, so that the endpoint answers Meta with one and
+Meta sends the notification again. A notification that is not a webhook payload is dropped and
+not retried. A removal that user-management refuses cannot succeed on a retry: it is an
+`opt_out_failed` alert.
 
 ## The delivered marker
 
@@ -230,6 +271,7 @@ one only together with the rules.
 | `archived_failed` | A message used up its five attempts and is archived as failed. | `instance`, `type`, `template`, `lang`, `code`, `class`, `attempts` | Look at the code and the class; a stream of them points at a problem the classifier does not know. |
 | `expired` | Messages waited longer than the maximum age and were archived unsent. Once per tick. | `instance`, `count`, `max_age_s` | They are lost. Find out why they waited: a runner that was down, WhatsApp off for the instance, a backlog. |
 | `queue_backlog` | After a tick, messages that are not held back by a refused template have waited more than an hour. On every tick while it lasts. | `instance`, `stale`, `oldest_waiting_s`, `threshold_s` | Read the instance's other alerts and the ERROR lines of its ticks: a sender that keeps failing, two transient failures that block the queue, a claim window too short for the batch. |
+| `opt_out_failed` | Logged where the webhook is processed: user-management refused to remove WhatsApp from a participant's channels after a `STOP` or a `131026` (see "Delivery statuses and replies"). | `instance`, `reason` (`stop_keyword` or `undeliverable`), `code` | The opt-out is lost and the participant is still sent WhatsApp messages. The code says why; the INFO and ERROR lines around it name the participant (masked number or user id). Remove WhatsApp from their channels by hand. |
 | `cancel_failed` | Logged by **user-management**: the cancellation of a participant's queued messages failed after its retries. | `user`, `attempts`, `code` | The messages are sent or expire at the maximum age. Check that messaging is reachable from user-management. |
 
 ### The queue line
@@ -256,8 +298,8 @@ by hand. A queue that cannot be read gives a WARNING too.
 
 Each deployment sets these up in the log tooling it has; the ones below are a starting point.
 
-- Notify on every `runner_not_started`, `auth_stop`, `template_refused` and `cancel_failed`
-  line, and on `queue_backlog` and `expired`, grouped by alert and instance.
+- Notify on every `runner_not_started`, `auth_stop`, `template_refused`, `opt_out_failed` and
+  `cancel_failed` line, and on `queue_backlog` and `expired`, grouped by alert and instance.
 - `permanent_failure` and `archived_failed` come one per message: notify on a count over a
   window (for instance one or more in 15 minutes), grouped by instance and template.
 - `throttle_pause`: notify when `in_a_row` reaches 3, or `stored=false` appears.

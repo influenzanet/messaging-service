@@ -9,7 +9,7 @@ require (
 	github.com/influenzanet/go-utils v0.2.14
 	github.com/influenzanet/logging-service v0.2.0
 	github.com/influenzanet/study-service v1.7.2
-	github.com/influenzanet/user-management-service v1.2.11-staging
+	github.com/influenzanet/user-management-service v1.2.13-staging
 	github.com/jordan-wright/email v4.0.1-0.20210109023952-943e75fe5223+incompatible
 	go.mongodb.org/mongo-driver v1.17.9
 	google.golang.org/grpc v1.83.2
