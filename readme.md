@@ -20,7 +20,10 @@ enabled: user-management decides it for each instance, and `WHATSAPP_ENABLED=fal
 off in this service. The messaging-service queues WhatsApp messages in `outgoing-whatsapp`; the
 message-scheduler sends them and archives them in `sent-whatsapp`. Only the message-scheduler
 needs the Meta credentials (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`); the messaging-service
-never calls Meta and warns at startup if `WHATSAPP_TOKEN` is set in its environment.
+never calls Meta and warns at startup if `WHATSAPP_TOKEN` is set in its environment. The
+messaging-service processes the delivery statuses and replies that api-gateway receives from
+Meta's webhook, for the business number `WHATSAPP_PHONE_NUMBER_ID` and the instance
+`WHATSAPP_WEBHOOK_INSTANCE_ID`.
 
 - Template options: [docs/whatsapp-template-options.md](docs/whatsapp-template-options.md), and
   templates with a header, footer or buttons: [docs/whatsapp-template-header-example.md](docs/whatsapp-template-header-example.md)

@@ -12,6 +12,7 @@ import (
 
 	gc "github.com/influenzanet/messaging-service/pkg/grpc/clients"
 	"github.com/influenzanet/messaging-service/pkg/grpc/messaging_service"
+	"github.com/influenzanet/messaging-service/pkg/whatsappwebhook"
 )
 
 // Config is the structure that holds all global configuration data
@@ -76,6 +77,7 @@ func main() {
 		conf.Port,
 		clients,
 		messageDBService,
+		webhookProcessor(os.Getenv, messageDBService, clients.UserManagementService),
 	); err != nil {
 		logger.Error.Fatal(err)
 	}
@@ -87,4 +89,18 @@ func main() {
 // out of this process.
 func serverWhatsAppSettings(source config.PlatformConfigSource) config.WhatsAppSettings {
 	return config.QueueingWhatsAppSettingsFromEnv(source)
+}
+
+// webhookProcessor builds the processing of the WhatsApp webhook notifications the gateway
+// forwards, for the business number and instance named in the environment. It is nil, and the
+// gateway's calls are refused, when they are not named. The processing does not follow the
+// WhatsApp switch: an opt-out that arrives while WhatsApp is off is still applied.
+func webhookProcessor(getenv func(string) string, archive whatsappwebhook.DeliveryStatusStore, channels whatsappwebhook.ChannelRemover) messaging_service.WebhookProcessor {
+	phoneNumberID, instanceID, ok := config.WhatsAppWebhookFromEnv(getenv)
+	if !ok {
+		logger.Info.Println("WhatsApp webhook processing off: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_WEBHOOK_INSTANCE_ID is not set")
+		return nil
+	}
+	logger.Info.Printf("WhatsApp webhook processing on for instance %s", instanceID)
+	return whatsappwebhook.NewProcessor(archive, channels, whatsappwebhook.SingleInstance(phoneNumberID, instanceID))
 }

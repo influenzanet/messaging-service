@@ -22,6 +22,8 @@ type messagingServer struct {
 	api.UnimplementedMessagingServiceApiServer
 	clients          *types.APIClients
 	messageDBservice *messagedb.MessageDBService
+	// webhook processes the WhatsApp webhook notifications; nil when not configured.
+	webhook WebhookProcessor
 	//globalDBService  *globaldb.GlobalDBService
 }
 
@@ -29,10 +31,12 @@ type messagingServer struct {
 func NewMessagingServiceServer(
 	clients *types.APIClients,
 	messageDBservice *messagedb.MessageDBService,
+	webhook WebhookProcessor,
 ) api.MessagingServiceApiServer {
 	return &messagingServer{
 		clients:          clients,
 		messageDBservice: messageDBservice,
+		webhook:          webhook,
 	}
 }
 
@@ -40,6 +44,7 @@ func NewMessagingServiceServer(
 func RunServer(ctx context.Context, port string,
 	clients *types.APIClients,
 	messageDBservice *messagedb.MessageDBService,
+	webhook WebhookProcessor,
 ) error {
 	lis, err := net.Listen("tcp", ":"+port)
 	if err != nil {
@@ -51,6 +56,7 @@ func RunServer(ctx context.Context, port string,
 	api.RegisterMessagingServiceApiServer(server, NewMessagingServiceServer(
 		clients,
 		messageDBservice,
+		webhook,
 	))
 
 	// graceful shutdown

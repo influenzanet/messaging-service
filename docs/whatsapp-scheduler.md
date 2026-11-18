@@ -165,10 +165,15 @@ added later gets its indexes at the next start.
 ## Delivery statuses and replies
 
 Meta reports what happens to a message after it accepted it, and forwards the messages
-participants send to the business number, through a webhook. The endpoint Meta calls checks the
-request's signature and hands its body to the processing in `pkg/whatsappwebhook`, which needs
-the archive and user-management, and the instance each business number id belongs to (one
-number, one instance, for now). Where that endpoint runs is not settled yet.
+participants send to the business number, through a webhook. Meta calls the participant API of
+api-gateway at `/v1/webhooks/whatsapp`; the gateway checks the request's signature and forwards
+the body to the messaging service (`ProcessWhatsAppWebhook`), which processes it with
+`pkg/whatsappwebhook` before answering. The messaging service processes the notifications of
+one business number, `WHATSAPP_PHONE_NUMBER_ID` (the number the scheduler sends from), for the
+instance named by `WHATSAPP_WEBHOOK_INSTANCE_ID`; notifications about any other number are
+ignored. Without both variables every notification is refused, with a
+`webhook_not_configured` alert, and Meta keeps sending it. The processing does not follow the
+WhatsApp switch: an opt-out that arrives while WhatsApp is off is still applied.
 
 - **Statuses.** A status is matched to the archived row by its `wamid` and recorded there (see
   "Archived messages"). Statuses may arrive in any order and more than once: one replaces the
@@ -272,6 +277,7 @@ one only together with the rules.
 | `expired` | Messages waited longer than the maximum age and were archived unsent. Once per tick. | `instance`, `count`, `max_age_s` | They are lost. Find out why they waited: a runner that was down, WhatsApp off for the instance, a backlog. |
 | `queue_backlog` | After a tick, messages that are not held back by a refused template have waited more than an hour. On every tick while it lasts. | `instance`, `stale`, `oldest_waiting_s`, `threshold_s` | Read the instance's other alerts and the ERROR lines of its ticks: a sender that keeps failing, two transient failures that block the queue, a claim window too short for the batch. |
 | `opt_out_failed` | Logged where the webhook is processed: user-management refused to remove WhatsApp from a participant's channels after a `STOP` or a `131026` (see "Delivery statuses and replies"). | `instance`, `reason` (`stop_keyword` or `undeliverable`), `code` | The opt-out is lost and the participant is still sent WhatsApp messages. The code says why; the INFO and ERROR lines around it name the participant (masked number or user id). Remove WhatsApp from their channels by hand. |
+| `webhook_not_configured` | Logged by the **messaging service**: a webhook notification arrived and `WHATSAPP_PHONE_NUMBER_ID` or `WHATSAPP_WEBHOOK_INSTANCE_ID` is not set there. On every notification until fixed. | none | Set both on the messaging service and restart it. Meta keeps sending the refused notifications for up to 7 days, so nothing is lost in that time. |
 | `cancel_failed` | Logged by **user-management**: the cancellation of a participant's queued messages failed after its retries. | `user`, `attempts`, `code` | The messages are sent or expire at the maximum age. Check that messaging is reachable from user-management. |
 
 ### The queue line
@@ -298,8 +304,8 @@ by hand. A queue that cannot be read gives a WARNING too.
 
 Each deployment sets these up in the log tooling it has; the ones below are a starting point.
 
-- Notify on every `runner_not_started`, `auth_stop`, `template_refused`, `opt_out_failed` and
-  `cancel_failed` line, and on `queue_backlog` and `expired`, grouped by alert and instance.
+- Notify on every `runner_not_started`, `auth_stop`, `template_refused`, `opt_out_failed`,
+  `webhook_not_configured` and `cancel_failed` line, and on `queue_backlog` and `expired`, grouped by alert and instance.
 - `permanent_failure` and `archived_failed` come one per message: notify on a count over a
   window (for instance one or more in 15 minutes), grouped by instance and template.
 - `throttle_pause`: notify when `in_a_row` reaches 3, or `stored=false` appears.

@@ -32,6 +32,7 @@ const (
 	MessagingServiceApi_SaveEmailTemplate_FullMethodName              = "/influenzanet.message_service.MessagingServiceApi/SaveEmailTemplate"
 	MessagingServiceApi_DeleteEmailTemplate_FullMethodName            = "/influenzanet.message_service.MessagingServiceApi/DeleteEmailTemplate"
 	MessagingServiceApi_DeleteOutgoingWhatsAppForUser_FullMethodName  = "/influenzanet.message_service.MessagingServiceApi/DeleteOutgoingWhatsAppForUser"
+	MessagingServiceApi_ProcessWhatsAppWebhook_FullMethodName         = "/influenzanet.message_service.MessagingServiceApi/ProcessWhatsAppWebhook"
 )
 
 // MessagingServiceApiClient is the client API for MessagingServiceApi service.
@@ -51,6 +52,13 @@ type MessagingServiceApiClient interface {
 	DeleteEmailTemplate(ctx context.Context, in *DeleteEmailTemplateReq, opts ...grpc.CallOption) (*ServiceStatus, error)
 	// Service to service: called by user-management whenever a participant withdraws WhatsApp.
 	DeleteOutgoingWhatsAppForUser(ctx context.Context, in *DeleteOutgoingWhatsAppForUserReq, opts ...grpc.CallOption) (*DeleteOutgoingWhatsAppForUserResp, error)
+	// Service to service: called by the gateway with the body of a WhatsApp webhook request whose
+	// signature it has checked. The delivery statuses and the replies in it are processed before
+	// the call returns, and processing the same body again changes nothing. Errors:
+	// InvalidArgument, not a webhook payload (delivering it again cannot help); FailedPrecondition,
+	// the webhook is not configured here; Unavailable, part of it could not be processed yet. On
+	// the last two the gateway answers Meta with an error, so that Meta sends the body again.
+	ProcessWhatsAppWebhook(ctx context.Context, in *ProcessWhatsAppWebhookReq, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type messagingServiceApiClient struct {
@@ -169,6 +177,15 @@ func (c *messagingServiceApiClient) DeleteOutgoingWhatsAppForUser(ctx context.Co
 	return out, nil
 }
 
+func (c *messagingServiceApiClient) ProcessWhatsAppWebhook(ctx context.Context, in *ProcessWhatsAppWebhookReq, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, MessagingServiceApi_ProcessWhatsAppWebhook_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MessagingServiceApiServer is the server API for MessagingServiceApi service.
 // All implementations must embed UnimplementedMessagingServiceApiServer
 // for forward compatibility
@@ -186,6 +203,13 @@ type MessagingServiceApiServer interface {
 	DeleteEmailTemplate(context.Context, *DeleteEmailTemplateReq) (*ServiceStatus, error)
 	// Service to service: called by user-management whenever a participant withdraws WhatsApp.
 	DeleteOutgoingWhatsAppForUser(context.Context, *DeleteOutgoingWhatsAppForUserReq) (*DeleteOutgoingWhatsAppForUserResp, error)
+	// Service to service: called by the gateway with the body of a WhatsApp webhook request whose
+	// signature it has checked. The delivery statuses and the replies in it are processed before
+	// the call returns, and processing the same body again changes nothing. Errors:
+	// InvalidArgument, not a webhook payload (delivering it again cannot help); FailedPrecondition,
+	// the webhook is not configured here; Unavailable, part of it could not be processed yet. On
+	// the last two the gateway answers Meta with an error, so that Meta sends the body again.
+	ProcessWhatsAppWebhook(context.Context, *ProcessWhatsAppWebhookReq) (*emptypb.Empty, error)
 	mustEmbedUnimplementedMessagingServiceApiServer()
 }
 
@@ -228,6 +252,9 @@ func (UnimplementedMessagingServiceApiServer) DeleteEmailTemplate(context.Contex
 }
 func (UnimplementedMessagingServiceApiServer) DeleteOutgoingWhatsAppForUser(context.Context, *DeleteOutgoingWhatsAppForUserReq) (*DeleteOutgoingWhatsAppForUserResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteOutgoingWhatsAppForUser not implemented")
+}
+func (UnimplementedMessagingServiceApiServer) ProcessWhatsAppWebhook(context.Context, *ProcessWhatsAppWebhookReq) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProcessWhatsAppWebhook not implemented")
 }
 func (UnimplementedMessagingServiceApiServer) mustEmbedUnimplementedMessagingServiceApiServer() {}
 
@@ -458,6 +485,24 @@ func _MessagingServiceApi_DeleteOutgoingWhatsAppForUser_Handler(srv interface{},
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MessagingServiceApi_ProcessWhatsAppWebhook_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ProcessWhatsAppWebhookReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MessagingServiceApiServer).ProcessWhatsAppWebhook(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MessagingServiceApi_ProcessWhatsAppWebhook_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MessagingServiceApiServer).ProcessWhatsAppWebhook(ctx, req.(*ProcessWhatsAppWebhookReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MessagingServiceApi_ServiceDesc is the grpc.ServiceDesc for MessagingServiceApi service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -512,6 +557,10 @@ var MessagingServiceApi_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteOutgoingWhatsAppForUser",
 			Handler:    _MessagingServiceApi_DeleteOutgoingWhatsAppForUser_Handler,
+		},
+		{
+			MethodName: "ProcessWhatsAppWebhook",
+			Handler:    _MessagingServiceApi_ProcessWhatsAppWebhook_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
