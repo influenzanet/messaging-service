@@ -104,16 +104,21 @@ func (dbService *MessageDBService) FetchOutgoingWhatsApp(instanceID string, amou
 // expired and another tick has already taken it out of the queue.
 var ErrOutgoingWhatsAppNotFound = errors.New("no outgoing whatsapp message found with the given id")
 
-// MarkOutgoingWhatsAppDelivered records on the queued message that Meta accepted it. It is
-// written before the message is archived, so that a failure of the archive write leaves a row
-// the next tick can finish instead of a row it would send to Meta a second time.
-func (dbService *MessageDBService) MarkOutgoingWhatsAppDelivered(instanceID string, id string) error {
+// MarkOutgoingWhatsAppDelivered records on the queued message that Meta accepted it, and the id
+// Meta gave it when there is one. It is written before the message is archived, so that a
+// failure of the archive write leaves a row the next tick can finish, id included, instead of
+// a row it would send to Meta a second time.
+func (dbService *MessageDBService) MarkOutgoingWhatsAppDelivered(instanceID string, id string, wamid string) error {
 	ctx, cancel := dbService.getContext()
 	defer cancel()
 
 	_id, _ := primitive.ObjectIDFromHex(id)
 	filter := bson.M{"_id": _id}
-	update := bson.M{"$set": bson.M{"delivered": true}}
+	set := bson.M{"delivered": true}
+	if wamid != "" {
+		set["wamid"] = wamid
+	}
+	update := bson.M{"$set": set}
 
 	res, err := dbService.collectionRefOutgoingWhatsApp(instanceID).UpdateOne(ctx, filter, update)
 	if err != nil {

@@ -113,7 +113,7 @@ func TestSendTemplateMessageHeaderPayloads(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c, raw, calls := newRawCaptureClient(t)
-			if err := c.SendTemplateMessage(context.Background(), phone, "tpl", "it", tc.params); err != nil {
+			if _, err := c.SendTemplateMessage(context.Background(), phone, "tpl", "it", tc.params); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if atomic.LoadInt32(calls) != 1 {
@@ -141,7 +141,7 @@ func TestSendTemplateMessageHeaderRejectedBeforeHTTP(t *testing.T) {
 	for name, params := range cases {
 		t.Run(name, func(t *testing.T) {
 			c, _, calls := newRawCaptureClient(t)
-			if err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err == nil {
+			if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err == nil {
 				t.Fatal("expected an error")
 			}
 			if n := atomic.LoadInt32(calls); n != 0 {

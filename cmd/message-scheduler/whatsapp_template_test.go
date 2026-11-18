@@ -28,7 +28,7 @@ type templateSelectiveWhatsAppSender struct {
 	calls    map[string]int
 }
 
-func (s *templateSelectiveWhatsAppSender) SendTemplateMessage(_ context.Context, _ string, name string, lang string, _ map[string]string) error {
+func (s *templateSelectiveWhatsAppSender) SendTemplateMessage(_ context.Context, _ string, name string, lang string, _ map[string]string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.calls == nil {
@@ -36,9 +36,9 @@ func (s *templateSelectiveWhatsAppSender) SendTemplateMessage(_ context.Context,
 	}
 	s.calls[name+"|"+lang]++
 	if name == s.failName && lang == s.failLang {
-		return s.err
+		return "", s.err
 	}
-	return nil
+	return "", nil
 }
 
 func (s *templateSelectiveWhatsAppSender) callsFor(name, lang string) int {
@@ -243,7 +243,7 @@ type barrierWhatsAppSender struct {
 	open    chan struct{}
 }
 
-func (s *barrierWhatsAppSender) SendTemplateMessage(ctx context.Context, _ string, _ string, _ string, _ map[string]string) error {
+func (s *barrierWhatsAppSender) SendTemplateMessage(ctx context.Context, _ string, _ string, _ string, _ map[string]string) (string, error) {
 	s.mu.Lock()
 	s.waiting++
 	if s.waiting == s.parties {
@@ -253,9 +253,9 @@ func (s *barrierWhatsAppSender) SendTemplateMessage(ctx context.Context, _ strin
 	select {
 	case <-s.open:
 	case <-ctx.Done():
-		return ctx.Err()
+		return "", ctx.Err()
 	}
-	return s.err
+	return "", s.err
 }
 
 // Two ticks can run at once. Each defers only what it claimed or what nobody holds, so every

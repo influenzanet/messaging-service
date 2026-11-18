@@ -601,7 +601,7 @@ type pauseRecordingSender struct {
 	calls int
 }
 
-func (s *pauseRecordingSender) SendTemplateMessage(context.Context, string, string, string, map[string]string) error {
+func (s *pauseRecordingSender) SendTemplateMessage(context.Context, string, string, string, map[string]string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
@@ -611,7 +611,7 @@ func (s *pauseRecordingSender) SendTemplateMessage(context.Context, string, stri
 			s.t.Errorf("record the other replica's pause: %v", err)
 		}
 	}
-	return nil
+	return "", nil
 }
 
 func TestWhatsAppTickStopsBeforeTheNextBatchWhenAnotherReplicaPaused(t *testing.T) {

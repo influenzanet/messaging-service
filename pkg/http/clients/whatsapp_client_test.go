@@ -83,7 +83,7 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 	// "header".
 	t.Run("text header param produces header component before body", func(t *testing.T) {
 		c, captured := newCaptureClient(t)
-		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
+		_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
 			"header:campaign": "Weekly survey",
 			"name":            "Mario",
 		})
@@ -121,7 +121,7 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 			t.Run(mc.key, func(t *testing.T) {
 				c, captured := newCaptureClient(t)
 				link := "https://example.com/asset"
-				err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
+				_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
 					mc.key: link,
 				})
 				if err != nil {
@@ -150,7 +150,7 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 	// body here is named.
 	t.Run("header body and button components are ordered deterministically", func(t *testing.T) {
 		c, captured := newCaptureClient(t)
-		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "en", map[string]string{
+		_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "en", map[string]string{
 			"button_0":        "verify/abc",
 			"header:campaign": "Hello",
 			"name":            "Mario",
@@ -176,7 +176,7 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 
 	t.Run("body-only params keep existing behaviour", func(t *testing.T) {
 		c, captured := newCaptureClient(t)
-		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "en", map[string]string{
+		_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "en", map[string]string{
 			"name": "Mario",
 		})
 		if err != nil {
@@ -194,7 +194,7 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 	// bare "header" key stays positional for templates built that way.
 	t.Run("named text header carries its parameter name", func(t *testing.T) {
 		c, captured := newCaptureClient(t)
-		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
+		_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
 			"header:campaign": "Weekly survey",
 			"name":            "Mario",
 		})
@@ -219,7 +219,7 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 
 	t.Run("rejects an unknown header media type instead of inventing one", func(t *testing.T) {
 		c, _ := newCaptureClient(t)
-		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
+		_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
 			"header_banner": "https://example.com/asset",
 		})
 		if err == nil {
@@ -229,7 +229,7 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 
 	t.Run("rejects two header keys instead of picking one at random", func(t *testing.T) {
 		c, _ := newCaptureClient(t)
-		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
+		_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{
 			"header":       "Weekly survey",
 			"header_image": "https://example.com/asset",
 		})
@@ -240,7 +240,7 @@ func TestSendTemplateMessageHeaderComponents(t *testing.T) {
 
 	t.Run("no params sends template without components", func(t *testing.T) {
 		c, captured := newCaptureClient(t)
-		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "en", nil)
+		_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "en", nil)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -256,7 +256,7 @@ func TestSendTemplateMessageTimeout(t *testing.T) {
 	cancel() // immediately cancelled
 
 	c := NewWhatsAppClient("fake-token", "fake-phone-id", "")
-	err := c.SendTemplateMessage(ctx, "+391234567890", "test_template", "it", nil)
+	_, err := c.SendTemplateMessage(ctx, "+391234567890", "test_template", "it", nil)
 	if err == nil {
 		t.Error("expected error with cancelled context")
 	}
@@ -282,7 +282,7 @@ func TestSendTemplateMessageLogsOnlyTheMaskedNumber(t *testing.T) {
 			c := NewWhatsAppClient("test-token", "test-phone-id", "")
 			c.apiBaseURL = server.URL
 
-			_ = c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", nil)
+			_, _ = c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", nil)
 
 			if !strings.Contains(logs.String(), "+39***7890") {
 				t.Errorf("the send log does not name the masked recipient: %q", logs.String())

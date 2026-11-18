@@ -65,7 +65,7 @@ func TestSendTemplateMessageKeepsRetryAfter(t *testing.T) {
 			c := NewWhatsAppClient("test-token", "test-phone-id", "")
 			c.apiBaseURL = server.URL
 
-			err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", nil)
+			_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", nil)
 			sendErr, ok := err.(*WhatsAppSendError)
 			if !ok {
 				t.Fatalf("expected a WhatsAppSendError, got %T: %v", err, err)
@@ -89,7 +89,7 @@ func TestSendTemplateMessageRetryAfterAsHTTPDate(t *testing.T) {
 	c := NewWhatsAppClient("test-token", "test-phone-id", "")
 	c.apiBaseURL = server.URL
 
-	err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", nil)
+	_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", nil)
 	sendErr, ok := err.(*WhatsAppSendError)
 	if !ok {
 		t.Fatalf("expected a WhatsAppSendError, got %T: %v", err, err)

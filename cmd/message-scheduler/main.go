@@ -529,8 +529,10 @@ func logWhatsAppOffInstance(mdb *messagedb.MessageDBService, instanceID string) 
 	}
 }
 
+// whatsAppSender sends a template message and returns the id Meta gave it, which may be empty
+// on an accepted message.
 type whatsAppSender interface {
-	SendTemplateMessage(context.Context, string, string, string, map[string]string) error
+	SendTemplateMessage(context.Context, string, string, string, map[string]string) (string, error)
 }
 
 // deliveredWhatsApp is the outcome of a message Meta accepted.
@@ -784,7 +786,7 @@ processQueue:
 
 			// Direct HTTP call to Meta API, bounded by the context timeout
 			sendCtx, cancel := context.WithTimeout(context.Background(), whatsAppSendTimeout)
-			err := wac.SendTemplateMessage(sendCtx, msg.ToPhoneNumber, msg.TemplateName, msg.Lang, msg.ContentParams)
+			wamid, err := wac.SendTemplateMessage(sendCtx, msg.ToPhoneNumber, msg.TemplateName, msg.Lang, msg.ContentParams)
 			cancel()
 			if err != nil {
 				logger.Error.Printf("Could not send whatsapp ('%s') in instance %s (attempt %d): %v", msg.MessageType, instanceID, msg.SendAttempt+1, err)
@@ -873,8 +875,9 @@ processQueue:
 			}
 			// Meta has accepted the message: record that on the queued row before archiving
 			// it, so that a failed archive write leaves a row the next tick finishes rather
-			// than one it sends again.
-			if markErr := mdb.MarkOutgoingWhatsAppDelivered(instanceID, msg.ID.Hex()); markErr != nil {
+			// than one it sends again. The archive keeps Meta's id even when the mark fails.
+			msg.WAMID = wamid
+			if markErr := mdb.MarkOutgoingWhatsAppDelivered(instanceID, msg.ID.Hex(), wamid); markErr != nil {
 				if errors.Is(markErr, messagedb.ErrOutgoingWhatsAppNotFound) {
 					// The claim expired and another tick has already archived this message,
 					// or the participant withdrew WhatsApp while it was being sent and

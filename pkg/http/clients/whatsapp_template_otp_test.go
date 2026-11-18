@@ -18,7 +18,7 @@ func TestAuthenticationTemplatePayload(t *testing.T) {
 	c, raw, calls := newRawCaptureClient(t)
 	const code = "123456"
 	params := map[string]string{"1": code, "button_0": code}
-	if err := c.SendTemplateMessage(context.Background(), "+391234567890", "login_otp", "en", params); err != nil {
+	if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "login_otp", "en", params); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if n := atomic.LoadInt32(calls); n != 1 {

@@ -26,7 +26,7 @@ func TestSendTemplateMessageCallsTheConfiguredVersion(t *testing.T) {
 	c := NewWhatsAppClient("token", "phone-id", "v25.0")
 	transport := &urlCapturingTransport{}
 	c.httpClient.Transport = transport
-	if err := c.SendTemplateMessage(context.Background(), "+391234567890", "weekly", "it", map[string]string{}); err != nil {
+	if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "weekly", "it", map[string]string{}); err != nil {
 		t.Fatalf("SendTemplateMessage: %v", err)
 	}
 	if transport.url != "https://graph.facebook.com/v25.0/phone-id/messages" {

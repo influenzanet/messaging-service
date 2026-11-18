@@ -132,8 +132,10 @@ age; `sentAt` is the moment it was archived, and a failed row keeps `errorCode`
 (Meta's numeric code, `0` when the failure never reached Meta) and `errorClass` (the class the
 retry policy read from that failure). Meta's free-form message is not stored, and the content
 parameters are dropped on archiving. Rows archived by older versions carry none of these
-fields and read as an unknown outcome. Meta's message id is not stored: the client does
-not return it. `addedAt` is the moment the message was queued (older versions overwrote it
+fields and read as an unknown outcome. A message Meta accepted keeps the id Meta gave it,
+`wamid`, which the delivery statuses Meta reports later refer to; a row with any other
+outcome, a row archived by an older version, and one whose acceptance named no id (logged as
+a warning) have no `wamid` field. `addedAt` is the moment the message was queued (older versions overwrote it
 with the archive time), and `archivedAt` is the archive time again, as a date.
 
 ## Retention and indexes
@@ -148,15 +150,16 @@ every instance in the global database, whether WhatsApp is on for it or not. On
 `outgoing-whatsapp`: `{addedAt, _id, lastSendAttempt}` for the claim,
 `{templateName, lang, lastSendAttempt}` for the deferral of a refused template, and `{userId}`
 for the cancellation and the purge of a participant's messages. On `sent-whatsapp`: `{userId}`
-for the purge of a deleted account, and the retention index. Creating them again is harmless.
+for the purge of a deleted account, a sparse `{wamid}` for matching Meta's delivery statuses,
+and the retention index. Creating them again is harmless.
 A retention index with another expiry, or with none, is changed in place with `collMod`. A
 failure is logged at ERROR with the instance and does not stop the scheduler; an instance
 added later gets its indexes at the next start.
 
 ## The delivered marker
 
-A message Meta has accepted is marked `delivered` on its queued row before that row is
-archived, and the row is removed only once the archive write has succeeded. An operator who
+A message Meta has accepted is marked `delivered` on its queued row, together with its
+`wamid`, before that row is archived, and the row is removed only once the archive write has succeeded. An operator who
 finds a queued message carrying `delivered` is looking at one whose archive write, or whose
 queue delete, failed: check `sent-whatsapp` first, the message may already be archived there.
 The next tick that claims it archives it instead of sending it, so it is never posted to Meta

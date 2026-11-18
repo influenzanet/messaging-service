@@ -20,7 +20,7 @@ func TestLanguageCodeSentToMeta(t *testing.T) {
 	rows := make([]string, 0, len(langsToMeta))
 	for _, lang := range langsToMeta {
 		c, captured := newCaptureClient(t)
-		err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", lang, map[string]string{"name": "Mario"})
+		_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", lang, map[string]string{"name": "Mario"})
 		if err != nil {
 			t.Fatalf("lang %q: unexpected error: %v", lang, err)
 		}
@@ -43,7 +43,7 @@ func TestLanguageCodeSentToMeta(t *testing.T) {
 // language today, so a queue row written by anything else would reach Meta like this.
 func TestEmptyLanguageReachesMetaVerbatim(t *testing.T) {
 	c, captured := newCaptureClient(t)
-	if err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "", nil); err != nil {
+	if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "", nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if captured.Template.Language.Code != "" {

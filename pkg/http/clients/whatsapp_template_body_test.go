@@ -41,7 +41,7 @@ func TestBodyPositionalPayload(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c, raw, calls := newRawCaptureClient(t)
-			if err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", tc.params); err != nil {
+			if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", tc.params); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if n := atomic.LoadInt32(calls); n != 1 {
@@ -57,7 +57,7 @@ func TestBodyPositionalPayload(t *testing.T) {
 func TestBodyNamedViaPrefixPayload(t *testing.T) {
 	c, raw, calls := newRawCaptureClient(t)
 	params := map[string]string{"body:header": "not the header"}
-	if err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err != nil {
+	if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if n := atomic.LoadInt32(calls); n != 1 {
@@ -91,7 +91,7 @@ func TestTemplateParamsRejectedBeforeHTTP(t *testing.T) {
 	for name, params := range cases {
 		t.Run(name, func(t *testing.T) {
 			c, _, calls := newRawCaptureClient(t)
-			if err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err == nil {
+			if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err == nil {
 				t.Fatal("expected an error")
 			} else if !errors.Is(err, ErrInvalidTemplateParams) {
 				t.Errorf("expected error to wrap ErrInvalidTemplateParams, got: %v", err)

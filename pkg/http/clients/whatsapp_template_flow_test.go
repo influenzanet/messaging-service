@@ -41,7 +41,7 @@ func TestButtonFlowPayload(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c, raw, calls := newRawCaptureClient(t)
-			if err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", tc.params); err != nil {
+			if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", tc.params); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 			if n := atomic.LoadInt32(calls); n != 1 {
@@ -65,7 +65,7 @@ func TestButtonFlowRejectedBeforeHTTP(t *testing.T) {
 	for name, params := range cases {
 		t.Run(name, func(t *testing.T) {
 			c, _, calls := newRawCaptureClient(t)
-			if err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err == nil {
+			if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err == nil {
 				t.Fatal("expected an error")
 			} else if !errors.Is(err, ErrInvalidTemplateParams) {
 				t.Errorf("expected error to wrap ErrInvalidTemplateParams, got: %v", err)
@@ -82,7 +82,7 @@ func TestButtonFlowRejectedBeforeHTTP(t *testing.T) {
 func TestButtonFlowActionDataSentVerbatim(t *testing.T) {
 	c, raw, _ := newRawCaptureClient(t)
 	params := map[string]string{"button_0:flow": `{"flow_action_data":{"order_id":12345678901234567890}}`}
-	if err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err != nil {
+	if _, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", params); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !strings.Contains(string(*raw), `"order_id":12345678901234567890`) {

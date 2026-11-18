@@ -103,10 +103,17 @@ func NewWhatsAppClient(token, phoneID, apiVersion string) *WhatsAppClient {
 	}
 }
 
-// SendTemplateMessage sends a message using a specific WhatsApp template with named parameters.
+// maxAcceptedResponseBytes bounds how much of an accepted send's response is read for the
+// message id. Meta's answer is a few hundred bytes.
+const maxAcceptedResponseBytes = 64 << 10
+
+// SendTemplateMessage sends a message using a specific WhatsApp template with named parameters,
+// and returns the id Meta gave the message (its wamid). A nil error means Meta accepted the
+// message, even when the id cannot be read from the response: the id is then empty, and the
+// message must not be sent again.
 // The flat params map is parsed and validated by parseTemplateParams; see
 // whatsapp_template_params.go for the key conventions it recognizes.
-func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber, templateName, lang string, params map[string]string) error {
+func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber, templateName, lang string, params map[string]string) (string, error) {
 	apiURL := fmt.Sprintf("%s/%s/messages", c.apiBaseURL, c.phoneNumberID)
 
 	template := map[string]interface{}{
@@ -119,7 +126,7 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 	if len(params) > 0 {
 		tp, err := parseTemplateParams(templateName, params)
 		if err != nil {
-			return err
+			return "", err
 		}
 		if components := tp.buildComponents(); len(components) > 0 {
 			template["components"] = components
@@ -135,12 +142,12 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewBuffer(body))
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	req.Header.Set("Authorization", "Bearer "+c.apiToken)
@@ -151,7 +158,7 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 	if err != nil {
 		sendErr := &WhatsAppSendError{cause: err}
 		logger.Error.Printf("WhatsApp SendTemplateMessage: %v", sendErr)
-		return sendErr
+		return "", sendErr
 	}
 	defer resp.Body.Close()
 
@@ -177,9 +184,34 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 			sendErr.cause = decodeErr
 		}
 		logger.Error.Printf("WhatsApp SendTemplateMessage: %v", sendErr)
-		return sendErr
+		return "", sendErr
+	}
+	wamid := acceptedMessageID(resp.Body)
+	if wamid == "" {
+		// Accepted all the same, so not an error: sending it again would deliver it twice.
+		// Its delivery statuses cannot be matched to it. The body is not logged: it echoes
+		// the recipient's number.
+		logger.Warning.Println("WhatsApp SendTemplateMessage: delivered to API, but the response names no message id")
+		return "", nil
 	}
 	logger.Info.Println("WhatsApp SendTemplateMessage: delivered to API")
 
-	return nil
+	return wamid, nil
+}
+
+// acceptedMessageID reads the message id from the response to an accepted send,
+// {"messages":[{"id":"wamid..."}], ...}, or returns "" when the response names none.
+func acceptedMessageID(body io.Reader) string {
+	var accepted struct {
+		Messages []struct {
+			ID string `json:"id"`
+		} `json:"messages"`
+	}
+	if err := json.NewDecoder(io.LimitReader(body, maxAcceptedResponseBytes)).Decode(&accepted); err != nil {
+		return ""
+	}
+	if len(accepted.Messages) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(accepted.Messages[0].ID)
 }

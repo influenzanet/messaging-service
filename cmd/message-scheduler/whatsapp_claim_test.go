@@ -267,12 +267,12 @@ type delayingWhatsAppSender struct {
 	calls int
 }
 
-func (s *delayingWhatsAppSender) SendTemplateMessage(context.Context, string, string, string, map[string]string) error {
+func (s *delayingWhatsAppSender) SendTemplateMessage(context.Context, string, string, string, map[string]string) (string, error) {
 	time.Sleep(s.delay)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
-	return s.err
+	return "", s.err
 }
 
 func (s *delayingWhatsAppSender) callCount() int {

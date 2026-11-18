@@ -234,7 +234,7 @@ type sendHookWhatsAppSender struct {
 	onSend func(to string)
 }
 
-func (s *sendHookWhatsAppSender) SendTemplateMessage(ctx context.Context, to, template, lang string, params map[string]string) error {
+func (s *sendHookWhatsAppSender) SendTemplateMessage(ctx context.Context, to, template, lang string, params map[string]string) (string, error) {
 	s.onSend(to)
 	return s.whatsAppSender.SendTemplateMessage(ctx, to, template, lang, params)
 }
@@ -286,7 +286,7 @@ func TestWhatsAppDeliveredMessageOlderThanMaxAgeIsArchivedAsDelivered(t *testing
 	const phone = "+391111111101"
 	db := newSchedulerTestDB(t)
 	msg := db.addAged(t, phone, testMaxAge+60, 0)
-	if err := db.service.MarkOutgoingWhatsAppDelivered(schedulerTestInstanceID, msg.ID.Hex()); err != nil {
+	if err := db.service.MarkOutgoingWhatsAppDelivered(schedulerTestInstanceID, msg.ID.Hex(), ""); err != nil {
 		t.Fatalf("mark the message delivered: %v", err)
 	}
 	sender := &perPhoneWhatsAppSender{}

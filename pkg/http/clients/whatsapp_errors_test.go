@@ -98,7 +98,7 @@ func TestSendTemplateMessageErrorResponse(t *testing.T) {
 			defer server.Close()
 			client := NewWhatsAppClient("test-token", "test-phone-id", "")
 			client.apiBaseURL = server.URL
-			err := client.SendTemplateMessage(context.Background(), phone, "template", "it", nil)
+			_, err := client.SendTemplateMessage(context.Background(), phone, "template", "it", nil)
 			var sendErr *WhatsAppSendError
 			if !errors.As(err, &sendErr) {
 				t.Fatalf("error = %v, want *WhatsAppSendError", err)
@@ -126,7 +126,7 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 		defer server.Close()
 		client := NewWhatsAppClient("test-token", "test-phone-id", "")
 		client.apiBaseURL = server.URL
-		err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
+		_, err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
 		var sendErr *WhatsAppSendError
 		if !errors.As(err, &sendErr) || sendErr.Class() != WhatsAppErrorTransient || !errors.Is(err, io.ErrUnexpectedEOF) {
 			t.Fatalf("expected a wrapped transient response-body disconnect, got %v", err)
@@ -145,7 +145,7 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 		client.apiBaseURL = server.URL
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
-		err := client.SendTemplateMessage(ctx, "+391234567890", "template", "it", nil)
+		_, err := client.SendTemplateMessage(ctx, "+391234567890", "template", "it", nil)
 		var sendErr *WhatsAppSendError
 		if !errors.As(err, &sendErr) || sendErr.Class() != WhatsAppErrorTransient || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("expected a wrapped transient response-body timeout, got %v", err)
@@ -156,7 +156,7 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 		server.Close()
 		client := NewWhatsAppClient("test-token", "test-phone-id", "")
 		client.apiBaseURL = server.URL
-		err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
+		_, err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
 		var sendErr *WhatsAppSendError
 		if !errors.As(err, &sendErr) || sendErr.Class() != WhatsAppErrorTransient || errors.Unwrap(err) == nil {
 			t.Fatalf("expected a wrapped transient transport error, got %v", err)
@@ -173,7 +173,7 @@ func TestSendTemplateMessageTransportErrors(t *testing.T) {
 		client.apiBaseURL = server.URL
 		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 		defer cancel()
-		err := client.SendTemplateMessage(ctx, "+391234567890", "template", "it", nil)
+		_, err := client.SendTemplateMessage(ctx, "+391234567890", "template", "it", nil)
 		var sendErr *WhatsAppSendError
 		if !errors.As(err, &sendErr) || sendErr.Class() != WhatsAppErrorTransient || !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("expected a wrapped transient deadline error, got %v", err)
@@ -203,7 +203,7 @@ func TestSendTemplateMessageDecodesTheMetaTraceID(t *testing.T) {
 	defer server.Close()
 	client := NewWhatsAppClient("test-token", "test-phone-id", "")
 	client.apiBaseURL = server.URL
-	err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
+	_, err := client.SendTemplateMessage(context.Background(), "+391234567890", "template", "it", nil)
 	var sendErr *WhatsAppSendError
 	if !errors.As(err, &sendErr) {
 		t.Fatalf("expected a WhatsAppSendError, got %v", err)

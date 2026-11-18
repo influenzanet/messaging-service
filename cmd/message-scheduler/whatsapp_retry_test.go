@@ -21,16 +21,21 @@ import (
 const schedulerTestInstanceID = "i"
 
 type fakeWhatsAppSender struct {
-	mu    sync.Mutex
-	err   error
+	mu  sync.Mutex
+	err error
+	// wamid is the id Meta gives each message it accepts; empty, the acceptance names none.
+	wamid string
 	calls int
 }
 
-func (s *fakeWhatsAppSender) SendTemplateMessage(context.Context, string, string, string, map[string]string) error {
+func (s *fakeWhatsAppSender) SendTemplateMessage(context.Context, string, string, string, map[string]string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
-	return s.err
+	if s.err != nil {
+		return "", s.err
+	}
+	return s.wamid, nil
 }
 
 func (s *fakeWhatsAppSender) setError(err error) {
@@ -55,7 +60,7 @@ type blockingWhatsAppSender struct {
 	calls int
 }
 
-func (s *blockingWhatsAppSender) SendTemplateMessage(ctx context.Context, _ string, _ string, _ string, _ map[string]string) error {
+func (s *blockingWhatsAppSender) SendTemplateMessage(ctx context.Context, _ string, _ string, _ string, _ map[string]string) (string, error) {
 	s.mu.Lock()
 	s.calls++
 	s.mu.Unlock()
@@ -63,9 +68,9 @@ func (s *blockingWhatsAppSender) SendTemplateMessage(ctx context.Context, _ stri
 
 	select {
 	case <-s.release:
-		return s.result
+		return "", s.result
 	case <-ctx.Done():
-		return ctx.Err()
+		return "", ctx.Err()
 	}
 }
 
@@ -75,15 +80,15 @@ type scriptedWhatsAppSender struct {
 	calls  int
 }
 
-func (s *scriptedWhatsAppSender) SendTemplateMessage(context.Context, string, string, string, map[string]string) error {
+func (s *scriptedWhatsAppSender) SendTemplateMessage(context.Context, string, string, string, map[string]string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	call := s.calls
 	s.calls++
 	if call < len(s.errors) {
-		return s.errors[call]
+		return "", s.errors[call]
 	}
-	return nil
+	return "", nil
 }
 
 func (s *scriptedWhatsAppSender) callCount() int {
@@ -477,14 +482,14 @@ type selectiveWhatsAppSender struct {
 	calls     int
 }
 
-func (s *selectiveWhatsAppSender) SendTemplateMessage(_ context.Context, to string, _ string, _ string, _ map[string]string) error {
+func (s *selectiveWhatsAppSender) SendTemplateMessage(_ context.Context, to string, _ string, _ string, _ map[string]string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
 	if to == s.failPhone {
-		return s.err
+		return "", s.err
 	}
-	return nil
+	return "", nil
 }
 
 const poisonPhone = "+390000000000"
@@ -512,14 +517,14 @@ type langSelectiveWhatsAppSender struct {
 	calls    int
 }
 
-func (s *langSelectiveWhatsAppSender) SendTemplateMessage(_ context.Context, _ string, _ string, lang string, _ map[string]string) error {
+func (s *langSelectiveWhatsAppSender) SendTemplateMessage(_ context.Context, _ string, _ string, lang string, _ map[string]string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
 	if lang == s.failLang {
-		return s.err
+		return "", s.err
 	}
-	return nil
+	return "", nil
 }
 
 func (db *schedulerTestDB) attemptsOf(t *testing.T, phone string) int {
@@ -704,7 +709,7 @@ type perPhoneWhatsAppSender struct {
 	delay     time.Duration
 }
 
-func (s *perPhoneWhatsAppSender) SendTemplateMessage(_ context.Context, to string, _ string, _ string, _ map[string]string) error {
+func (s *perPhoneWhatsAppSender) SendTemplateMessage(_ context.Context, to string, _ string, _ string, _ map[string]string) (string, error) {
 	if to == s.slowPhone {
 		time.Sleep(s.delay)
 	}
@@ -716,9 +721,9 @@ func (s *perPhoneWhatsAppSender) SendTemplateMessage(_ context.Context, to strin
 	call := s.calls[to]
 	s.calls[to]++
 	if outcomes := s.script[to]; call < len(outcomes) {
-		return outcomes[call]
+		return "", outcomes[call]
 	}
-	return nil
+	return "", nil
 }
 
 // A held failure whose claim has expired is not charged, and the message it belongs to is not

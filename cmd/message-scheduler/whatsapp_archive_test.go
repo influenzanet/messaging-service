@@ -55,6 +55,7 @@ type archivedWhatsApp struct {
 	ErrorCode     int    `bson:"errorCode"`
 	ErrorClass    string `bson:"errorClass"`
 	SentAt        int64  `bson:"sentAt"`
+	WAMID         string `bson:"wamid"`
 }
 
 // archivedFor reads the archive row of a recipient. The archive stores the number masked, so
@@ -150,14 +151,14 @@ func TestWhatsAppMessageArchivedAtTheCapKeepsTheLastFailure(t *testing.T) {
 // tick must finish the archive instead of posting the message to Meta a second time. Without
 // the delivered marker the queued row is indistinguishable from one that was never sent, so it
 // is re-sent on every lock expiry, for ever, with no attempt ever charged.
-// Fails if the success path stops marking the message before archiving it, or if a marked
-// message is sent again instead of being archived.
+// Fails if the success path stops marking the message before archiving it, if a marked
+// message is sent again instead of being archived, or if the mark loses Meta's message id.
 func TestWhatsAppDeliveredMessageIsNotResentWhenItsArchiveWriteFails(t *testing.T) {
 	const recipient = "+391111111101"
 	db := newSchedulerTestDB(t)
 	db.addTo(t, recipient, 0)
 	db.blockArchive(t, recipient)
-	sender := &fakeWhatsAppSender{}
+	sender := &fakeWhatsAppSender{wamid: "wamid.repaired"}
 
 	runWhatsAppHandler(db.service, sender, 60)
 
@@ -192,7 +193,13 @@ func TestWhatsAppDeliveredMessageIsNotResentWhenItsArchiveWriteFails(t *testing.
 	if queued := db.countQueued(t, bson.M{"toPhoneNumber": recipient}); queued != 0 {
 		t.Fatalf("the repaired message did not leave the queue: %d rows", queued)
 	}
-	if row := db.archivedFor(t, recipient); row.Status != types.WhatsAppStatusDelivered {
+	row := db.archivedFor(t, recipient)
+	if row.Status != types.WhatsAppStatusDelivered {
 		t.Fatalf("the repaired message was archived as %q, want %q", row.Status, types.WhatsAppStatusDelivered)
+	}
+	// The id came back with the first send, the only one: the queued row has to keep it for
+	// the repair, or the statuses Meta reports for this message can never be matched.
+	if row.WAMID != "wamid.repaired" {
+		t.Fatalf("the repaired message was archived with wamid %q, want the one Meta gave at the send", row.WAMID)
 	}
 }

@@ -18,7 +18,7 @@ func TestButtonIndexValidation(t *testing.T) {
 	for key := range validCases {
 		t.Run(key+" is accepted", func(t *testing.T) {
 			c, _, calls := newRawCaptureClient(t)
-			err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{key: "v"})
+			_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{key: "v"})
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -38,7 +38,7 @@ func TestButtonIndexValidation(t *testing.T) {
 	for _, key := range invalidKeys {
 		t.Run(key+" is rejected before any HTTP call", func(t *testing.T) {
 			c, _, calls := newRawCaptureClient(t)
-			err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{key: "v"})
+			_, err := c.SendTemplateMessage(context.Background(), "+391234567890", "tpl", "it", map[string]string{key: "v"})
 			if err == nil {
 				t.Fatalf("expected an error for key %q", key)
 			}

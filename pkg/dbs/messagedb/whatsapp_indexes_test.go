@@ -89,8 +89,8 @@ func keysOf(t *testing.T, collection *mongo.Collection) map[string]int64 {
 }
 
 // On a database that has never seen WhatsApp, the queue gets its claim, template and
-// participant indexes, and the archive its participant index and an index that expires rows
-// 180 days after archivedAt. A second run changes nothing and does not fail.
+// participant indexes, and the archive its participant index, a sparse index on Meta's message
+// id and an index that expires rows 180 days after archivedAt. A second run changes nothing and does not fail.
 // Fails if an index is missing, has its keys in another order, or the retention is not 180 days
 // on the archive date.
 func TestCreateIndexesForWhatsAppOnAFreshDatabase(t *testing.T) {
@@ -105,6 +105,7 @@ func TestCreateIndexesForWhatsAppOnAFreshDatabase(t *testing.T) {
 		"sent-whatsapp": {
 			"_id:1":        -1,
 			"userId:1":     -1,
+			"wamid:1":      -1,
 			"archivedAt:1": retentionSeconds,
 		},
 	}
@@ -123,6 +124,11 @@ func TestCreateIndexesForWhatsAppOnAFreshDatabase(t *testing.T) {
 					t.Fatalf("run %d: %s index %s: present %v, TTL %d; want TTL %d (all: %v)", run, collection, key, ok, gotTTL, ttl, got)
 				}
 			}
+		}
+		// Only the rows of accepted messages carry a wamid; the others stay out of its index.
+		sent := testDBService.collectionRefSentWhatsApp(instanceID)
+		if sparse := indexSpecs(t, sent)["wamid_1"].Map()["sparse"]; sparse != true {
+			t.Fatalf("run %d: the wamid index of sent-whatsapp is not sparse (sparse=%v)", run, sparse)
 		}
 	}
 }
@@ -318,7 +324,7 @@ func contains(list []string, want string) bool {
 
 // The queries that run on the queue and the archive go through their indexes: the claim reads
 // the claim index in order and needs no sort of its own, and the template deferral, the
-// cancellation and the purge do not scan the collection.
+// cancellation, the purge and the match of a delivery status do not scan the collection.
 // Fails if an index is dropped, or the claim index is built with the claim age first, which
 // makes every claim sort all the free messages.
 func TestWhatsAppQueriesUseTheirIndexes(t *testing.T) {
@@ -365,6 +371,10 @@ func TestWhatsAppQueriesUseTheirIndexes(t *testing.T) {
 		"purge of the archive": {
 			{Key: "find", Value: "sent-whatsapp"},
 			{Key: "filter", Value: bson.M{"userId": "user-1"}},
+		},
+		"status match on the archive": {
+			{Key: "find", Value: "sent-whatsapp"},
+			{Key: "filter", Value: bson.M{"wamid": "wamid.A"}},
 		},
 	} {
 		stages, indexes := planOf(t, db, query)
