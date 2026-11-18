@@ -760,3 +760,118 @@ func TestTurnedOffByKillSwitch(t *testing.T) {
 		}
 	}
 }
+
+// queueOnlySettings builds the settings of a process that only queues WhatsApp messages, over
+// env and source.
+func queueOnlySettings(env map[string]string, source PlatformConfigSource) WhatsAppSettings {
+	return NewQueueingWhatsAppSettings(envMap(env), source)
+}
+
+// A process that only queues follows the kill switch and user-management, and needs no Meta
+// credentials: with none set, WhatsApp is on where user-management turns it on, off where it
+// does not, and off everywhere under WHATSAPP_ENABLED=false or a value that is not understood.
+// A process that sends still needs its credentials.
+// Fails if the queueing decision still requires the credentials, or stops following the kill
+// switch or user-management, or if the sending decision loses its credentials check.
+func TestQueueOnlyEnabledNeedsNoCredentials(t *testing.T) {
+	source := newFakeSource()
+	source.setEnabled("italy", true)
+	source.setEnabled("swiss", false)
+
+	for _, tt := range []struct {
+		name      string
+		switchVal string
+		wantItaly bool
+	}{
+		{name: "switch unset", switchVal: "", wantItaly: true},
+		{name: "switch true", switchVal: "true", wantItaly: true},
+		{name: "switch false", switchVal: "false", wantItaly: false},
+		{name: "switch not understood", switchVal: "TRUE", wantItaly: false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			settings := queueOnlySettings(map[string]string{"WHATSAPP_ENABLED": tt.switchVal}, source)
+			var italy, swiss bool
+			out := captureLoggerOutput(t, func() {
+				italy = settings.Enabled("italy")
+				swiss = settings.Enabled("swiss")
+			})
+			if italy != tt.wantItaly {
+				t.Errorf("italy (user-management on): Enabled = %v, want %v", italy, tt.wantItaly)
+			}
+			if swiss {
+				t.Error("swiss (user-management off): expected WhatsApp off")
+			}
+			if strings.Contains(out, "WHATSAPP_TOKEN") || strings.Contains(out, "WHATSAPP_PHONE_NUMBER_ID") {
+				t.Errorf("a queue-only process must not warn about Meta credentials, got %q", out)
+			}
+			if settings.CanSend() {
+				t.Error("queue-only settings hold no credentials and can never send")
+			}
+		})
+	}
+
+	sending := NewWhatsAppSettings(envMap(map[string]string{"WHATSAPP_ENABLED": "true"}), source)
+	if sending.Enabled("italy") {
+		t.Error("a sending process without credentials must keep WhatsApp off")
+	}
+}
+
+// A queue-only process never reads the Meta credentials: its accessors return nothing, and a
+// token left in its environment is reported, by name only, as one to remove.
+// Fails if the queueing settings keep the token or phone number ID, stay silent about a token
+// they have no use for, complain about missing credentials, or log the token's value.
+func TestQueueOnlySettingsKeepNoCredentials(t *testing.T) {
+	const secret = "queue-only-secret-token-value"
+	withToken := queueOnlySettings(map[string]string{
+		"WHATSAPP_TOKEN":           secret,
+		"WHATSAPP_PHONE_NUMBER_ID": "queue-only-phone-id",
+		"WHATSAPP_API_VERSION":     "v99.0",
+	}, newFakeSource())
+	if withToken.Token() != "" || withToken.PhoneNumberID() != "" || withToken.APIVersion() != "" {
+		t.Errorf("queue-only settings kept a Meta value: token %q, phone %q, version %q", withToken.Token(), withToken.PhoneNumberID(), withToken.APIVersion())
+	}
+	problems := withToken.Problems()
+	if len(problems) != 1 || !strings.Contains(problems[0], "WHATSAPP_TOKEN is set") || !strings.Contains(problems[0], "remove it") {
+		t.Fatalf("expected one problem asking to remove WHATSAPP_TOKEN, got %q", problems)
+	}
+	out := captureLoggerOutput(t, func() { LogWhatsAppStartup("messaging-service", withToken) })
+	if strings.Contains(out, secret) {
+		t.Errorf("the startup log leaked the token value: %q", out)
+	}
+	if !strings.Contains(out, "WHATSAPP_TOKEN is set") {
+		t.Errorf("expected the startup log to warn about the token, got %q", out)
+	}
+
+	// The kill switch with a stray token: one line about the token, not two.
+	killed := queueOnlySettings(map[string]string{"WHATSAPP_ENABLED": "false", "WHATSAPP_TOKEN": secret}, newFakeSource())
+	if problems := killed.Problems(); len(problems) != 1 || !strings.Contains(problems[0], "WHATSAPP_TOKEN is set") {
+		t.Errorf("WHATSAPP_ENABLED=false with a token: expected the token line only, got %q", problems)
+	}
+
+	if problems := queueOnlySettings(map[string]string{}, newFakeSource()).Problems(); len(problems) != 0 {
+		t.Errorf("a queue-only process with no credentials has nothing to fix, got %q", problems)
+	}
+}
+
+// The startup line of a queue-only process says it follows user-management and only queues,
+// instead of reporting WhatsApp disabled for want of credentials it does not need.
+// Fails if the queueing settings report WhatsApp disabled while the switch allows it, or report
+// it on under the kill switch.
+func TestLogWhatsAppStartupQueueOnly(t *testing.T) {
+	out := captureLoggerOutput(t, func() {
+		LogWhatsAppStartup("messaging-service", queueOnlySettings(map[string]string{}, newFakeSource()))
+	})
+	if !strings.Contains(out, "WhatsApp for messaging-service follows user-management per instance; it only queues the messages") {
+		t.Errorf("expected the queue-only line, got %q", out)
+	}
+	if strings.Contains(out, "disabled") {
+		t.Errorf("expected no disabled line, got %q", out)
+	}
+
+	out = captureLoggerOutput(t, func() {
+		LogWhatsAppStartup("messaging-service", queueOnlySettings(map[string]string{"WHATSAPP_ENABLED": "false"}, newFakeSource()))
+	})
+	if !strings.Contains(out, "WhatsApp turned off for messaging-service by WHATSAPP_ENABLED=false") {
+		t.Errorf("expected the kill-switch line, got %q", out)
+	}
+}

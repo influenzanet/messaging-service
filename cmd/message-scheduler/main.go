@@ -398,7 +398,8 @@ func handleAutoMessages(mdb *messagedb.MessageDBService, gdb *globaldb.GlobalDBS
 				if err != nil {
 					logger.Error.Printf("%s: %v", instance.InstanceID, err)
 				}
-				return
+				// Only this schedule has ended: the other schedules and instances still run.
+				continue
 			}
 			// The scheduler only advances the schedule of a message it read from the database, so
 			// it never carries an intent to change the WhatsApp binding.
@@ -848,7 +849,10 @@ processQueue:
 						undecidedClaimedAt = claimStart
 						continue
 					case waClient.WhatsAppErrorRecipientThrottled:
-						// Keep this message's lock, but let other recipients proceed.
+						// Meta answered, about this recipient alone: a held failure is decided
+						// like after any answer. Keep this message's lock, but let other
+						// recipients proceed.
+						chargeUndecided()
 						continue
 					}
 				}

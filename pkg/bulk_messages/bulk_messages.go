@@ -279,6 +279,14 @@ func GenerateForStudyParticipants(
 	logger.Info.Printf("Generated %d (%d failed) '%s' messages in %d s for %s for %s. Skipped, no notification channel: %d.", counters.Total, counters.Failed, messageTemplate.MessageType, counters.Duration, messageLabel, instanceID, counters.NoChannel)
 }
 
+// templateCacheKey identifies a template within one run of a generator. Templates are stored
+// per message type and study, so two studies with the same message type have their own
+// template, WhatsApp binding included.
+type templateCacheKey struct {
+	messageType string
+	studyKey    string
+}
+
 func GenerateParticipantMessages(
 	apiClients *types.APIClients,
 	messageDBService *messagedb.MessageDBService,
@@ -308,7 +316,7 @@ func GenerateParticipantMessages(
 		return
 	}
 
-	messageTemplateCache := map[string]types.EmailTemplate{}
+	messageTemplateCache := map[templateCacheKey]types.EmailTemplate{}
 	sentMessageCountByType := map[string]int{}
 	for {
 		user, err := stream.Recv()
@@ -360,7 +368,8 @@ func GenerateParticipantMessages(
 						continue
 					}
 
-					template, ok := messageTemplateCache[m.Type]
+					cacheKey := templateCacheKey{messageType: m.Type, studyKey: study.Key}
+					template, ok := messageTemplateCache[cacheKey]
 					if !ok {
 						template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, study.Key)
 						if err != nil {
@@ -368,7 +377,7 @@ func GenerateParticipantMessages(
 							logger.Error.Printf("template for '%s' could not be found. [%s:%s]", m.Type, instanceID, study.Key)
 							continue
 						}
-						messageTemplateCache[m.Type] = template
+						messageTemplateCache[cacheKey] = template
 					}
 
 					contentInfos := map[string]string{}
@@ -466,7 +475,7 @@ func GenerateResearcherNotificationMessages(
 
 	globalTemplateInfos := templates.LoadGlobalEmailTemplateConstants()
 
-	messageTemplateCache := map[string]types.EmailTemplate{}
+	messageTemplateCache := map[templateCacheKey]types.EmailTemplate{}
 
 	messages, err := apiClients.StudyService.GetResearcherMessages(context.Background(), &studyAPI.GetReseacherMessagesReq{InstanceId: instanceID})
 	if err != nil {
@@ -475,7 +484,8 @@ func GenerateResearcherNotificationMessages(
 	}
 
 	for _, m := range messages.Messages {
-		template, ok := messageTemplateCache[m.Type+m.StudyKey]
+		cacheKey := templateCacheKey{messageType: m.Type, studyKey: m.StudyKey}
+		template, ok := messageTemplateCache[cacheKey]
 		if !ok {
 			template, err = messageDBService.FindEmailTemplateByType(instanceID, m.Type, m.StudyKey)
 			if err != nil {
@@ -483,7 +493,7 @@ func GenerateResearcherNotificationMessages(
 				logger.Error.Printf("template for '%s' could not be found. [%s:%s]", m.Type, instanceID, m.StudyKey)
 				continue
 			}
-			messageTemplateCache[m.Type+m.StudyKey] = template
+			messageTemplateCache[cacheKey] = template
 		}
 
 		contentInfos := map[string]string{}

@@ -592,26 +592,45 @@ func TestWhatsAppLoneSenderSideFailureIsLeftUntouched(t *testing.T) {
 	}
 }
 
-// A recipient-level throttle in between says nothing about the sender, so the earlier
-// undecided failure waits for the next message that does.
-func TestWhatsAppRecipientThrottleDoesNotDecideAnEarlierFailure(t *testing.T) {
-	db := newSchedulerTestDB(t)
-	db.addTo(t, poisonPhone, 0)
-	db.addTo(t, "+391111111101", 0)
-	db.addTo(t, "+391111111102", 0)
-	sender := &scriptedWhatsAppSender{errors: []error{
-		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131000},
-		&waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056},
-		nil,
-	}}
+// A recipient-level throttle is an answer from Meta, about that recipient alone: like any other
+// answer it decides an earlier held failure, which is charged. The throttled message itself
+// keeps its claim and its attempts. When the tick goes on to a success, the held failure is
+// still charged once, not twice.
+// Fails if the throttle leaves the held failure undecided (the tick then ends with it
+// uncharged), charges the throttled message, or charges the held failure again afterwards.
+func TestWhatsAppRecipientThrottleDecidesAnEarlierFailure(t *testing.T) {
+	transient := &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131000}
+	throttled := &waClient.WhatsAppSendError{StatusCode: http.StatusBadRequest, Code: 131056}
+	const throttledPhone, thirdPhone = "+391111111101", "+391111111102"
+	for _, tt := range []struct {
+		name                   string
+		script                 []error
+		wantOutgoing, wantSent int64
+	}{
+		{name: "the throttle ends the tick", script: []error{transient, throttled}, wantOutgoing: 2, wantSent: 0},
+		{name: "a success follows", script: []error{transient, throttled, nil}, wantOutgoing: 2, wantSent: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			db := newSchedulerTestDB(t)
+			db.addTo(t, poisonPhone, 0)
+			db.addTo(t, throttledPhone, 0)
+			if len(tt.script) == 3 {
+				db.addTo(t, thirdPhone, 0)
+			}
+			sender := &scriptedWhatsAppSender{errors: tt.script}
 
-	runWhatsAppHandler(db.service, sender, 60)
+			runWhatsAppHandler(db.service, sender, 60)
 
-	if outgoing, sent := db.counts(t); outgoing != 2 || sent != 1 {
-		t.Fatalf("expected one delivery, got outgoing=%d sent=%d", outgoing, sent)
-	}
-	if got := db.attemptsOf(t, poisonPhone); got != 1 {
-		t.Fatalf("the failure before the throttle must be charged once the third message succeeds, got %d attempts", got)
+			if outgoing, sent := db.counts(t); outgoing != tt.wantOutgoing || sent != tt.wantSent {
+				t.Fatalf("queue after the tick: outgoing=%d sent=%d, want %d/%d", outgoing, sent, tt.wantOutgoing, tt.wantSent)
+			}
+			if got := db.attemptsOf(t, poisonPhone); got != 1 {
+				t.Fatalf("the failure before the throttle must be charged once, got %d attempts", got)
+			}
+			if got := db.attemptsOf(t, throttledPhone); got != 0 {
+				t.Fatalf("the throttled message must not be charged, got %d attempts", got)
+			}
+		})
 	}
 }
 

@@ -63,7 +63,7 @@ func main() {
 	// through Configure instead of checking an environment variable itself. Built after the
 	// client connections above: the per-instance half of the decision (Enabled) asks
 	// user-management through clients.UserManagementService.
-	whatsAppSettings := config.WhatsAppSettingsFromEnv(clients.UserManagementService)
+	whatsAppSettings := serverWhatsAppSettings(clients.UserManagementService)
 	config.LogWhatsAppStartup("messaging-service", whatsAppSettings)
 	bulk_messages.Configure(whatsAppSettings)
 
@@ -79,4 +79,12 @@ func main() {
 	); err != nil {
 		logger.Error.Fatal(err)
 	}
+}
+
+// serverWhatsAppSettings is the WhatsApp decision of the gRPC server. The server only queues
+// WhatsApp messages and the message-scheduler sends them, so it follows the kill switch and
+// user-management without the Meta credentials: the token that can send paid messages stays
+// out of this process.
+func serverWhatsAppSettings(source config.PlatformConfigSource) config.WhatsAppSettings {
+	return config.QueueingWhatsAppSettingsFromEnv(source)
 }

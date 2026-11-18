@@ -6,15 +6,16 @@ archived row records.
 
 ## When the runner starts
 
-The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is `true`, when
-`MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds and when a WhatsApp
-client could be built. The reason it did not start is logged once at startup: as the alert
-`runner_not_started` (see "Alerts" below) unless `WHATSAPP_ENABLED` is exactly `false`, and as
-a warning when it is.
+The runner that delivers these messages starts only when `WHATSAPP_ENABLED` is unset or
+exactly `true` (both follow user-management for each instance; `false` turns WhatsApp off, and
+so does any other value), when `WHATSAPP_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` are set, and when
+`MESSAGE_SCHEDULER_INTERVAL_WHATSAPP` is a positive number of seconds. The reason it did not
+start is logged once at startup: as the alert `runner_not_started` (see "Alerts" below) unless
+`WHATSAPP_ENABLED` is exactly `false`, and as a warning when it is.
 Messages already in `outgoing-whatsapp` stay queued and are not delivered until the runner
 is enabled again; those that have by then waited longer than the maximum age are archived
-as expired instead (see below). When `WHATSAPP_ENABLED` is `true` but this delivery configuration is
-incomplete, the message-scheduler logs an error naming each missing variable and stops
+as expired instead (see below). When WhatsApp is not turned off but this delivery configuration
+is incomplete, the message-scheduler logs an error naming each missing variable and stops
 generating WhatsApp messages for that process, instead of queueing messages nobody will
 send; participants who prefer WhatsApp receive the e-mail instead, and the e-mail channel is
 never affected.

@@ -377,3 +377,33 @@ func TestSendInstantEmailQueuesNoWhatsApp(t *testing.T) {
 		t.Errorf("expected no WhatsApp row from SendInstantEmail, got %d", waRows)
 	}
 }
+
+// The gRPC server only queues WhatsApp messages; the message-scheduler sends them. Configured
+// the way the server is, with no Meta credentials in its environment, a one-time send still
+// queues a WhatsApp message for every participant where user-management turns WhatsApp on.
+// Fails if queueing on the server depends on the Meta token again.
+func TestOneTimeSendQueuesWhatsAppWithoutMetaCredentials(t *testing.T) {
+	testenv.Require(t, "MESSAGE_DB_CONNECTION_STR", "the one-time WhatsApp tests need a reachable MongoDB")
+	bulk_messages.Configure(config.NewQueueingWhatsAppSettings(func(string) string { return "" }, allInstancesPlatformConfigSource(true)))
+	t.Cleanup(func() { bulk_messages.Configure(config.WhatsAppSettings{}) })
+	lmClearWhatsAppQueue(t)
+	defer lmClearWhatsAppQueue(t)
+	lmClearEmailQueue(t)
+	defer lmClearEmailQueue(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	s := oneTimeServer(t, ctrl)
+
+	if _, err := s.SendMessageToAllUsers(context.Background(), &api.SendMessageToAllUsersReq{
+		Token:         lmAdminToken(),
+		Template:      lmOneTimeAPITemplate("", true),
+		IgnoreWeekday: true,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if rows := waitForWhatsAppRows(t, len(oneTimeLangs)); len(rows) != len(oneTimeLangs) {
+		t.Fatalf("expected one WhatsApp message per participant (%d), got %d", len(oneTimeLangs), len(rows))
+	}
+}

@@ -43,6 +43,12 @@ type WhatsAppSettings struct {
 	phoneNumberID string
 	apiVersion    string
 	decision      *platformDecision
+	// queueOnly marks the settings of a process that queues WhatsApp messages but never calls
+	// Meta: its per-instance decision needs no credentials, and it never reads them.
+	queueOnly bool
+	// strayToken records that WHATSAPP_TOKEN is set in the environment of a queue-only process,
+	// which has no use for it.
+	strayToken bool
 }
 
 // platformDecision is the cache of user-management's per-instance answer, shared by every copy
@@ -94,6 +100,29 @@ func NewWhatsAppSettings(getenv func(string) string, source PlatformConfigSource
 			states: map[string]*instanceState{},
 		}
 	}
+	return settings
+}
+
+// QueueingWhatsAppSettingsFromEnv builds the settings of a process that only queues WhatsApp
+// messages and never sends them, such as the messaging gRPC server: the message-scheduler does
+// the sending. Its per-instance decision is the kill switch and user-management's answer, and
+// it never reads the Meta credentials, so the token need not be in its environment at all.
+func QueueingWhatsAppSettingsFromEnv(source PlatformConfigSource) WhatsAppSettings {
+	return NewQueueingWhatsAppSettings(os.Getenv, source)
+}
+
+// NewQueueingWhatsAppSettings is QueueingWhatsAppSettingsFromEnv over any getenv-shaped
+// function, for tests. Of the Meta variables it only checks whether WHATSAPP_TOKEN is set, to
+// warn about it, and keeps no value.
+func NewQueueingWhatsAppSettings(getenv func(string) string, source PlatformConfigSource) WhatsAppSettings {
+	settings := NewWhatsAppSettings(func(key string) string {
+		if key == "WHATSAPP_ENABLED" {
+			return getenv(key)
+		}
+		return ""
+	}, source)
+	settings.queueOnly = true
+	settings.strayToken = getenv("WHATSAPP_TOKEN") != ""
 	return settings
 }
 
@@ -149,7 +178,8 @@ func (s WhatsAppSettings) missingCredentials() string {
 }
 
 // CanSend is the local precondition for sending WhatsApp in this process: the kill switch
-// allows it and this process has its own Meta credentials. It answers no question about any
+// allows it and this process has its own Meta credentials. It is always false for queue-only
+// settings, which hold no credentials. It answers no question about any
 // particular instance - that is Enabled(instanceID) below, which also asks user-management -
 // and exists for the moments before any instance is known, such as building this process's
 // Meta client at start-up or deciding whether the scheduler's delivery runner is worth starting
@@ -169,7 +199,8 @@ func (s WhatsAppSettings) Enabled(instanceID string) bool {
 	if !s.switchAllows() || instanceID == "" || s.decision == nil || s.decision.source == nil {
 		return false
 	}
-	return s.decision.enabledFor(instanceID, s.hasCredentials(), s.missingCredentials())
+	// A queue-only process needs no credentials: the scheduler that sends has its own.
+	return s.decision.enabledFor(instanceID, s.queueOnly || s.hasCredentials(), s.missingCredentials())
 }
 
 // Token returns the configured Meta access token, or "" when none was set.
@@ -204,7 +235,12 @@ func (s WhatsAppSettings) Problems() []string {
 		problems = append(problems, "WHATSAPP_ENABLED=false turns WhatsApp off locally: the configured WhatsApp credentials are ignored")
 	}
 
-	if s.switchAllows() {
+	switch {
+	case s.queueOnly:
+		if s.strayToken {
+			problems = append(problems, "WHATSAPP_TOKEN is set, but this process only queues WhatsApp messages and never calls Meta: remove it from this process's environment")
+		}
+	case s.switchAllows():
 		if missing := s.missingCredentials(); missing != "" {
 			problems = append(problems, fmt.Sprintf(
 				"%s not set: instances where user-management enables WhatsApp get e-mail instead", missing))
@@ -220,6 +256,8 @@ func LogWhatsAppStartup(process string, s WhatsAppSettings) {
 	switch {
 	case s.enabledSwitch == "false":
 		logger.Info.Printf("WhatsApp turned off for %s by WHATSAPP_ENABLED=false", process)
+	case s.queueOnly && s.switchAllows():
+		logger.Info.Printf("WhatsApp for %s follows user-management per instance; it only queues the messages, the message-scheduler sends them", process)
 	case s.CanSend():
 		logger.Info.Printf("WhatsApp for %s follows user-management per instance", process)
 	default:

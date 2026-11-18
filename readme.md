@@ -18,11 +18,19 @@ The two files follow the same structure and allow the same configuration options
 The services can also send messages over WhatsApp, through the Meta Cloud API. It is off unless
 enabled: user-management decides it for each instance, and `WHATSAPP_ENABLED=false` switches it
 off in this service. The messaging-service queues WhatsApp messages in `outgoing-whatsapp`; the
-message-scheduler sends them and archives them in `sent-whatsapp`.
+message-scheduler sends them and archives them in `sent-whatsapp`. Only the message-scheduler
+needs the Meta credentials (`WHATSAPP_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`); the messaging-service
+never calls Meta and warns at startup if `WHATSAPP_TOKEN` is set in its environment.
 
 - Template options: [docs/whatsapp-template-options.md](docs/whatsapp-template-options.md), and
   templates with a header, footer or buttons: [docs/whatsapp-template-header-example.md](docs/whatsapp-template-header-example.md)
 - How the scheduler retries, throttles and archives: [docs/whatsapp-scheduler.md](docs/whatsapp-scheduler.md)
+
+## Deployment
+Run exactly one replica of the message-scheduler. The e-mail and WhatsApp queues are claimed
+message by message, but the jobs that create the messages are not: every replica reads the
+same due auto-message schedules, participant messages and researcher notifications, and
+queues each message again, so participants get it twice.
 
 ## Generated API
 The Go code under `pkg/api` is generated from the proto contracts in the `api` submodule:
