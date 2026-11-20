@@ -212,23 +212,30 @@ type noChannelGenerator struct {
 	run  func(t *testing.T, clients noChannelClients, db *messagedb.MessageDBService, instanceID string, withWhatsApp bool)
 	// participantMsgType is the type GetParticipantMessages returns (participant messages only).
 	participantMsgType string
+	// tokens is how many tokens each served participant needs: the weekly reminder asks for a
+	// login and an unsubscribe token, the newsletter for an unsubscribe token, the others for a
+	// login token.
+	tokens int
 }
 
 var noChannelGenerators = []noChannelGenerator{
 	{
-		name: "weekly reminder",
+		name:   "weekly reminder",
+		tokens: 2,
 		run: func(t *testing.T, clients noChannelClients, db *messagedb.MessageDBService, instanceID string, withWhatsApp bool) {
 			GenerateForAllUsers(clients.api, db, instanceID, noChannelTemplate(constants.EMAIL_TYPE_WEEKLY, "", withWhatsApp), true, "no channel test")
 		},
 	},
 	{
-		name: "newsletter",
+		name:   "newsletter",
+		tokens: 1,
 		run: func(t *testing.T, clients noChannelClients, db *messagedb.MessageDBService, instanceID string, withWhatsApp bool) {
 			GenerateForAllUsers(clients.api, db, instanceID, noChannelTemplate(constants.EMAIL_TYPE_NEWSLETTER, "", withWhatsApp), true, "no channel test")
 		},
 	},
 	{
-		name: "study message",
+		name:   "study message",
+		tokens: 1,
 		run: func(t *testing.T, clients noChannelClients, db *messagedb.MessageDBService, instanceID string, withWhatsApp bool) {
 			GenerateForStudyParticipants(clients.api, db, instanceID, noChannelTemplate(constants.EMAIL_TYPE_STUDY_REMINDER, fallbackStudy, withWhatsApp), nil, true, "no channel test")
 		},
@@ -236,6 +243,7 @@ var noChannelGenerators = []noChannelGenerator{
 	{
 		name:               "participant message",
 		participantMsgType: fallbackMsgType,
+		tokens:             1,
 		run: func(t *testing.T, clients noChannelClients, db *messagedb.MessageDBService, instanceID string, withWhatsApp bool) {
 			if _, err := db.DBClient.Database(db.DBNamePrefix+instanceID+"_messageDB").
 				Collection("email-templates").InsertOne(context.Background(), noChannelTemplate(fallbackMsgType, fallbackStudy, withWhatsApp)); err != nil {
@@ -313,11 +321,11 @@ func TestParticipantWithoutChannelGetsNothing(t *testing.T) {
 						servedTokens++
 					}
 				}
-				// The newsletter asks for an unsubscribe token, the others for a login token:
-				// one per served participant, so the check above is not vacuous.
-				if servedTokens != len(noChannelUsers)-silentNoChannelUsers() {
-					t.Errorf("expected one token per served participant (%d), got %d",
-						len(noChannelUsers)-silentNoChannelUsers(), servedTokens)
+				// The served participants' tokens are all there, so the check above is not
+				// vacuous.
+				if want := g.tokens * (len(noChannelUsers) - silentNoChannelUsers()); servedTokens != want {
+					t.Errorf("expected %d token(s) per served participant (%d), got %d",
+						g.tokens, want, servedTokens)
 				}
 
 				total, failed, noChannel := logs.summary(t)

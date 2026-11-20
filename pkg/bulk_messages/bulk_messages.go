@@ -701,6 +701,11 @@ func prepareOutgoingEmail(
 
 	if messageTemplate.MessageType == constants.EMAIL_TYPE_NEWSLETTER {
 		outgoingEmail.To = getEmailsByIds(user.ContactInfos, user.ContactPreferences.SendNewsletterTo)
+	}
+
+	// The messages of a subscription carry the participant's unsubscribe token, for the link that
+	// turns the subscription off without a login. The WhatsApp copy reads it from contentInfos too.
+	if carriesUnsubscribeToken(messageTemplate.MessageType) {
 		token, err := getUnsubscribeToken(apiClients.UserManagementService, instanceID, user)
 		if err != nil {
 			return nil, err
@@ -748,6 +753,10 @@ func checkStudyStateForUser(
 		Condition:  expressionArgFromMessageToStudyAPI(condition),
 	})
 	return err
+}
+
+func carriesUnsubscribeToken(messageType string) bool {
+	return messageType == constants.EMAIL_TYPE_NEWSLETTER || messageType == constants.EMAIL_TYPE_WEEKLY
 }
 
 func isSubscribed(user *umAPI.User, messageType string) bool {
