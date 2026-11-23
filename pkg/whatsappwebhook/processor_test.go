@@ -3,6 +3,7 @@ package whatsappwebhook
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -112,7 +113,7 @@ func archived(t *testing.T, archive *messagedb.MessageDBService, wamid string) t
 	defer cancel()
 	var row types.SentWhatsApp
 	if err := archive.DBClient.Database(archive.DBNamePrefix+testInstance+"_messageDB").Collection("sent-whatsapp").
-		FindOne(ctx, bson.M{"wamid": wamid}).Decode(&row); err != nil {
+		FindOne(ctx, bson.M{"wamidHash": types.WAMIDHash(wamid)}).Decode(&row); err != nil {
 		t.Fatal(err)
 	}
 	return row
@@ -236,6 +237,103 @@ func TestStatusesAreRecorded(t *testing.T) {
 		if row := archived(t, archive, "wamid.E"); row.MetaStatus != "" {
 			t.Errorf("metaStatus=%q, want none", row.MetaStatus)
 		}
+	})
+}
+
+// realisticWAMID builds an id in the shape of Meta's: the recipient's number and a random part,
+// base64-encoded, so that a test can tell whether the number leaks through the id.
+func realisticWAMID(digits, random string) string {
+	raw := "\x1c\x18" + string(rune(len(digits))) + digits + "\x15\x02\x00\x11\x18\x12" + random + "\x00"
+	return "wamid." + base64.StdEncoding.EncodeToString([]byte(raw))
+}
+
+// Each outcome of a status has its own line, at DEBUG, naming the message by its id reference:
+// a reader can tell a status recorded on a newsletter from one about a message the scheduler
+// never sent, which is expected and not a fault. The id itself, which holds the number, is never
+// logged.
+// Fails if two outcomes share a line again, if a line loses the reference, if any of them is
+// logged above DEBUG (only a failure on a known message is), or if the raw id or the number
+// reaches the logs.
+func TestStatusLogs(t *testing.T) {
+	p, archive, r := newTestProcessor(t)
+	known := realisticWAMID(senderDigits, "ABCDEF0123456789AB")
+	unknown := realisticWAMID(senderDigits, "ZYXWVU9876543210ZY")
+	archiveSent(t, archive, known, "user-k")
+	knownRef, unknownRef := types.WAMIDLogRef(known), types.WAMIDLogRef(unknown)
+
+	for _, c := range []struct {
+		name    string
+		status  obj
+		debug   string
+		aboveOK string
+	}{
+		{"recorded", statusOf(known, "delivered"),
+			"wamid_ref=" + knownRef + ` status="delivered" recorded`, ""},
+		{"unchanged", statusOf(known, "sent"),
+			"wamid_ref=" + knownRef + ` status="sent" already recorded, or a later one`, ""},
+		{"not tracked", statusOf(known, "played"),
+			"wamid_ref=" + knownRef + ` status="played" is not a delivery status this service tracks, ignored`, ""},
+		{"a message the scheduler did not send", statusOf(unknown, "delivered"),
+			"wamid_ref=" + unknownRef + ` status="delivered" for a message the message-scheduler did not send (a verification code, a message sent outside the platform, or one already purged): nothing to record, this is expected`, ""},
+		{"a failure the scheduler did not send", statusOf(unknown, "failed", 131026),
+			"wamid_ref=" + unknownRef + ` status="failed" for a message the message-scheduler did not send`, ""},
+		{"a failure on a known message", statusOf(known, "failed", 131049),
+			"wamid_ref=" + knownRef + ` status="failed" recorded`,
+			"WhatsApp status: instance=italy wamid_ref=" + knownRef + " user=user-k failed code=131049"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var above string
+			debug := captureFrom(t, []*log.Logger{logger.Debug}, func() {
+				above = captureFrom(t, []*log.Logger{logger.Error, logger.Warning, logger.Info}, func() {
+					process(t, p, statuses(t, c.status))
+				})
+			})
+			if !strings.Contains(debug, "WhatsApp status: instance=italy "+c.debug) {
+				t.Errorf("DEBUG log %q, want %q", debug, c.debug)
+			}
+			if c.aboveOK == "" && above != "" {
+				t.Errorf("logged above DEBUG: %q", above)
+			}
+			if c.aboveOK != "" && !strings.Contains(above, c.aboveOK) {
+				t.Errorf("log above DEBUG %q, want %q", above, c.aboveOK)
+			}
+			for _, leaked := range []string{known, unknown, strings.TrimPrefix(known, "wamid.")[:16], senderDigits} {
+				if strings.Contains(debug+above, leaked) {
+					t.Errorf("the logs hold %q: %q", leaked, debug+above)
+				}
+			}
+		})
+	}
+	requireCalls(t, r)
+
+	t.Run("a status that cannot be recorded names its message", func(t *testing.T) {
+		p, _, _ := newTestProcessor(t)
+		broken := newArchive(t)
+		if err := broken.DBClient.Disconnect(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		p.archive = broken
+		logged := captureLogs(t, func() {
+			_ = p.Process(context.Background(), statuses(t, statusOf(known, "read")))
+		})
+		if !strings.Contains(logged, "wamid_ref="+knownRef+` status="read" could not be recorded`) {
+			t.Errorf("the error does not name the message: %q", logged)
+		}
+		if strings.Contains(logged, known) {
+			t.Errorf("the error holds the raw id: %q", logged)
+		}
+	})
+
+	t.Run("an undeliverable message without an account names its message", func(t *testing.T) {
+		nouser := realisticWAMID(senderDigits, "NOUSER0123456789AB")
+		archiveSent(t, archive, nouser, "")
+		logged := captureFrom(t, []*log.Logger{logger.Warning}, func() {
+			process(t, p, statuses(t, statusOf(nouser, "failed", 131026)))
+		})
+		if !strings.Contains(logged, "wamid_ref="+types.WAMIDLogRef(nouser)+" undeliverable message without an account") {
+			t.Errorf("warning %q does not name the message", logged)
+		}
+		requireCalls(t, r)
 	})
 }
 

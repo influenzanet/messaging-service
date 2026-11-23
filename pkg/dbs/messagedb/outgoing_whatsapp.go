@@ -29,9 +29,10 @@ func (dbService *MessageDBService) AddToOutgoingWhatsApp(instanceID string, msg 
 
 // AddToSentWhatsApp archives a message that left the outgoing queue, together with the outcome
 // that took it out: a delivered message and one the scheduler gave up on are otherwise stored
-// identically. Whatever the outcome, the row keeps only the masked number and no content
-// parameters: neither has any use once the message has left the queue, and the parameters
-// may carry a login token or other personal data. addedAt stays the moment the message was
+// identically. Whatever the outcome, the row keeps only the masked number, no content
+// parameters, and Meta's message id only as its hash (wamidHash): none of them has any use in
+// full once the message has left the queue, the parameters may carry a login token or other
+// personal data, and the id holds the full number. addedAt stays the moment the message was
 // queued; the archive time goes to sentAt and, as a date the retention index can expire,
 // to archivedAt.
 func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg types.OutgoingWhatsApp, outcome types.WhatsAppSendOutcome) (types.SentWhatsApp, error) {
@@ -43,6 +44,9 @@ func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg type
 	msg.ID = primitive.NilObjectID
 	// Queue bookkeeping: the archive states the outcome in its own status field.
 	msg.Delivered = false
+	// Meta's id holds the full number: the archive keeps only its hash.
+	wamidHash := types.WAMIDHash(msg.WAMID)
+	msg.WAMID = ""
 
 	sent := types.SentWhatsApp{
 		OutgoingWhatsApp: msg,
@@ -51,6 +55,7 @@ func (dbService *MessageDBService) AddToSentWhatsApp(instanceID string, msg type
 		ErrorClass:       outcome.ErrorClass,
 		SentAt:           archivedAt.Unix(),
 		ArchivedAt:       archivedAt,
+		WAMIDHash:        wamidHash,
 	}
 	res, err := dbService.collectionRefSentWhatsApp(instanceID).InsertOne(ctx, sent)
 	if err != nil {

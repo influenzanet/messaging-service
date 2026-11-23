@@ -27,7 +27,7 @@ func rawArchived(t *testing.T, instanceID, wamid string) bson.M {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var row bson.M
-	if err := testDBService.collectionRefSentWhatsApp(instanceID).FindOne(ctx, bson.M{"wamid": wamid}).Decode(&row); err != nil {
+	if err := testDBService.collectionRefSentWhatsApp(instanceID).FindOne(ctx, bson.M{"wamidHash": types.WAMIDHash(wamid)}).Decode(&row); err != nil {
 		t.Fatalf("read the archived row: %v", err)
 	}
 	return row
@@ -39,35 +39,58 @@ type deliveryStatus struct {
 	code   int
 }
 
+const (
+	recorded   = types.DeliveryStatusRecorded
+	unchanged  = types.DeliveryStatusUnchanged
+	notTracked = types.DeliveryStatusNotTracked
+)
+
 // Meta's statuses can arrive in any order; the row keeps the highest one with its own time,
-// failed being final. The outcome of the queue (status "delivered") is never touched.
-// Fails if a later-ranked status is overwritten, if a repeated one moves the time, or if the
-// error code is lost or written on a status that is not a failure.
+// failed being final. The outcome of the queue (status "delivered") is never touched. Each call
+// says whether it changed the row, which is what the webhook logs.
+// Fails if a later-ranked status is overwritten, if a repeated one moves the time, if the
+// error code is lost or written on a status that is not a failure, if a call reports a change
+// it did not make (or the other way round), or if it does not name the row's account.
 func TestRecordWhatsAppDeliveryStatusKeepsTheHighest(t *testing.T) {
 	instanceID := freshWhatsAppInstance(t)
 	for i, c := range []struct {
 		name     string
 		statuses []deliveryStatus
+		results  []types.DeliveryStatusResult
 		want     deliveryStatus
 	}{
-		{"in order", []deliveryStatus{{"sent", 10, 0}, {"delivered", 11, 0}, {"read", 12, 0}}, deliveryStatus{"read", 12, 0}},
-		{"read before the others", []deliveryStatus{{"read", 12, 0}, {"delivered", 11, 0}, {"sent", 10, 0}}, deliveryStatus{"read", 12, 0}},
-		{"the same status again keeps its first time", []deliveryStatus{{"delivered", 11, 0}, {"delivered", 15, 0}}, deliveryStatus{"delivered", 11, 0}},
-		{"failed after delivered", []deliveryStatus{{"delivered", 11, 0}, {"failed", 13, 131026}}, deliveryStatus{"failed", 13, 131026}},
-		{"failed is final", []deliveryStatus{{"failed", 13, 131049}, {"read", 14, 0}, {"sent", 10, 0}}, deliveryStatus{"failed", 13, 131049}},
-		{"a status not ranked writes nothing", []deliveryStatus{{"played", 20, 0}}, deliveryStatus{}},
-		{"an error code on a status that is not a failure is not kept", []deliveryStatus{{"sent", 10, 131026}}, deliveryStatus{"sent", 10, 0}},
+		{"in order", []deliveryStatus{{"sent", 10, 0}, {"delivered", 11, 0}, {"read", 12, 0}},
+			[]types.DeliveryStatusResult{recorded, recorded, recorded}, deliveryStatus{"read", 12, 0}},
+		{"read before the others", []deliveryStatus{{"read", 12, 0}, {"delivered", 11, 0}, {"sent", 10, 0}},
+			[]types.DeliveryStatusResult{recorded, unchanged, unchanged}, deliveryStatus{"read", 12, 0}},
+		{"the same status again keeps its first time", []deliveryStatus{{"delivered", 11, 0}, {"delivered", 15, 0}},
+			[]types.DeliveryStatusResult{recorded, unchanged}, deliveryStatus{"delivered", 11, 0}},
+		{"failed after delivered", []deliveryStatus{{"delivered", 11, 0}, {"failed", 13, 131026}},
+			[]types.DeliveryStatusResult{recorded, recorded}, deliveryStatus{"failed", 13, 131026}},
+		{"failed is final", []deliveryStatus{{"failed", 13, 131049}, {"read", 14, 0}, {"sent", 10, 0}},
+			[]types.DeliveryStatusResult{recorded, unchanged, unchanged}, deliveryStatus{"failed", 13, 131049}},
+		{"a status not ranked writes nothing", []deliveryStatus{{"played", 20, 0}},
+			[]types.DeliveryStatusResult{notTracked}, deliveryStatus{}},
+		{"an error code on a status that is not a failure is not kept", []deliveryStatus{{"sent", 10, 131026}},
+			[]types.DeliveryStatusResult{recorded}, deliveryStatus{"sent", 10, 0}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			wamid := fmt.Sprintf("wamid.order%d", i)
 			archiveWithWAMID(t, instanceID, wamid, "user-1")
-			for _, s := range c.statuses {
-				userID, found, err := testDBService.RecordWhatsAppDeliveryStatus(instanceID, wamid, s.status, s.at, s.code)
+			for j, s := range c.statuses {
+				userID, result, err := testDBService.RecordWhatsAppDeliveryStatus(instanceID, wamid, s.status, s.at, s.code)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if types.WhatsAppDeliveryStatusRank(s.status) > 0 && (!found || userID != "user-1") {
-					t.Fatalf("%s: found=%v user=%q, want the row of user-1 whether or not it changed", s.status, found, userID)
+				if result != c.results[j] {
+					t.Fatalf("%s: result %d, want %d", s.status, result, c.results[j])
+				}
+				wantUser := "user-1"
+				if result == notTracked {
+					wantUser = ""
+				}
+				if userID != wantUser || result.Known() != (wantUser != "") {
+					t.Fatalf("%s: user=%q known=%v, want the row of user-1 whether or not it changed", s.status, userID, result.Known())
 				}
 			}
 			row := rawArchived(t, instanceID, wamid)
@@ -103,9 +126,9 @@ func TestRecordWhatsAppDeliveryStatusUnknownMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, wamid := range []string{"wamid.unknown", ""} {
-		userID, found, err := testDBService.RecordWhatsAppDeliveryStatus(instanceID, wamid, "failed", 10, 131026)
-		if err != nil || found || userID != "" {
-			t.Errorf("wamid %q: found=%v user=%q err=%v, want nothing found", wamid, found, userID, err)
+		userID, result, err := testDBService.RecordWhatsAppDeliveryStatus(instanceID, wamid, "failed", 10, 131026)
+		if err != nil || result != types.DeliveryStatusUnknownMessage || result.Known() || userID != "" {
+			t.Errorf("wamid %q: result=%d user=%q err=%v, want an unknown message", wamid, result, userID, err)
 		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -113,6 +136,31 @@ func TestRecordWhatsAppDeliveryStatusUnknownMessage(t *testing.T) {
 	n, err := testDBService.collectionRefSentWhatsApp(instanceID).CountDocuments(ctx, bson.M{"metaStatus": bson.M{"$exists": true}})
 	if err != nil || n != 0 {
 		t.Errorf("%d rows got a status (err %v), want none", n, err)
+	}
+}
+
+// Rows archived before the id was hashed carry the raw wamid and no hash. They are not
+// migrated: their statuses are no longer matched and the retention index removes them.
+// Fails if such a row is matched on its raw id (the lookup would have to keep reading the
+// field that holds the number), changed, or makes the call fail.
+func TestRecordWhatsAppDeliveryStatusIgnoresRowsWithTheRawID(t *testing.T) {
+	instanceID := freshWhatsAppInstance(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sent := testDBService.collectionRefSentWhatsApp(instanceID)
+	if _, err := sent.InsertOne(ctx, bson.M{"userId": "user-old", "status": types.WhatsAppStatusDelivered, "wamid": "wamid.old"}); err != nil {
+		t.Fatal(err)
+	}
+	userID, result, err := testDBService.RecordWhatsAppDeliveryStatus(instanceID, "wamid.old", "read", 10, 0)
+	if err != nil || result != types.DeliveryStatusUnknownMessage || userID != "" {
+		t.Fatalf("result=%d user=%q err=%v, want an unknown message", result, userID, err)
+	}
+	var row bson.M
+	if err := sent.FindOne(ctx, bson.M{"wamid": "wamid.old"}).Decode(&row); err != nil {
+		t.Fatal(err)
+	}
+	if _, present := row["metaStatus"]; present {
+		t.Errorf("the old row got a status: %v", row["metaStatus"])
 	}
 }
 

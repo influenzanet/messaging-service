@@ -34,7 +34,7 @@ var outgoingWhatsAppIndexes = []mongo.IndexModel{
 
 // CreateIndexesForWhatsApp makes sure the WhatsApp collections of an instance have their
 // indexes: the queue's, the archive's index on userId for the purge of a deleted account, its
-// index on wamid for matching the delivery statuses Meta reports, and its retention index,
+// index on wamidHash for matching the delivery statuses Meta reports, and its retention index,
 // which deletes a row SentWhatsAppRetention after it was archived. It can run any number of
 // times. A retention index left by an earlier version with
 // another retention is changed in place with collMod, since creating it again with the new
@@ -50,12 +50,12 @@ func (dbService *MessageDBService) CreateIndexesForWhatsApp(instanceID string) e
 	if _, err := sent.Indexes().CreateOne(ctx, mongo.IndexModel{Keys: bson.D{{Key: "userId", Value: 1}}}); err != nil {
 		return fmt.Errorf("userId index of sent-whatsapp: %w", err)
 	}
-	// Sparse: only the rows of messages Meta accepted carry a wamid.
+	// Sparse: only the rows of messages Meta accepted carry the hash of its id.
 	if _, err := sent.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "wamid", Value: 1}},
+		Keys:    bson.D{{Key: "wamidHash", Value: 1}},
 		Options: options.Index().SetSparse(true),
 	}); err != nil {
-		return fmt.Errorf("wamid index of sent-whatsapp: %w", err)
+		return fmt.Errorf("wamidHash index of sent-whatsapp: %w", err)
 	}
 	if err := ensureTTLIndex(ctx, sent, sentWhatsAppRetentionField, int64(SentWhatsAppRetention/time.Second)); err != nil {
 		return fmt.Errorf("retention index of sent-whatsapp: %w", err)

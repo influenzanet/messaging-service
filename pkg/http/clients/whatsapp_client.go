@@ -194,7 +194,9 @@ func (c *WhatsAppClient) SendTemplateMessage(ctx context.Context, toPhoneNumber,
 		logger.Warning.Println("WhatsApp SendTemplateMessage: delivered to API, but the response names no message id")
 		return "", nil
 	}
-	logger.Info.Println("WhatsApp SendTemplateMessage: delivered to API")
+	// The wamid holds the recipient's number: only its reference is logged, the one the
+	// webhook logs with the delivery statuses of this message.
+	logger.Info.Printf("WhatsApp SendTemplateMessage: delivered to API, wamid_ref=%s", types.WAMIDLogRef(wamid))
 
 	return wamid, nil
 }

@@ -13,19 +13,26 @@ import (
 var allDeliveryStatuses = []string{types.MetaStatusSent, types.MetaStatusDelivered, types.MetaStatusRead, types.MetaStatusFailed}
 
 // RecordWhatsAppDeliveryStatus records the delivery status Meta reported for the archived
-// message with the given wamid, unless the message already has a status that ranks the same or
+// message with the given wamid (matched on its hash, the only form the archive keeps; see
+// types.WAMIDHash), unless the message already has a status that ranks the same or
 // higher (see types.WhatsAppDeliveryStatusRank): the check and the write are one conditional
 // update, so of two notifications processed at the same time the higher status is the one kept,
 // and a repeated notification changes nothing. errorCode is stored only on a failed status.
 //
-// found is false when no archived message has this wamid (one sent by another service, or
-// purged with its account or by the retention index), and for a status that has no rank, which
-// is not recorded. userID is the account the message was sent
-// to, whether or not this call changed the row; it is "" for a message with no account.
-func (dbService *MessageDBService) RecordWhatsAppDeliveryStatus(instanceID, wamid, status string, at int64, errorCode int) (userID string, found bool, err error) {
+// result says which of these happened: the status was recorded, the row already had it or a
+// later one, no archived message has this wamid (see types.DeliveryStatusUnknownMessage), or
+// the status has no rank and is not recorded. userID is the account the message was sent to,
+// whether or not this call changed the row; it is "" for a message with no account. On an
+// error, result is 0.
+func (dbService *MessageDBService) RecordWhatsAppDeliveryStatus(instanceID, wamid, status string, at int64, errorCode int) (userID string, result types.DeliveryStatusResult, err error) {
 	rank := types.WhatsAppDeliveryStatusRank(status)
 	if rank == 0 {
-		return "", false, nil
+		return "", types.DeliveryStatusNotTracked, nil
+	}
+	// An empty id has no hash, and must not reach the rows that have none.
+	wamidHash := types.WAMIDHash(wamid)
+	if wamidHash == "" {
+		return "", types.DeliveryStatusUnknownMessage, nil
 	}
 	notLower := []string{}
 	for _, s := range allDeliveryStatuses {
@@ -48,23 +55,23 @@ func (dbService *MessageDBService) RecordWhatsAppDeliveryStatus(instanceID, wami
 
 	var row types.SentWhatsApp
 	err = sent.FindOneAndUpdate(ctx,
-		bson.M{"wamid": wamid, "metaStatus": bson.M{"$nin": notLower}},
+		bson.M{"wamidHash": wamidHash, "metaStatus": bson.M{"$nin": notLower}},
 		update,
 		options.FindOneAndUpdate().SetProjection(projection),
 	).Decode(&row)
 	if err == nil {
-		return row.UserID, true, nil
+		return row.UserID, types.DeliveryStatusRecorded, nil
 	}
 	if !errors.Is(err, mongo.ErrNoDocuments) {
-		return "", false, err
+		return "", 0, err
 	}
 	// Nothing changed: the message is unknown, or it already has this status or a later one.
-	err = sent.FindOne(ctx, bson.M{"wamid": wamid}, options.FindOne().SetProjection(projection)).Decode(&row)
+	err = sent.FindOne(ctx, bson.M{"wamidHash": wamidHash}, options.FindOne().SetProjection(projection)).Decode(&row)
 	if errors.Is(err, mongo.ErrNoDocuments) {
-		return "", false, nil
+		return "", types.DeliveryStatusUnknownMessage, nil
 	}
 	if err != nil {
-		return "", false, err
+		return "", 0, err
 	}
-	return row.UserID, true, nil
+	return row.UserID, types.DeliveryStatusUnchanged, nil
 }

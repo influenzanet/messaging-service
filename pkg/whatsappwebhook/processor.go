@@ -42,7 +42,7 @@ var ErrMalformedPayload = errors.New("not a WhatsApp webhook payload")
 
 // DeliveryStatusStore records Meta's delivery statuses on the archived messages.
 type DeliveryStatusStore interface {
-	RecordWhatsAppDeliveryStatus(instanceID, wamid, status string, at int64, errorCode int) (userID string, found bool, err error)
+	RecordWhatsAppDeliveryStatus(instanceID, wamid, status string, at int64, errorCode int) (userID string, result types.DeliveryStatusResult, err error)
 }
 
 // ChannelRemover is the user-management call that takes WhatsApp out of a participant's channels.
@@ -145,26 +145,32 @@ func (p *Processor) handleStatus(ctx context.Context, instanceID string, s statu
 		}
 	}
 
-	userID, found, err := p.archive.RecordWhatsAppDeliveryStatus(instanceID, s.ID, s.Status, at, errorCode)
+	// The wamid holds the recipient's number: only its reference is logged.
+	ref := types.WAMIDLogRef(s.ID)
+	userID, result, err := p.archive.RecordWhatsAppDeliveryStatus(instanceID, s.ID, s.Status, at, errorCode)
 	if err != nil {
-		logger.Error.Printf("WhatsApp status: instance=%s could not be recorded: %v", instanceID, err)
+		logger.Error.Printf("WhatsApp status: instance=%s wamid_ref=%s status=%q could not be recorded: %v", instanceID, ref, s.Status, err)
 		return err
 	}
-	if !found {
-		// Not a message the scheduler sent (a verification code, for one), one already purged, or
-		// a status the archive does not record.
-		logger.Debug.Printf("WhatsApp status: instance=%s status=%q not recorded: unknown message or status", instanceID, s.Status)
+	switch result {
+	case types.DeliveryStatusRecorded:
+		logger.Debug.Printf("WhatsApp status: instance=%s wamid_ref=%s status=%q recorded", instanceID, ref, s.Status)
+	case types.DeliveryStatusUnchanged:
+		logger.Debug.Printf("WhatsApp status: instance=%s wamid_ref=%s status=%q already recorded, or a later one", instanceID, ref, s.Status)
+	case types.DeliveryStatusUnknownMessage:
+		logger.Debug.Printf("WhatsApp status: instance=%s wamid_ref=%s status=%q for a message the message-scheduler did not send (a verification code, a message sent outside the platform, or one already purged): nothing to record, this is expected", instanceID, ref, s.Status)
+	case types.DeliveryStatusNotTracked:
+		logger.Debug.Printf("WhatsApp status: instance=%s wamid_ref=%s status=%q is not a delivery status this service tracks, ignored", instanceID, ref, s.Status)
+	}
+	if !result.Known() || s.Status != types.MetaStatusFailed {
 		return nil
 	}
-	if s.Status != types.MetaStatusFailed {
-		return nil
-	}
-	logger.Info.Printf("WhatsApp status: instance=%s user=%s failed code=%d", instanceID, userID, errorCode)
+	logger.Info.Printf("WhatsApp status: instance=%s wamid_ref=%s user=%s failed code=%d", instanceID, ref, userID, errorCode)
 	if !undeliverable {
 		return nil
 	}
 	if userID == "" {
-		logger.Warning.Printf("WhatsApp status: instance=%s undeliverable message without an account, no channel to remove", instanceID)
+		logger.Warning.Printf("WhatsApp status: instance=%s wamid_ref=%s undeliverable message without an account, no channel to remove", instanceID, ref)
 		return nil
 	}
 	// Removing the channel is asked again for a status seen before, whether or not this call

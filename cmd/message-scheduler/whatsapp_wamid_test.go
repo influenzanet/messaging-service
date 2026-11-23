@@ -42,12 +42,13 @@ func (db *schedulerTestDB) rawArchivedFor(t *testing.T, phone string) bson.M {
 	return row
 }
 
-// Each message Meta accepts is archived with the id Meta gave it, the key its delivery
-// statuses are matched on later. A message Meta refused, or whose acceptance named no id,
-// is archived with no wamid field at all: an empty one would make every such row match a
-// status that carries an empty id, and fill the index with them.
-// Fails if the id is not stored, if one message's id lands on another's row, or if a row
-// without an id gets an empty wamid.
+// Each message Meta accepts is archived with the hash of the id Meta gave it, the key its
+// delivery statuses are matched on later; the id itself, which holds the recipient's number,
+// is not archived. A message Meta refused, or whose acceptance named no id, is archived with
+// no hash field at all: an empty one would make every such row match a status that carries
+// an empty id, and fill the index with them.
+// Fails if the hash is not stored, if one message's hash lands on another's row, if the raw id
+// is archived, or if a row without an id gets an empty hash.
 func TestWhatsAppArchiveKeepsTheIDMetaGave(t *testing.T) {
 	const (
 		first   = "+391111111101"
@@ -73,8 +74,11 @@ func TestWhatsAppArchiveKeepsTheIDMetaGave(t *testing.T) {
 	}
 	for phone, want := range map[string]string{first: "wamid.first", second: "wamid.second"} {
 		row := db.archivedFor(t, phone)
-		if row.Status != types.WhatsAppStatusDelivered || row.WAMID != want {
-			t.Errorf("%s archived as %q with wamid %q, want delivered with %q", phone, row.Status, row.WAMID, want)
+		if row.Status != types.WhatsAppStatusDelivered || row.WAMIDHash != types.WAMIDHash(want) {
+			t.Errorf("%s archived as %q with wamidHash %q, want delivered with the hash of %q", phone, row.Status, row.WAMIDHash, want)
+		}
+		if wamid, ok := db.rawArchivedFor(t, phone)["wamid"]; ok {
+			t.Errorf("%s archived with the raw id %v", phone, wamid)
 		}
 	}
 	for phone, wantStatus := range map[string]string{noID: types.WhatsAppStatusDelivered, refused: types.WhatsAppStatusFailed} {
@@ -82,8 +86,10 @@ func TestWhatsAppArchiveKeepsTheIDMetaGave(t *testing.T) {
 		if row["status"] != wantStatus {
 			t.Errorf("%s archived as %v, want %q", phone, row["status"], wantStatus)
 		}
-		if wamid, ok := row["wamid"]; ok {
-			t.Errorf("%s (%s) archived with a wamid field %q, want none", phone, wantStatus, wamid)
+		for _, field := range []string{"wamid", "wamidHash"} {
+			if value, ok := row[field]; ok {
+				t.Errorf("%s (%s) archived with a %s field %q, want none", phone, wantStatus, field, value)
+			}
 		}
 	}
 }

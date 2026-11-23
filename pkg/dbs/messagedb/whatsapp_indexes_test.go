@@ -89,8 +89,8 @@ func keysOf(t *testing.T, collection *mongo.Collection) map[string]int64 {
 }
 
 // On a database that has never seen WhatsApp, the queue gets its claim, template and
-// participant indexes, and the archive its participant index, a sparse index on Meta's message
-// id and an index that expires rows 180 days after archivedAt. A second run changes nothing and does not fail.
+// participant indexes, and the archive its participant index, a sparse index on the hash of Meta's
+// message id and an index that expires rows 180 days after archivedAt. A second run changes nothing and does not fail.
 // Fails if an index is missing, has its keys in another order, or the retention is not 180 days
 // on the archive date.
 func TestCreateIndexesForWhatsAppOnAFreshDatabase(t *testing.T) {
@@ -105,7 +105,7 @@ func TestCreateIndexesForWhatsAppOnAFreshDatabase(t *testing.T) {
 		"sent-whatsapp": {
 			"_id:1":        -1,
 			"userId:1":     -1,
-			"wamid:1":      -1,
+			"wamidHash:1":  -1,
 			"archivedAt:1": retentionSeconds,
 		},
 	}
@@ -125,10 +125,10 @@ func TestCreateIndexesForWhatsAppOnAFreshDatabase(t *testing.T) {
 				}
 			}
 		}
-		// Only the rows of accepted messages carry a wamid; the others stay out of its index.
+		// Only the rows of accepted messages carry the hash of their id; the others stay out of its index.
 		sent := testDBService.collectionRefSentWhatsApp(instanceID)
-		if sparse := indexSpecs(t, sent)["wamid_1"].Map()["sparse"]; sparse != true {
-			t.Fatalf("run %d: the wamid index of sent-whatsapp is not sparse (sparse=%v)", run, sparse)
+		if sparse := indexSpecs(t, sent)["wamidHash_1"].Map()["sparse"]; sparse != true {
+			t.Fatalf("run %d: the wamidHash index of sent-whatsapp is not sparse (sparse=%v)", run, sparse)
 		}
 	}
 }
@@ -374,7 +374,7 @@ func TestWhatsAppQueriesUseTheirIndexes(t *testing.T) {
 		},
 		"status match on the archive": {
 			{Key: "find", Value: "sent-whatsapp"},
-			{Key: "filter", Value: bson.M{"wamid": "wamid.A"}},
+			{Key: "filter", Value: bson.M{"wamidHash": types.WAMIDHash("wamid.A")}},
 		},
 	} {
 		stages, indexes := planOf(t, db, query)

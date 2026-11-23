@@ -132,10 +132,15 @@ age; `sentAt` is the moment it was archived, and a failed row keeps `errorCode`
 (Meta's numeric code, `0` when the failure never reached Meta) and `errorClass` (the class the
 retry policy read from that failure). Meta's free-form message is not stored, and the content
 parameters are dropped on archiving. Rows archived by older versions carry none of these
-fields and read as an unknown outcome. A message Meta accepted keeps the id Meta gave it,
-`wamid`, which the delivery statuses Meta reports later refer to; a row with any other
-outcome, a row archived by an older version, and one whose acceptance named no id (logged as
-a warning) have no `wamid` field. `addedAt` is the moment the message was queued (older versions overwrote it
+fields and read as an unknown outcome. A message Meta accepted keeps the hash of the id Meta
+gave it, `wamidHash` (hex SHA-256 of the `wamid`), which the delivery statuses Meta reports
+later are matched on. The `wamid` itself is not archived: it is the recipient's full number
+and a random part, base64-encoded. A row with any other outcome, a row archived by an older
+version, and one whose acceptance named no id (logged as a warning) have no `wamidHash` field.
+Rows archived before the hash was introduced still carry the raw `wamid` and no hash: their
+statuses are no longer matched, and the retention index removes them. The logs name a message
+by `wamid_ref`, the first 12 characters of its `wamidHash`, so a log line leads to its row with
+`{wamidHash: /^<wamid_ref>/}`. `addedAt` is the moment the message was queued (older versions overwrote it
 with the archive time), and `archivedAt` is the archive time again, as a date.
 
 The delivery statuses Meta reports later for an accepted message are kept apart from `status`,
@@ -156,7 +161,7 @@ every instance in the global database, whether WhatsApp is on for it or not. On
 `outgoing-whatsapp`: `{addedAt, _id, lastSendAttempt}` for the claim,
 `{templateName, lang, lastSendAttempt}` for the deferral of a refused template, and `{userId}`
 for the cancellation and the purge of a participant's messages. On `sent-whatsapp`: `{userId}`
-for the purge of a deleted account, a sparse `{wamid}` for matching Meta's delivery statuses,
+for the purge of a deleted account, a sparse `{wamidHash}` for matching Meta's delivery statuses,
 and the retention index. Creating them again is harmless.
 A retention index with another expiry, or with none, is changed in place with `collMod`. A
 failure is logged at ERROR with the instance and does not stop the scheduler; an instance
@@ -175,13 +180,17 @@ ignored. Without both variables every notification is refused, with a
 `webhook_not_configured` alert, and Meta keeps sending it. The processing does not follow the
 WhatsApp switch: an opt-out that arrives while WhatsApp is off is still applied.
 
-- **Statuses.** A status is matched to the archived row by its `wamid` and recorded there (see
-  "Archived messages"). Statuses may arrive in any order and more than once: one replaces the
-  recorded status only when it comes later in `sent`, `delivered`, `read`, `failed`, so a late
-  `delivered` never undoes `read`, and `failed` is final. Only Meta's numeric error code is
-  kept. A status of a message that is not in the archive (a verification code, which
-  user-management sends, or a row already purged) changes nothing and is logged at DEBUG only,
-  and so is a status other than these four.
+- **Statuses.** A status is matched to the archived row by the hash of its `wamid` and
+  recorded there (see "Archived messages"). Statuses may arrive in any order and more than
+  once: one replaces the recorded status only when it comes later in `sent`, `delivered`,
+  `read`, `failed`, so a late `delivered` never undoes `read`, and `failed` is final. Only
+  Meta's numeric error code is kept. Meta reports the statuses of every message sent from the
+  business number, so many are about messages that are not in the archive: verification codes
+  (user-management logs each one's `wamid_ref` when it sends it), messages sent outside the
+  platform, rows already purged. They change nothing. Each status gets one DEBUG line naming
+  the message by `wamid_ref`: `recorded`, `already recorded, or a later one`, `for a message
+  the message-scheduler did not send ... this is expected`, or `is not a delivery status this
+  service tracks` for a status other than these four.
 - **Undeliverable numbers.** A `failed` status with error `131026` (the number is not on
   WhatsApp, or cannot receive the message) takes WhatsApp out of the participant's notification
   channels, through user-management, on its first occurrence. The archived row names the
@@ -205,7 +214,7 @@ not retried. A removal that user-management refuses cannot succeed on a retry: i
 ## The delivered marker
 
 A message Meta has accepted is marked `delivered` on its queued row, together with its
-`wamid`, before that row is archived, and the row is removed only once the archive write has succeeded. An operator who
+`wamid` (the archive keeps only its hash), before that row is archived, and the row is removed only once the archive write has succeeded. An operator who
 finds a queued message carrying `delivered` is looking at one whose archive write, or whose
 queue delete, failed: check `sent-whatsapp` first, the message may already be archived there.
 The next tick that claims it archives it instead of sending it, so it is never posted to Meta

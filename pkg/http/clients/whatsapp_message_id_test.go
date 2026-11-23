@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/coneno/logger"
+	"github.com/influenzanet/messaging-service/pkg/types"
 )
 
 // sendWithResponse sends one template message to a server that answers with status and body,
@@ -110,5 +111,25 @@ func TestSendTemplateMessageWithAnIDLogsNoWarning(t *testing.T) {
 	_, logs, _ := sendWithResponse(t, http.StatusOK, acceptedResponse)
 	if strings.Contains(logs, "names no message id") {
 		t.Fatalf("a send whose response names its id warned about a missing id: %q", logs)
+	}
+}
+
+// An accepted send logs the reference of its id, so that the delivery statuses the webhook logs
+// later can be matched to it, and never the id itself, which holds the recipient's number.
+// Fails if the reference is missing or is not the one the webhook computes for the same id, or
+// if the raw id or the number reaches the log.
+func TestSendTemplateMessageLogsTheIDReferenceOnly(t *testing.T) {
+	const wamid = "wamid.HBgLMzkxMjM0NTY3ODkwFQIAERgSQUJDREVGMDEyMzQ1Njc4OQA="
+	_, logs, err := sendWithResponse(t, http.StatusOK, acceptedResponse)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(logs, "delivered to API, wamid_ref="+types.WAMIDLogRef(wamid)) {
+		t.Errorf("the send log does not carry the id reference %s: %q", types.WAMIDLogRef(wamid), logs)
+	}
+	for _, leaked := range []string{wamid, "HBgLMzkxMjM0NTY3ODkw", "1234567890"} {
+		if strings.Contains(logs, leaked) {
+			t.Errorf("the send log holds %q: %q", leaked, logs)
+		}
 	}
 }

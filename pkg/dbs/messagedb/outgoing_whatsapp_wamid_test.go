@@ -3,6 +3,7 @@ package messagedb
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,24 +73,36 @@ func TestMarkOutgoingWhatsAppDeliveredRecordsTheID(t *testing.T) {
 	})
 }
 
-// The archive keeps Meta's id while it strips the number and the parameters: the id is what
-// the delivery statuses are matched on, and it carries no personal data.
-// Fails if the minimisation of the archive row drops the wamid with the other fields.
-func TestSentWhatsAppKeepsTheID(t *testing.T) {
+// Meta's id for a message to +393331234567: the number is inside it, base64-encoded.
+const wamidWithNumber = "wamid.HBgMMzkzMzMxMjM0NTY3FQIAERgSQUJDREVGMDEyMzQ1Njc4OQA="
+
+// The archive strips the number and the parameters, and keeps Meta's id only as its hash: the
+// id holds the full number, and the hash is enough to match the delivery statuses.
+// Fails if the raw id reaches the archive row in any field, or if the row loses the hash its
+// statuses are matched on.
+func TestSentWhatsAppKeepsOnlyTheIDHash(t *testing.T) {
 	instanceID := freshWhatsAppInstance(t)
 	if _, err := testDBService.AddToSentWhatsApp(instanceID, types.OutgoingWhatsApp{
 		MessageType: "weekly", ToPhoneNumber: "+393331234567", TemplateName: "t", Lang: "it",
-		ContentParams: map[string]string{"name": "Mario"}, Delivered: true, WAMID: "wamid.A",
+		ContentParams: map[string]string{"name": "Mario"}, Delivered: true, WAMID: wamidWithNumber,
 	}, types.WhatsAppSendOutcome{Status: types.WhatsAppStatusDelivered}); err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var row bson.M
-	if err := testDBService.collectionRefSentWhatsApp(instanceID).FindOne(ctx, bson.M{"wamid": "wamid.A"}).Decode(&row); err != nil {
-		t.Fatalf("find the archived row by its wamid: %v", err)
+	if err := testDBService.collectionRefSentWhatsApp(instanceID).FindOne(ctx, bson.M{"wamidHash": types.WAMIDHash(wamidWithNumber)}).Decode(&row); err != nil {
+		t.Fatalf("find the archived row by the hash of its id: %v", err)
 	}
 	if row["status"] != types.WhatsAppStatusDelivered {
 		t.Fatalf("archived row status = %v, want delivered", row["status"])
+	}
+	if wamid, ok := row["wamid"]; ok {
+		t.Errorf("the archive row keeps the raw id %v", wamid)
+	}
+	for field, value := range row {
+		if s, ok := value.(string); ok && (strings.Contains(s, "HBgM") || strings.Contains(s, "3331234567")) {
+			t.Errorf("field %s holds the id or the number: %q", field, s)
+		}
 	}
 }

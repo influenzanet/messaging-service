@@ -41,6 +41,10 @@ type SentWhatsApp struct {
 	// ArchivedAt is the same moment as a BSON date, to millisecond precision: the archive's
 	// retention index expires rows on it, and such an index ignores a number like SentAt.
 	ArchivedAt time.Time `bson:"archivedAt"`
+	// WAMIDHash is WAMIDHash of the id Meta gave the message, the key its delivery statuses
+	// are matched on. The id itself is not archived (the embedded WAMID stays empty): it holds
+	// the recipient's full number. Absent on a message Meta did not accept or named no id for.
+	WAMIDHash string `bson:"wamidHash,omitempty"`
 
 	// The delivery status Meta reported for the message through the webhook, after it accepted
 	// it. These fields are kept apart from Status, which says how the message left the queue
@@ -78,4 +82,29 @@ func WhatsAppDeliveryStatusRank(status string) int {
 		return 4
 	}
 	return 0
+}
+
+// DeliveryStatusResult is what recording a delivery status did.
+type DeliveryStatusResult int
+
+const (
+	// DeliveryStatusRecorded: the archived message now has this status.
+	DeliveryStatusRecorded DeliveryStatusResult = iota + 1
+	// DeliveryStatusUnchanged: the archived message already had this status or a later one.
+	DeliveryStatusUnchanged
+	// DeliveryStatusUnknownMessage: no archived message has this id. The message was not sent
+	// by the message-scheduler (a verification code from user-management, or a message sent
+	// outside the platform with the same business number), or its row is gone (purged with its
+	// account or by the retention index). Meta reports the statuses of every message sent from
+	// the number, so this is expected.
+	DeliveryStatusUnknownMessage
+	// DeliveryStatusNotTracked: a status WhatsAppDeliveryStatusRank does not rank; nothing is
+	// looked up or written.
+	DeliveryStatusNotTracked
+)
+
+// Known reports whether the status is about a message the archive holds, whether or not
+// recording it changed the row.
+func (r DeliveryStatusResult) Known() bool {
+	return r == DeliveryStatusRecorded || r == DeliveryStatusUnchanged
 }

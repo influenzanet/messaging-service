@@ -56,6 +56,7 @@ type archivedWhatsApp struct {
 	ErrorClass    string `bson:"errorClass"`
 	SentAt        int64  `bson:"sentAt"`
 	WAMID         string `bson:"wamid"`
+	WAMIDHash     string `bson:"wamidHash"`
 }
 
 // archivedFor reads the archive row of a recipient. The archive stores the number masked, so
@@ -199,7 +200,8 @@ func TestWhatsAppDeliveredMessageIsNotResentWhenItsArchiveWriteFails(t *testing.
 	}
 	// The id came back with the first send, the only one: the queued row has to keep it for
 	// the repair, or the statuses Meta reports for this message can never be matched.
-	if row.WAMID != "wamid.repaired" {
-		t.Fatalf("the repaired message was archived with wamid %q, want the one Meta gave at the send", row.WAMID)
+	// The archive keeps it as its hash only.
+	if row.WAMIDHash != types.WAMIDHash("wamid.repaired") || row.WAMID != "" {
+		t.Fatalf("the repaired message was archived with wamidHash %q and wamid %q, want the hash of the one Meta gave at the send and no raw id", row.WAMIDHash, row.WAMID)
 	}
 }
