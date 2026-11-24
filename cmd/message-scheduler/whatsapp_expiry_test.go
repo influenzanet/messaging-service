@@ -56,7 +56,7 @@ func (db *schedulerTestDB) archivedRowsFor(t *testing.T, phone string) int64 {
 func runWhatsAppHandlerWithMaxAge(db *schedulerTestDB, sender whatsAppSender, maxAge int64) {
 	var wg sync.WaitGroup
 	wg.Add(1)
-	handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, 60, defaultWhatsAppTemplateRetryDelay, maxAge, &wg)
+	handleOutgoingWhatsAppForInstance(db.service, schedulerTestInstanceID, sender, whatsAppAlwaysOn, 60, defaultWhatsAppTemplateRetryDelay, maxAge, &wg)
 	wg.Wait()
 }
 

@@ -20,6 +20,20 @@ generating WhatsApp messages for that process, instead of queueing messages nobo
 send; participants who prefer WhatsApp receive the e-mail instead, and the e-mail channel is
 never affected.
 
+### Turning WhatsApp off for an instance
+
+Each tick asks whether WhatsApp is on for the instance (the local switch, user-management's
+answer and the Meta credentials) before it starts, and again before every message it sends to
+Meta. user-management's answer is cached for 60 s, so once user-management answers "off" a tick
+already draining the queue stops within 60 s, after at most the one send already in flight
+(bounded by the 30 s HTTP timeout). It logs "stopping the WhatsApp tick: WhatsApp was turned off
+for this instance". Nothing is charged: the messages left stay queued with their claims left to
+expire, and a transient failure held at that moment stays undecided. A row that needs no call to
+Meta (an expired message, or one Meta already accepted) is still archived when the tick reaches
+it before the stop. While user-management cannot be reached the last known answer is kept, so
+the 60 s count starts once user-management answers again, for instance after the restart that
+applies `WHATSAPP_ENABLED=false` there.
+
 ## Account-wide failures
 
 Failures that a single message cannot cause stop the current instance's tick at once,

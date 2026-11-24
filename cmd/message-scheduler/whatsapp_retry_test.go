@@ -210,7 +210,7 @@ func (db *schedulerTestDB) oneOutgoing(t *testing.T) types.OutgoingWhatsApp {
 func runWhatsAppHandler(mdb *messagedb.MessageDBService, sender whatsAppSender, lockSeconds int64) {
 	var wg sync.WaitGroup
 	wg.Add(1)
-	handleOutgoingWhatsAppForInstance(mdb, schedulerTestInstanceID, sender, lockSeconds, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, &wg)
+	handleOutgoingWhatsAppForInstance(mdb, schedulerTestInstanceID, sender, whatsAppAlwaysOn, lockSeconds, defaultWhatsAppTemplateRetryDelay, defaultWhatsAppMaxAge, &wg)
 	wg.Wait()
 }
 

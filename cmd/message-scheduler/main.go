@@ -505,8 +505,12 @@ func handleOutgoingWhatsApp(mdb *messagedb.MessageDBService, gdb *globaldb.Globa
 			logWhatsAppOffInstance(mdb, instance.InstanceID)
 			continue
 		}
+		// Asked again before every send: a tick can drain the queue for far longer than the
+		// cache window, and turning WhatsApp off must stop it too, not only the ticks after it.
+		instanceID := instance.InstanceID
+		whatsAppOn := func() bool { return settings.Enabled(instanceID) }
 		wg.Add(1)
-		go handleOutgoingWhatsAppForInstance(mdb, instance.InstanceID, wac, lastAttemptOlderThan, templateRetryDelay, maxAge, &wg)
+		go handleOutgoingWhatsAppForInstance(mdb, instanceID, wac, whatsAppOn, lastAttemptOlderThan, templateRetryDelay, maxAge, &wg)
 	}
 	wg.Wait()
 	logger.Info.Printf("<-- Process <%s> finished: fetching and sending outgoing whatsapp messages", threadID)
@@ -646,7 +650,11 @@ func pauseWhatsAppAfterThrottle(mdb *messagedb.MessageDBService, instanceID stri
 	}, fmt.Sprintf("Meta is limiting WhatsApp sending (%s, retry-after %d s): sending paused", sendErr.Class(), int64(sendErr.RetryAfter/time.Second)))
 }
 
-func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, lastAttemptOlderThan int64, templateRetryDelay int64, maxAge int64, wg *sync.WaitGroup) {
+// handleOutgoingWhatsAppForInstance drains the instance's queue. whatsAppOn reports whether
+// WhatsApp is still on for the instance: it is asked before every call to Meta, and once it
+// answers no the tick stops, so turning WhatsApp off reaches a tick already under way within
+// the cache window of the answer, plus at most the one send already in flight.
+func handleOutgoingWhatsAppForInstance(mdb *messagedb.MessageDBService, instanceID string, wac whatsAppSender, whatsAppOn func() bool, lastAttemptOlderThan int64, templateRetryDelay int64, maxAge int64, wg *sync.WaitGroup) {
 	defer wg.Done()
 	// However the tick ends, paused included, it states what it leaves in the queue.
 	defer func() { reportWhatsAppQueue(mdb, instanceID, time.Now().Unix()) }()
@@ -782,6 +790,15 @@ processQueue:
 				// Already deferred with the rest of its template when Meta refused it.
 				counters.IncreaseCounter(false)
 				continue
+			}
+
+			// Checked here, after the branches that never call Meta, so that it only ever holds
+			// back a send. Nothing is sent or charged from here on: the claims of this batch are
+			// left to expire, and a held failure is left undecided, as after any other stop.
+			if !whatsAppOn() {
+				logger.Warning.Printf("[%s] stopping the WhatsApp tick: WhatsApp was turned off for this instance while it ran; the messages left stay queued", instanceID)
+				warnAboutHeldWhatsApp(instanceID, undecided)
+				break processQueue
 			}
 
 			// Direct HTTP call to Meta API, bounded by the context timeout
