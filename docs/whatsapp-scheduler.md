@@ -237,6 +237,19 @@ has to be removed sooner by hand. The same holds for a message a running tick se
 participant's queued messages are being cancelled: it is archived as `cancelled`, without the
 `wamid`, and its statuses are not recorded.
 
+**A repeated STOP after the participant opted in again (accepted).** A STOP is applied on
+every delivery: the processing keeps no record of the messages it has handled, and their id
+and timestamp are not read. User-management changes nothing while WhatsApp is still off, so a
+repeat is harmless until the participant turns WhatsApp back on in the settings. A STOP that
+arrives again after that removes it again. Repeats come from Meta's retry of a whole
+notification, after another part of it failed or after the gateway's 10 s deadline passed while
+the STOP was being applied, and from the occasional duplicate Meta sends after a 200. Meta
+retries within minutes to hours, so this takes a participant who opts in again soon after
+sending STOP. The error is towards fewer messages, never unwanted ones; a participant reached
+on WhatsApp only is left with no channel. The audit log shows it as a second
+`WHATSAPP CHANNEL REMOVED reason=stop_keyword` for the same account; the participant turns
+WhatsApp back on in the settings.
+
 ## The delivered marker
 
 A message Meta has accepted is marked `delivered` on its queued row, together with its
@@ -335,6 +348,21 @@ DEBUG line only. When messages are waiting there, every tick writes a WARNING
 (`WhatsApp is not enabled for this instance, its outgoing messages stay queued`): they are not
 sent, and do not expire, until WhatsApp is turned back on for that instance or they are removed
 by hand. A queue that cannot be read gives a WARNING too.
+
+This is intended. The first tick after WhatsApp is turned back on claims the oldest rows first
+and archives every row older than the maximum age as `expired` before it sends anything, so no
+stale message goes out. The same holds while the runner is not started, and, for an hour at most,
+during a throttle pause. Until then each waiting row keeps the full number and the template
+parameters, so when WhatsApp is turned off **for good** for an instance, delete its queue by
+hand, in that instance's messages database:
+
+```
+db.getCollection("outgoing-whatsapp").countDocuments({})
+db.getCollection("outgoing-whatsapp").deleteMany({})
+```
+
+Rows deleted this way get no archive row. A participant's cancellation (deleting the account or
+the phone, removing the channel, unsubscribing) still removes their rows while WhatsApp is off.
 
 ### Rules for the log stack
 
