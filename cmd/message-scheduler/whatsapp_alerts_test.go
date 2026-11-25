@@ -548,3 +548,50 @@ func TestWhatsAppQueueReportWhenTheQueueCannotBeRead(t *testing.T) {
 	noLineWith(t, infos.String(), "WA_QUEUE")
 	noLineWith(t, errorsLog.String(), "WA_ALERT queue_backlog")
 }
+
+// A failed archive write raises archive_write_failed, once, with the outcome it could not
+// store, whether the message was delivered or given up on; the message stays queued. The alert
+// carries neither the number, masked or not, nor the database error, which can quote the
+// document it refused. A message archived normally raises nothing.
+// Fails if the alert is dropped, fires on a successful archive, or carries the database error.
+func TestWhatsAppArchiveWriteFailureRaisesItsAlert(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		sender     *fakeWhatsAppSender
+		wantStatus string
+	}{
+		{"delivered", &fakeWhatsAppSender{wamid: "wamid.archive-refused"}, types.WhatsAppStatusDelivered},
+		{"failed", &fakeWhatsAppSender{err: permanentFailure(132001)}, types.WhatsAppStatusFailed},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			db := newSchedulerTestDB(t)
+			db.addTo(t, poisonPhone, 0)
+			db.blockArchive(t, poisonPhone)
+			errorsLog := captureErrorLog(t)
+
+			runWhatsAppHandler(db.service, tt.sender, 60)
+
+			line := oneLineWith(t, errorsLog.String(), "WA_ALERT archive_write_failed")
+			fields, _ := fieldsOf(t, line, "WA_ALERT archive_write_failed")
+			wantFields(t, line, fields, map[string]string{"instance": schedulerTestInstanceID, "type": "test", "status": tt.wantStatus})
+			if strings.Contains(line, poisonPhone) || strings.Contains(line, types.MaskPhone(poisonPhone)) || strings.Contains(line, "dup key") {
+				t.Fatalf("the alert carries the number or the database error: %q", line)
+			}
+			if db.queuedFor(t, poisonPhone) != 1 {
+				t.Fatal("the message left the queue although its archive write failed")
+			}
+		})
+	}
+	t.Run("archived", func(t *testing.T) {
+		db := newSchedulerTestDB(t)
+		db.addTo(t, poisonPhone, 0)
+		errorsLog := captureErrorLog(t)
+
+		runWhatsAppHandler(db.service, &fakeWhatsAppSender{wamid: "wamid.archived"}, 60)
+
+		if db.archivedRowsFor(t, poisonPhone) != 1 {
+			t.Fatal("the message was not archived")
+		}
+		noLineWith(t, errorsLog.String(), "WA_ALERT archive_write_failed")
+	})
+}

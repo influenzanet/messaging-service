@@ -565,8 +565,17 @@ func failedWhatsApp(err error) types.WhatsAppSendOutcome {
 // queue. The archive row is written first and the queue row deleted only once it is stored: a
 // message still in the queue can be finished by a later tick, a lost archive row cannot be
 // recovered. It returns the error of the archive write, already logged.
+//
+// A failed archive write is an alert: the webhook matches Meta's delivery statuses on the
+// archive only, so the statuses of a message that waits in the queue for its archive are
+// acknowledged and not recorded, a 131026 included (accepted, see "Delivery statuses and
+// replies" in docs/whatsapp-scheduler.md). The cause is logged on a line of its own, since a
+// database error can quote the values of the document it refused.
 func archiveWhatsApp(mdb *messagedb.MessageDBService, instanceID string, msg types.OutgoingWhatsApp, outcome types.WhatsAppSendOutcome) error {
 	if _, err := mdb.AddToSentWhatsApp(instanceID, msg, outcome); err != nil {
+		logWhatsAppAlert(alertArchiveWriteFailed, []alertField{
+			{"instance", instanceID}, {"type", msg.MessageType}, {"status", outcome.Status},
+		}, "WhatsApp message could not be archived: it stays queued for a later tick, and the delivery statuses Meta reports for it until then are not recorded")
 		logger.Error.Printf("Error archiving whatsapp ('%s') in instance %s as %s: %v", msg.MessageType, instanceID, outcome.Status, err)
 		return err
 	}

@@ -225,6 +225,18 @@ Meta sends the notification again. A notification that is not a webhook payload 
 not retried. A removal that user-management refuses cannot succeed on a retry: it is an
 `opt_out_failed` alert.
 
+**Statuses that arrive before the archive row (accepted).** Statuses are matched on the
+archive only, which the scheduler writes just after Meta accepts the message. A status that
+arrives before that write is treated like any status of a message that is not in the archive:
+acknowledged, not recorded, and not sent again by Meta. In normal operation the gap is a few
+milliseconds and Meta's statuses come later. It only lasts while the archive write fails and the
+message waits in the queue for a later tick (see "The delivered marker"), which raises an
+`archive_write_failed` alert. A `131026` lost this way is applied by the next message to the
+same participant, which fails the same way. Its archive row names the account if the channel
+has to be removed sooner by hand. The same holds for a message a running tick sends while the
+participant's queued messages are being cancelled: it is archived as `cancelled`, without the
+`wamid`, and its statuses are not recorded.
+
 ## The delivered marker
 
 A message Meta has accepted is marked `delivered` on its queued row, together with its
@@ -297,6 +309,7 @@ one only together with the rules.
 | `template_refused` | Meta refused a template in one language (paused, disabled, marketing turned off). Once per template per tick. | `instance`, `template`, `lang`, `code`, `deferred`, `archived_failed`, `retry_delay_s` | Check the template in WhatsApp Manager: `132015` paused for quality, `132016` disabled, `131063` marketing messages turned off for the account. `archived_failed` counts messages lost for good. |
 | `permanent_failure` | Meta refused one message for good; it is archived as failed at the first attempt. | `instance`, `type`, `template`, `lang`, `code` | Several in a row with the same template mean the binding is wrong (parameters `132000`/`132012`/`132018`, language `132001`): every message of that binding will fail, so fix it. A lone `131026` is a recipient who is not on WhatsApp. |
 | `archived_failed` | A message used up its five attempts and is archived as failed. | `instance`, `type`, `template`, `lang`, `code`, `class`, `attempts` | Look at the code and the class; a stream of them points at a problem the classifier does not know. |
+| `archive_write_failed` | The archive write of a message that was sent, or given up on, failed. Once per message per tick, for as long as it keeps failing. | `instance`, `type`, `status` (`delivered` or `failed`) | The database refuses writes to `sent-whatsapp`; the next ERROR line gives the cause. The message stays queued and is archived by a later tick, never sent twice. Until then Meta's statuses for it are not recorded, a `131026` included (see "Delivery statuses and replies"). Fix the database; if it lasted long, check the participants of the `delivered` rows it held. |
 | `expired` | Messages waited longer than the maximum age and were archived unsent. Once per tick. | `instance`, `count`, `max_age_s` | They are lost. Find out why they waited: a runner that was down, WhatsApp off for the instance, a backlog. |
 | `queue_backlog` | After a tick, messages that are not held back by a refused template have waited more than an hour. On every tick while it lasts. | `instance`, `stale`, `oldest_waiting_s`, `threshold_s` | Read the instance's other alerts and the ERROR lines of its ticks: a sender that keeps failing, two transient failures that block the queue, a claim window too short for the batch. |
 | `opt_out_failed` | Logged where the webhook is processed: user-management refused to remove WhatsApp from a participant's channels after a `STOP` or a `131026` (see "Delivery statuses and replies"). | `instance`, `reason` (`stop_keyword` or `undeliverable`), `code` | The opt-out is lost and the participant is still sent WhatsApp messages. The code says why; the INFO and ERROR lines around it name the participant (masked number or user id). Remove WhatsApp from their channels by hand. |
@@ -329,8 +342,9 @@ Each deployment sets these up in the log tooling it has; the ones below are a st
 
 - Notify on every `runner_not_started`, `auth_stop`, `template_refused`, `opt_out_failed`,
   `webhook_not_configured` and `cancel_failed` line, and on `queue_backlog` and `expired`, grouped by alert and instance.
-- `permanent_failure` and `archived_failed` come one per message: notify on a count over a
-  window (for instance one or more in 15 minutes), grouped by instance and template.
+- `permanent_failure`, `archived_failed` and `archive_write_failed` come one per message: notify
+  on a count over a window (for instance one or more in 15 minutes), grouped by instance and
+  template (`archive_write_failed`, which has no template, by instance and status).
 - `throttle_pause`: notify when `in_a_row` reaches 3, or `stored=false` appears.
 - Absence: no `WA_QUEUE` line for an instance where WhatsApp is on for 10 minutes means the
   scheduler or its runner is not running.

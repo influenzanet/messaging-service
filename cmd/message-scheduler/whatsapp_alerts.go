@@ -33,6 +33,10 @@ const (
 	alertPermanentFailure whatsAppAlert = "permanent_failure"
 	// A message used up its attempts: it is archived as failed.
 	alertArchivedFailed whatsAppAlert = "archived_failed"
+	// The archive write of a message that was sent, or given up on, failed: the message stays
+	// queued until a later tick archives it, and the delivery statuses Meta reports for it in
+	// the meantime are not recorded.
+	alertArchiveWriteFailed whatsAppAlert = "archive_write_failed"
 	// Messages waited longer than the maximum age: they are archived as expired, unsent.
 	alertExpired whatsAppAlert = "expired"
 	// Messages that are not held back by a refused template have waited longer than
